@@ -37,7 +37,9 @@ def get_thumbnail(photo_id: str, size: str, request: Request):
     if not thumb_path or not thumb_path.exists():
         raise HTTPException(status_code=404, detail="Thumbnail not found")
 
-    return FileResponse(thumb_path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=31536000, immutable"})
+    return FileResponse(
+        thumb_path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=31536000, immutable"}
+    )
 
 
 @router.post("/photos/{photo_id}/decision", response_class=HTMLResponse)

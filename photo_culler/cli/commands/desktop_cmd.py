@@ -16,5 +16,7 @@ def main(
 ):
     """Start native Desktop window for photo-culler."""
     cli_ctx = get_cli_context(ctx)
-    console.print(f"\n[bold blue]Launching Photo Culler Desktop Window...[/bold blue]\nCatalog: {cli_ctx.catalog_path}\n")
+    console.print(
+        f"\n[bold blue]Launching Photo Culler Desktop Window...[/bold blue]\nCatalog: {cli_ctx.catalog_path}\n"
+    )
     run_desktop(catalog_path=cli_ctx.catalog_path, fullscreen=fullscreen)

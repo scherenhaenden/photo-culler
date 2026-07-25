@@ -23,7 +23,9 @@ def main(
     app = create_app(catalog_path=cli_ctx.catalog_path)
 
     url = f"http://{host}:{port}"
-    console.print(f"\n[bold green]Photo Culler Web UI Running[/bold green]\nURL: [bold underline blue]{url}[/bold underline blue]\nCatalog: {cli_ctx.catalog_path}\n")
+    console.print(
+        f"\n[bold green]Photo Culler Web UI Running[/bold green]\nURL: [bold underline blue]{url}[/bold underline blue]\nCatalog: {cli_ctx.catalog_path}\n"
+    )
 
     if open_browser:
         webbrowser.open(url)

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block title %}Sesiones y Ráfagas - Photo Culler{% endblock %}
+
+{% block content %}
+<div class="header-bar">
+  <h1>Sesiones y Ráfagas</h1>
+</div>
+
+<div style="background: var(--bg-card); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color);">
+  <p style="color: var(--text-secondary);">Actualmente hay {{ photo_count }} fotografías registradas. Utiliza la CLI para agrupar sesiones automáticamente por intervalo de tiempo (ej. 15 minutos) o ráfagas continuas de disparos.</p>
+</div>
+{% endblock %}

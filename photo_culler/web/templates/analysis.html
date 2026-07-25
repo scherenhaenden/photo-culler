@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}Análisis - Photo Culler{% endblock %}
+
+{% block content %}
+<div class="header-bar">
+  <h1>Ejecución de Análisis Técnico</h1>
+</div>
+
+<div style="background: var(--bg-card); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color); max-width: 600px;">
+  <h3>Perfil de Análisis</h3>
+  <div style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
+    <label><input type="radio" name="profile" value="fast" checked> <strong>Fast</strong> - Infección, dimensiones y rotación rápida</label>
+    <label><input type="radio" name="profile" value="technical"> <strong>Technical</strong> - Nitidez, clipping, histograma y exposición</label>
+    <label><input type="radio" name="profile" value="concert"> <strong>Concert</strong> - Ajustado para luces intensas de escenario y sujeto central</label>
+  </div>
+
+  <div style="margin-top: 1.5rem;">
+    <button class="btn" style="width: 100%;">Ejecutar Análisis Técnico</button>
+  </div>
+</div>
+{% endblock %}

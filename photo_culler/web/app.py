@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from photo_culler.catalog.database import Database
-from photo_culler.web.routes import api, dashboard, library, photos
+from photo_culler.web.routes import analysis, api, dashboard, library, photos, sessions
 
 
 def create_app(catalog_path: Optional[Union[str, Path]] = None) -> FastAPI:
@@ -33,6 +33,8 @@ def create_app(catalog_path: Optional[Union[str, Path]] = None) -> FastAPI:
     app.include_router(dashboard.router)
     app.include_router(library.router)
     app.include_router(photos.router)
+    app.include_router(analysis.router)
+    app.include_router(sessions.router)
     app.include_router(api.router)
 
     return app
