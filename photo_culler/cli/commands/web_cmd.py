@@ -3,10 +3,12 @@
 import webbrowser
 import typer
 import uvicorn
+from rich.console import Console
 from photo_culler.cli.context import get_cli_context
 from photo_culler.web.app import create_app
 
 web_app = typer.Typer(help="Launch local FastAPI Web UI application.")
+console = Console()
 
 
 @web_app.callback(invoke_without_command=True)
@@ -21,12 +23,7 @@ def main(
     app = create_app(catalog_path=cli_ctx.catalog_path)
 
     url = f"http://{host}:{port}"
-    cli_ctx.console.print_panel(
-        f"[bold green]Photo Culler Web UI Running[/bold green]\n\n"
-        f"URL: [bold underline blue]{url}[/bold underline blue]\n"
-        f"Catalog: [dim]{cli_ctx.catalog_path}[/dim]",
-        title="Web Server Started",
-    )
+    console.print(f"\n[bold green]Photo Culler Web UI Running[/bold green]\nURL: [bold underline blue]{url}[/bold underline blue]\nCatalog: {cli_ctx.catalog_path}\n")
 
     if open_browser:
         webbrowser.open(url)
