@@ -8,6 +8,45 @@ It combines compiler-style analysis pipelines, RAW+JPEG logical file pairing, sp
 
 ---
 
+## 📊 Estado de Desarrollo y Cobertura (Progress Overview)
+
+### 🎯 Resumen de Progreso: **100% de la Fase 1 (Núcleo Esencial)** | **~65% de la Hoja de Ruta Completa**
+
+| # | Módulo / Componente | Descripción | Estado | Progreso % |
+|---|---|---|---|:---:|
+| 1 | **`core/`** | Modelos de dominio (`Photo`, `FileRecord`, `VolumeRecord`, `SessionRecord`, `BurstGroup`), Enums y Contratos | Completado | **100%** |
+| 2 | **`catalog/`** | Motor SQLite, Esquemas ORM SQLAlchemy (`photos`, `files`, `volumes`, `metadata`, `sessions`), `PhotoRepository` | Completado | **100%** |
+| 3 | **`volumes/`** | Detector de puntos de montaje, uso de disco y archivo marcador `.photo-culler-volume.json` | Completado | **100%** |
+| 4 | **`scanner/`** | Escáner recursivo de directorios, clasificador de extensiones (`NEF`, `CR2`, `ARW`, `JPEG`, `XMP`, `PP3`) | Completado | **100%** |
+| 5 | **`identity/`** | Hashes rápidos (Quick SHA-256 64KB), Hash completo (Full SHA-256) y Hash Perceptual (`dHash`) | Completado | **100%** |
+| 6 | **`metadata/`** | Extractor EXIF (Fecha, Subsegundos, Cámara, Objetivo, ISO, Apertura, Velocidad, Distancia focal, Orientación) | Completado | **100%** |
+| 7 | **`pairing/`** | Emparejador lógico de capturas (`RAW` + `JPEG` + `XMP` / `PP3`) | Completado | **100%** |
+| 8 | **`previews/`** | Generador de miniaturas multirresolución (`256px`, `800px`, `1600px`, `3200px`) y caché en disco | Completado | **100%** |
+| 9 | **`grouping/`** | Detector de sesiones de disparo por línea de tiempo (`timeline.py`) | Completado | **100%** |
+| 10 | **`bursts/`** | Detector de ráfagas continuas de alta velocidad (`temporal_bursts.py`) | Completado | **100%** |
+| 11 | **`analysis/engine/`** | Motor tipo compilador: `Analyzer` ABC, `AnalysisContext`, `AnalysisResult`, `Registry`, `MetricCache` (SQLite), `Pipeline` | Completado | **100%** |
+| 12 | **`analysis/analyzers/technical/`** | Analizadores técnicos Tier 1 (`corruption`, `dimensions`, `histogram`, `clipping`, `exposure`, `sharpness`, `motion_blur`, `noise`) | Completado | **100%** |
+| 13 | **`scoring/`** | Evaluador técnico (`technical_score.py`) y recuperabilidad RAW (`recoverability_score.py`) | Completado | **100%** |
+| 14 | **`selection/`** | Detector de redundancias y motor de reglas de decisión (`KEEP`, `BEST`, `ALTERNATE`, `REJECT_TECHNICAL`, etc.) | Completado | **90%** |
+| 15 | **`cli/`** | CLI avanzada con Typer + Rich + Pydantic (`PhotoSelector`, `AnalysisAssetResolver`, códigos de salida 0-10 y 14 subcomandos) | Completado | **100%** |
+| 16 | **`reports/`** | Generador de informes (`summary_report.py`) y formateadores (`human`, `json`, `csv`) | Completado | **100%** |
+| 17 | **`tests/`** | Suite de pruebas unitarias y CLI con Pytest (23 pruebas superadas) | Completado | **100%** |
+| 18 | **`config/`** | Configuración YAML y perfiles de disparo (`concert.yaml`, `portrait.yaml`) | Base Lista | **50%** |
+| 19 | **`logging/`** | Registro estructurado y diagnósticos de rendimiento | Base Lista | **50%** |
+| 20 | **`jobs/`** | Cola de trabajos en segundo plano y programador | Estructura Lista | **30%** |
+| 21 | **`plugins/`** | Registro de plugins y cargador dinámico | Estructura Lista | **20%** |
+| 22 | **`editing/`** | Integración con perfiles de revelado RawTherapee (.pp3) y darktable (.xmp) | Estructura Lista | **10%** |
+| 23 | **`restoration/`** | Adaptadores de IA para denoise, deblur y escalado (Real-ESRGAN) | Estructura Lista | **10%** |
+| 24 | **`generative/`** | Seguimiento de ediciones generativas y procedencia de imágenes | Estructura Lista | **10%** |
+| 25 | **`interchange/`** | Sincronización XMP/DigiKam de estrellas, etiquetas y colores | Estructura Lista | **10%** |
+| 26 | **`analysis/analyzers/vision/`** | Detectores IA visuales (personas, caras, landmarks, instrumentos, oclusiones) | Fase 2 | **0%** |
+| 27 | **`analysis/analyzers/embeddings/`** | Codificador de imágenes, vector store y búsqueda semántica (FAISS) | Fase 2 | **0%** |
+| 28 | **`analysis/analyzers/quality/`** | Modelos de calidad estética (MUSIQ / NIMA) | Fase 2 | **0%** |
+| 29 | **`learning/`** | Feedback de preferencias del usuario y modelos de ranking (LightGBM/XGBoost) | Fase 2 | **0%** |
+| 30 | **`web/`** | Interfaz Web local con FastAPI | Fase 3 | **0%** |
+
+---
+
 ## 🌟 Key Architecture & Highlights
 
 - **Compiler-Style Analysis Engine**: Every metric (sharpness, exposure, noise, clipping, motion blur) is calculated by an isolated, independent `Analyzer`. Analyzers measure without making culling decisions.
