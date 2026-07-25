@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}{{ photo.stem_name }} - Inspección{% endblock %}
+{% block photo_id %}{{ photo.photo_id }}{% endblock %}
+
+{% block content %}
+<div class="header-bar">
+  <a href="/library" class="btn btn-secondary">← Volver a Biblioteca</a>
+  <h2>{{ photo.stem_name }}</h2>
+</div>
+
+<div class="detail-view">
+  <div class="main-image-container">
+    <img src="/thumbnails/{{ photo.photo_id }}/1600" alt="{{ photo.stem_name }}">
+  </div>
+
+  <div class="inspector-panel">
+    <h3>Evaluación Técnica</h3>
+    <div style="font-size: 1.5rem; font-weight: 700; color: var(--accent-blue);">
+      Score: {{ (photo.score * 100)|round|int }} / 100
+    </div>
+
+    <div>
+      <strong>Decisión Actual:</strong>
+      <span class="photo-badge badge-{{ photo.decision.value|lower }}" style="margin-left: 0.5rem;">
+        {{ photo.decision.value }}
+      </span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1rem;">
+      <form hx-post="/photos/{{ photo.photo_id }}/decision" hx-target="#photo-detail-view">
+        <input type="hidden" name="decision" value="best">
+        <button type="submit" data-decision="best" class="btn" style="background-color: var(--accent-green); width: 100%;">1 - BEST</button>
+      </form>
+      <form hx-post="/photos/{{ photo.photo_id }}/decision" hx-target="#photo-detail-view">
+        <input type="hidden" name="decision" value="keep">
+        <button type="submit" data-decision="keep" class="btn" style="background-color: var(--accent-blue); width: 100%;">2 - KEEP</button>
+      </form>
+      <form hx-post="/photos/{{ photo.photo_id }}/decision" hx-target="#photo-detail-view">
+        <input type="hidden" name="decision" value="review">
+        <button type="submit" data-decision="review" class="btn" style="background-color: var(--accent-yellow); color: #000; width: 100%;">4 - REVIEW</button>
+      </form>
+      <form hx-post="/photos/{{ photo.photo_id }}/decision" hx-target="#photo-detail-view">
+        <input type="hidden" name="decision" value="reject">
+        <button type="submit" data-decision="reject" class="btn" style="background-color: var(--accent-red); width: 100%;">X - REJECT</button>
+      </form>
+    </div>
+
+    <div class="keyboard-shortcut-legend">
+      <strong>Atajos de teclado:</strong><br>
+      [1] BEST &nbsp; [2] KEEP &nbsp; [4] REVIEW<br>
+      [X] REJECT &nbsp; [R] RECOVER
+    </div>
+  </div>
+</div>
+{% endblock %}

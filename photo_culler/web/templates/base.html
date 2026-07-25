@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Photo Culler{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+  <link rel="stylesheet" href="/static/css/gallery.css">
+</head>
+<body data-current-photo-id="{% block photo_id %}{% endblock %}">
+  <aside class="sidebar">
+    <div class="brand">
+      <span>📷</span> Photo Culler
+    </div>
+    <ul class="nav-links">
+      <li><a href="/" class="{% if active_tab == 'dashboard' %}active{% endif %}">Dashboard</a></li>
+      <li><a href="/library" class="{% if active_tab == 'library' %}active{% endif %}">Biblioteca</a></li>
+      <li><a href="/analysis" class="{% if active_tab == 'analysis' %}active{% endif %}">Análisis</a></li>
+      <li><a href="/sessions" class="{% if active_tab == 'sessions' %}active{% endif %}">Sesiones</a></li>
+    </ul>
+  </aside>
+
+  <main class="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script src="/static/js/htmx.min.js"></script>
+  <script src="/static/js/keyboard.js"></script>
+</body>
+</html>

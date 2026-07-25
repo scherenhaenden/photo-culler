@@ -1,0 +1,12 @@
+<a href="/photos/{{ photo.photo_id }}" class="photo-card" id="photo-card-{{ photo.photo_id }}">
+  <div class="thumbnail-wrapper">
+    <img src="/thumbnails/{{ photo.photo_id }}/800" alt="{{ photo.stem_name }}" loading="lazy">
+  </div>
+  <div class="photo-meta">
+    <div class="photo-stem">{{ photo.stem_name }}</div>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <span class="photo-badge badge-{{ photo.decision.value|lower }}">{{ photo.decision.value }}</span>
+      <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-secondary);">Score: {{ (photo.score * 100)|round|int }}</span>
+    </div>
+  </div>
+</a>

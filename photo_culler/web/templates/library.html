@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}Biblioteca - Photo Culler{% endblock %}
+
+{% block content %}
+<div class="header-bar">
+  <h1>Biblioteca de Fotografías</h1>
+  <div style="font-size: 0.9rem; color: var(--text-secondary);">Total: {{ photos|length }} fotos</div>
+</div>
+
+<div class="photo-grid">
+  {% for photo in photos %}
+    {% include "partials/photo_card.html" %}
+  {% endfor %}
+</div>
+{% endblock %}

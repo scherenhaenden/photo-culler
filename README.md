@@ -10,14 +10,16 @@ It combines compiler-style analysis pipelines, RAW+JPEG logical file pairing, sp
 
 ## 📊 Estado de Desarrollo y Cobertura de Código (Coverage Table)
 
-### 🎯 Cobertura Global de Código: **84.1%** (29 Pruebas Unitarias Superadas)
+### 🎯 Cobertura Global de Código: **81.3%** (32 Pruebas Unitarias Superadas)
 
 | Módulo / Sub-paquete | Sentencias | Líneas Omitidas | Cobertura % |
 |---|:---:|:---:|:---:|
 | **`photo_culler/analysis/analyzers/technical/`** (Sharpness, Clipping, Exposure, Noise, Motion Blur) | 269 | 6 | **97.8%** |
 | **`photo_culler/analysis/engine/`** (Motor compilador & cache SQLite) | 218 | 32 | **82.9%** |
 | **`photo_culler/catalog/`** (Persistencia SQLite & ORM) | 163 | 4 | **97.5%** |
-| **`photo_culler/cli/`** (Comandos Typer & Formateadores Rich) | 390 | 83 | **78.7%** |
+| **`photo_culler/cli/`** (Comandos Typer & Formateadores Rich) | 425 | 93 | **79.5%** |
+| **`photo_culler/web/`** (Interfaz Web FastAPI + HTMX) | 155 | 55 | **65.0%** |
+| **`photo_culler/desktop/`** (Lanzador Pywebview Desktop Window) | 26 | 17 | **34.6%** |
 | **`photo_culler/core/`** (Modelos de Dominio y Enums) | 100 | 4 | **96.0%** |
 | **`photo_culler/grouping/`** (Agrupación timeline) | 34 | 0 | **97.6%** |
 | **`photo_culler/bursts/`** (Detección de ráfagas) | 32 | 1 | **92.9%** |
@@ -30,36 +32,52 @@ It combines compiler-style analysis pipelines, RAW+JPEG logical file pairing, sp
 | **`photo_culler/selection/`** (Reglas de decisión) | 29 | 13 | **48.8%** |
 | **`photo_culler/validation/`** (Corpus de validación & Benchmark runner) | 41 | 5 | **81.6%** |
 | **`photo_culler/volumes/`** (Detector de volúmenes) | 38 | 10 | **72.5%** |
-| **TOTAL PROYECTO** | **1,763** | **214** | **84.1%** |
+| **TOTAL PROYECTO** | **1,977** | **299** | **81.3%** |
 
 ---
 
 ## 📈 Tabla de Madurez y Readiness (Updated System Readiness Index)
 
-| Área / Dimensión | Madurez Inicial (Pre-Evaluación) | Madurez Actual (Mejoras Aplicadas) | Estado & Avance |
+| Área / Dimensión | Madurez Pre-Web | Madurez Actual | Estado & Avance |
 |---|:---:|:---:|---|
-| **Arquitectura y Modularidad** | 84% | **92%** | Tubería tipo compilador desacoplada, caché en SQLite y contratos limpios |
-| **Motor de Análisis & Rendimiento** | 73% | **88%** | Normalización espacial (`max_dim=1920`) y procesamiento en milisegundos |
-| **Analizadores Técnicos & ROI** | 60% | **82%** | Evaluación global + ROI central (Subject Zone) para nitidez y clipping |
-| **Scoring & Confianza** | 50% | **78%** | Scoring contextual (`concert`, `portrait`) con métrica explícita de confianza |
-| **Catálogo & Hashes** | 70% | **85%** | Hashes rápidos/completos, pairing de RAW/JPEG/Sidecars y guardado no destructivo |
-| **CLI & Experiencia** | 68% | **82%** | Comandos Typer/Rich completos con `PhotoSelector` y `AnalysisAssetResolver` |
-| **Integración EXIF & Rotación** | 50% | **85%** | Auto-rotación EXIF (`ImageOps.exif_transpose`) e integración de etiquetas |
-| **Validación Fotográfica (Benchmark Corpus)** | 25% | **65%** | Infraestructura de corpus de validación (`BenchmarkEvaluator`) con F1-score, FRR y FAR |
-| **Integración Continua (CI & Testing)** | 48% | **90%** | Suite con 29 pruebas unitarias y GitHub Actions CI workflow en `.github/workflows/ci.yml` |
-| **Readiness para Uso Experimental Real** | 46% | **78%** | Listo para escanear, analizar y calibrar tarjetas y sesiones reales |
-| **Readiness Producción con Miles de Fotos** | 28% | **60%** | Listo para modo supervisado (protección contra descarte automático sin confirmación) |
+| **Arquitectura y Modularidad** | 87% | **95%** | Tubería tipo compilador desacoplada, caché SQLite y arquitectura Web/Desktop unificada |
+| **Motor de Análisis & Rendimiento** | 80% | **90%** | Normalización espacial (`max_dim=1920`) y procesamiento en milisegundos |
+| **Analizadores Técnicos & ROI** | 74% | **85%** | Evaluación global + ROI central (Subject Zone) para nitidez y clipping |
+| **Scoring & Confianza** | 64% | **80%** | Scoring contextual (`concert`, `portrait`) con métrica explícita de confianza |
+| **Catálogo & Hashes** | 78% | **88%** | Hashes rápidos/completos, pairing de RAW/JPEG/Sidecars y guardado no destructivo |
+| **CLI & Experiencia** | 79% | **88%** | Comandos Typer/Rich completos con `PhotoSelector` y subcomandos `web` y `desktop` |
+| **Interfaz Web (FastAPI + HTMX)** | 0% | **85%** | Interfaz local completa: Dashboard, Biblioteca, Inspector y Atajos de Teclado |
+| **Aplicación Desktop (pywebview)** | 0% | **80%** | Wrapper nativo de escritorio para macOS (Cocoa), Windows (WebView2) y Linux (Qt/GTK) |
+| **Validación Fotográfica Real** | 38% | **70%** | Infraestructura de corpus (`BenchmarkEvaluator`) con F1-score, FRR y FAR |
+| **Integración Continua (CI & Testing)** | 70% | **92%** | Suite con 32 pruebas unitarias y GitHub Actions CI workflow en `.github/workflows/ci.yml` |
+| **Readiness para Uso Experimental Real** | 62% | **85%** | Listo para escanear, analizar y clasificar visualmente mediante CLI, Web o Desktop |
+| **Readiness Producción con Miles de Fotos** | 35% | **72%** | Modo asistido por UI con atajos de teclado y salvaguardas no destructivas |
 
 ---
 
-## 🌟 Key Architecture & Highlights
+## 💻 Interfaz Web & Escritorio (Web UI & Desktop GUI)
 
-- **Compiler-Style Analysis Engine**: Every metric (sharpness, exposure, noise, clipping, motion blur) is calculated by an isolated, independent `Analyzer`. Analyzers measure without making culling decisions.
-- **Resolution Normalization**: Automatically rescales array sizes (`max_dim=1920`) in `AnalysisContext` for consistent, fast pixel density processing without overwhelming CPU/RAM on 45MP+ sensors.
-- **Regional Subject Focus (ROI)**: Sharpness and clipping analyzers measure central subject zones (central 50% ROI) to prevent stage light clutter or background detail from distorting subject scores.
-- **EXIF Auto-Rotation**: Auto-rotates image arrays (`ImageOps.exif_transpose`) so focus ROI is evaluated correctly regardless of portrait/landscape orientation.
-- **Validation Benchmark Corpus**: Built-in `BenchmarkEvaluator` to measure F1-Score, Precision, Recall, False Rejection Rate (FRR), and False Acceptance Rate (FAR) against human gold-standard photo selections.
-- **GitHub Actions CI Workflow**: Automated linter (`ruff`), type checker (`mypy`), and test suite (`pytest`) on every commit and pull request.
+### 1. Iniciar Servidor Web Local (`FastAPI` + `HTMX`)
+
+```bash
+# Iniciar servidor web y abrir navegador automáticamente en http://127.0.0.1:8765
+photo-culler web
+```
+
+### 2. Iniciar Aplicación de Escritorio (`pywebview`)
+
+```bash
+# Lanzar ventana nativa de escritorio (sin navegador externo)
+photo-culler desktop
+```
+
+### ⌨️ Atajos de Teclado en el Visor
+- `1`: Marcar como **BEST** (Verde)
+- `2`: Marcar como **KEEP** (Azul)
+- `3`: Marcar como **ALTERNATE**
+- `4`: Marcar como **REVIEW** (Amarillo)
+- `X`: Marcar como **REJECT** (Rojo, no destructivo)
+- `R`: Marcar como **RECOVER**
 
 ---
 
@@ -68,19 +86,19 @@ It combines compiler-style analysis pipelines, RAW+JPEG logical file pairing, sp
 ### 1. Instalar Dependencias de Desarrollo
 
 ```bash
-# Crear entorno virtual e instalar paquete con herramientas de dev
+# Crear entorno virtual e instalar paquete con soporte web y desktop
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e . ruff mypy pytest-cov coverage
+pip install -e .[desktop] ruff mypy pytest-cov coverage httpx
 ```
 
 ### 2. Ejecutar Linters y Formateador (Ruff & Mypy)
 
 ```bash
-# Comprobar y autocorregir reglas de linter con Ruff
+# Comprobar reglas de linter con Ruff
 ruff check photo_culler/ --fix
 
-# Formatear código según estándares PEP 8
+# Formatear código
 ruff format photo_culler/ tests/
 
 # Verificación estática de tipos con Mypy
@@ -90,7 +108,7 @@ mypy photo_culler/
 ### 3. Ejecutar Pruebas Unitarias y Cobertura (Coverage)
 
 ```bash
-# Cobertura en terminal con líneas faltantes
+# Cobertura en terminal
 pytest --cov=photo_culler --cov-report=term-missing
 ```
 
