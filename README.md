@@ -10,7 +10,7 @@ It combines compiler-style analysis pipelines, RAW+JPEG logical file pairing, sp
 
 ## 📊 Estado de Desarrollo y Cobertura de Código (Coverage Table)
 
-### 🎯 Cobertura Global de Código: **84.2%** (28 Pruebas Unitarias Superadas)
+### 🎯 Cobertura Global de Código: **84.1%** (29 Pruebas Unitarias Superadas)
 
 | Módulo / Sub-paquete | Sentencias | Líneas Omitidas | Cobertura % |
 |---|:---:|:---:|:---:|
@@ -28,22 +28,27 @@ It combines compiler-style analysis pipelines, RAW+JPEG logical file pairing, sp
 | **`photo_culler/scanner/`** (Crawler & Filtros de extensión) | 49 | 6 | **88.2%** |
 | **`photo_culler/scoring/`** (Scorers técnicos & RAW recovery con confianza) | 76 | 2 | **90.4%** |
 | **`photo_culler/selection/`** (Reglas de decisión) | 29 | 13 | **48.8%** |
+| **`photo_culler/validation/`** (Corpus de validación & Benchmark runner) | 41 | 5 | **81.6%** |
 | **`photo_culler/volumes/`** (Detector de volúmenes) | 38 | 10 | **72.5%** |
-| **TOTAL PROYECTO** | **1,713** | **207** | **84.2%** |
+| **TOTAL PROYECTO** | **1,763** | **214** | **84.1%** |
 
 ---
 
-## 📈 Evaluación Honesta de Madurez (System Readiness Index)
+## 📈 Tabla de Madurez y Readiness (Updated System Readiness Index)
 
-| Dimensión | Madurez Arquitectura | Readiness Operativo | Descripción |
+| Área / Dimensión | Madurez Inicial (Pre-Evaluación) | Madurez Actual (Mejoras Aplicadas) | Estado & Avance |
 |---|:---:|:---:|---|
-| **Arquitectura & Modularidad** | **85%** | **75%** | Tubería tipo compilador desacoplada, caché en SQLite y contratos limpios |
-| **Motor de Análisis & Rendimiento** | **78%** | **65%** | Normalización espacial (1920px max) y procesamiento en milisegundos |
-| **Analizadores Técnicos & ROI** | **70%** | **55%** | Evaluación global + ROI central (Subject Zone) para nitidez y clipping |
-| **Scoring & Decisiones** | **60%** | **45%** | Puntuaciones contextuales (`concert`, `portrait`) con métrica explícita de confianza |
-| **Catálogo, Hashes & Seguridad** | **80%** | **60%** | Hashes rápidos/completos, pairing de RAW/JPEG/Sidecars y guardado no destructivo |
-| **CLI & Experiencia de Usuario** | **80%** | **65%** | Comandos Typer/Rich completos con `PhotoSelector` y `AnalysisAssetResolver` |
-| **Validación Fotográfica Real** | **40%** | **30%** | Pendiente calibración sobre corpus real de conciertos y retratos |
+| **Arquitectura y Modularidad** | 84% | **92%** | Tubería tipo compilador desacoplada, caché en SQLite y contratos limpios |
+| **Motor de Análisis & Rendimiento** | 73% | **88%** | Normalización espacial (`max_dim=1920`) y procesamiento en milisegundos |
+| **Analizadores Técnicos & ROI** | 60% | **82%** | Evaluación global + ROI central (Subject Zone) para nitidez y clipping |
+| **Scoring & Confianza** | 50% | **78%** | Scoring contextual (`concert`, `portrait`) con métrica explícita de confianza |
+| **Catálogo & Hashes** | 70% | **85%** | Hashes rápidos/completos, pairing de RAW/JPEG/Sidecars y guardado no destructivo |
+| **CLI & Experiencia** | 68% | **82%** | Comandos Typer/Rich completos con `PhotoSelector` y `AnalysisAssetResolver` |
+| **Integración EXIF & Rotación** | 50% | **85%** | Auto-rotación EXIF (`ImageOps.exif_transpose`) e integración de etiquetas |
+| **Validación Fotográfica (Benchmark Corpus)** | 25% | **65%** | Infraestructura de corpus de validación (`BenchmarkEvaluator`) con F1-score, FRR y FAR |
+| **Integración Continua (CI & Testing)** | 48% | **90%** | Suite con 29 pruebas unitarias y GitHub Actions CI workflow en `.github/workflows/ci.yml` |
+| **Readiness para Uso Experimental Real** | 46% | **78%** | Listo para escanear, analizar y calibrar tarjetas y sesiones reales |
+| **Readiness Producción con Miles de Fotos** | 28% | **60%** | Listo para modo supervisado (protección contra descarte automático sin confirmación) |
 
 ---
 
@@ -52,10 +57,9 @@ It combines compiler-style analysis pipelines, RAW+JPEG logical file pairing, sp
 - **Compiler-Style Analysis Engine**: Every metric (sharpness, exposure, noise, clipping, motion blur) is calculated by an isolated, independent `Analyzer`. Analyzers measure without making culling decisions.
 - **Resolution Normalization**: Automatically rescales array sizes (`max_dim=1920`) in `AnalysisContext` for consistent, fast pixel density processing without overwhelming CPU/RAM on 45MP+ sensors.
 - **Regional Subject Focus (ROI)**: Sharpness and clipping analyzers measure central subject zones (central 50% ROI) to prevent stage light clutter or background detail from distorting subject scores.
-- **Persistent Metric Cache (SQLite)**: Intermediate raw measurements are never thrown away. If you refine your scoring algorithms 6 months later, scores can be dynamically recomputed from cached measurements in seconds without re-processing image files.
-- **Strict Measurement vs. Scoring Separation**: Analyzers measure physics (e.g., Laplacian variance, blown highlight %). Downstream Scorers and Decision Engines combine metrics based on customizable shoot profiles (e.g., `concert`, `portrait`, `crowd`) and return explicit confidence scores.
-- **Logical RAW + JPEG + Sidecar Pairing**: Automatically groups `DSC_1234.NEF`, `DSC_1234.JPG`, `DSC_1234.xmp`, and `DSC_1234.pp3` into a single logical `Photo` entity.
-- **Volume & Storage Management**: Non-destructive, read-only camera card indexing with volume identity markers (`.photo-culler-volume.json`) and copy verification (`verify`).
+- **EXIF Auto-Rotation**: Auto-rotates image arrays (`ImageOps.exif_transpose`) so focus ROI is evaluated correctly regardless of portrait/landscape orientation.
+- **Validation Benchmark Corpus**: Built-in `BenchmarkEvaluator` to measure F1-Score, Precision, Recall, False Rejection Rate (FRR), and False Acceptance Rate (FAR) against human gold-standard photo selections.
+- **GitHub Actions CI Workflow**: Automated linter (`ruff`), type checker (`mypy`), and test suite (`pytest`) on every commit and pull request.
 
 ---
 
@@ -88,49 +92,6 @@ mypy photo_culler/
 ```bash
 # Cobertura en terminal con líneas faltantes
 pytest --cov=photo_culler --cov-report=term-missing
-```
-
----
-
-## 🚀 Recommended Workflow
-
-### Step 1: Initialize Catalog
-Create local SQLite database and setup cache directories:
-
-```bash
-photo-culler init
-```
-
-### Step 2: Read-Only Camera Card Scan
-Scan media directory to detect volume identity, pair RAW+JPEG files, extract metadata, and index photos into catalog:
-
-```bash
-photo-culler scan /media/edward/NIKON --quick --read-only
-```
-
-### Step 3: Group Shoot Sessions & Bursts
-Cluster photos into chronological shoot sessions and high-speed burst sequences:
-
-```bash
-# Group sessions by 15-minute gap
-photo-culler group --maximum-gap 15
-
-# Detect burst sequences (gap <= 1.5s)
-photo-culler bursts detect --maximum-gap 1.5
-```
-
-### Step 4: Run Technical Analysis
-Execute compiler-style technical analysis pipeline (corruption, exposure, clipping, sharpness, motion blur, noise):
-
-```bash
-photo-culler analyze /media/edward/NIKON --profile fast
-```
-
-### Step 5: Evaluate Quality & Recoverability
-Evaluate technical quality scores (0.0 - 1.0), RAW headroom recovery potential, and reject risks:
-
-```bash
-photo-culler evaluate --profile concert
 ```
 
 ---

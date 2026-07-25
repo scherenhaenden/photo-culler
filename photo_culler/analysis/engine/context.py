@@ -1,4 +1,4 @@
-"""AnalysisContext class for encapsulating photo data, resolution normalization, and cached feature representations."""
+"""AnalysisContext class for encapsulating photo data, resolution normalization, EXIF orientation handling, and cached feature representations."""
 
 import os
 from pathlib import Path
@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional, Union
 class AnalysisContext:
     """Execution context passed to every analyzer during pipeline run.
 
-    Provides lazy-loaded access to file metadata, Pillow Image objects,
+    Provides lazy-loaded access to file metadata, Pillow Image objects (with EXIF auto-rotation),
     resolution-normalized Numpy arrays, and shared computation state.
     """
 
@@ -28,7 +28,7 @@ class AnalysisContext:
         self._normalized_array = None
         self._file_bytes = None
 
-        # Shared computation cache across analyzers (e.g., histogram, grayscale conversion)
+        # Shared computation cache across analyzers
         self.shared_features: Dict[str, Any] = {}
 
     @property
@@ -48,11 +48,17 @@ class AnalysisContext:
         return self._file_bytes
 
     def get_pillow_image(self):
-        """Lazy load and return Pillow Image object."""
+        """Lazy load and return Pillow Image object with EXIF auto-rotation applied."""
         if self._pillow_image is None:
-            from PIL import Image
+            from PIL import Image, ImageOps
 
-            self._pillow_image = Image.open(self.image_path)
+            raw_img = Image.open(self.image_path)
+            try:
+                # Transpose image according to EXIF Orientation tag
+                self._pillow_image = ImageOps.exif_transpose(raw_img)
+            except Exception:
+                self._pillow_image = raw_img
+
         return self._pillow_image
 
     def get_numpy_array(self):
