@@ -1,4 +1,4 @@
-"""AnalysisContext class for encapsulating photo data and cached feature representations."""
+"""AnalysisContext class for encapsulating photo data, resolution normalization, and cached feature representations."""
 
 import os
 from pathlib import Path
@@ -9,7 +9,7 @@ class AnalysisContext:
     """Execution context passed to every analyzer during pipeline run.
 
     Provides lazy-loaded access to file metadata, Pillow Image objects,
-    Numpy image arrays, and shared computation state.
+    resolution-normalized Numpy arrays, and shared computation state.
     """
 
     def __init__(
@@ -25,6 +25,7 @@ class AnalysisContext:
         # Lazy properties
         self._pillow_image = None
         self._numpy_array = None
+        self._normalized_array = None
         self._file_bytes = None
 
         # Shared computation cache across analyzers (e.g., histogram, grayscale conversion)
@@ -55,7 +56,7 @@ class AnalysisContext:
         return self._pillow_image
 
     def get_numpy_array(self):
-        """Lazy load and return Numpy RGB array."""
+        """Lazy load and return full-resolution Numpy RGB array."""
         if self._numpy_array is None:
             import numpy as np
 
@@ -64,6 +65,32 @@ class AnalysisContext:
                 pil_img = pil_img.convert("RGB")
             self._numpy_array = np.array(pil_img)
         return self._numpy_array
+
+    def get_analysis_array(self, max_dim: int = 1920):
+        """Return resolution-normalized Numpy RGB array (bounded max dimension).
+
+        Normalizes spatial dimensions to ensure analyzers operate on consistent
+        pixel density and execution bounds regardless of camera sensor resolution.
+        """
+        if self._normalized_array is None:
+            import numpy as np
+            from PIL import Image
+
+            pil_img = self.get_pillow_image()
+            w, h = pil_img.size
+
+            if max(w, h) > max_dim:
+                scale = max_dim / float(max(w, h))
+                new_w, new_h = int(w * scale), int(h * scale)
+                resized_img = pil_img.resize((new_w, new_h), Image.Resampling.BILINEAR)
+            else:
+                resized_img = pil_img
+
+            if resized_img.mode != "RGB":
+                resized_img = resized_img.convert("RGB")
+            self._normalized_array = np.array(resized_img)
+
+        return self._normalized_array
 
     def close(self):
         """Clean up open file handles and arrays."""
@@ -74,4 +101,5 @@ class AnalysisContext:
                 pass
             self._pillow_image = None
         self._numpy_array = None
+        self._normalized_array = None
         self._file_bytes = None

@@ -47,8 +47,7 @@ def test_cli_group_bursts_sessions_decisions(cli_full_env):
 
     # Decisions
     res_dec = runner.invoke(
-        app,
-        ["--catalog", cli_full_env["cat"], "decisions", "set", "--decision", "keep", "--confirm"]
+        app, ["--catalog", cli_full_env["cat"], "decisions", "set", "--decision", "keep", "--confirm"]
     )
     assert res_dec.exit_code == 0
     assert "Updated" in res_dec.stdout
