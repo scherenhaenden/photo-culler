@@ -1,10 +1,10 @@
 """Rich console output renderer and printer."""
 
+from typing import Any, List, Optional
+
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
-from typing import Any, List, Dict, Optional
+from rich.table import Table
 
 
 class OutputRenderer:

@@ -1,9 +1,9 @@
 """Thumbnail and preview image generator."""
 
-from PIL import Image
 from pathlib import Path
 from typing import Dict, Union
 
+from PIL import Image
 
 THUMBNAIL_SIZES = {
     "small": 256,

@@ -1,12 +1,13 @@
 """sessions command for session naming and management."""
 
-import typer
 from typing import Optional
 
-from ..context import CliContext
-from ..output import OutputRenderer
+import typer
+
 from ...catalog.database import Database
 from ...catalog.schema import SessionDB
+from ..context import CliContext
+from ..output import OutputRenderer
 
 
 def sessions_command(

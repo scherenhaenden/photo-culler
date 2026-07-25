@@ -1,11 +1,12 @@
 """init command for catalog and environment setup."""
 
-import typer
 from pathlib import Path
 
+import typer
+
+from ...catalog.database import Database
 from ..context import CliContext
 from ..output import OutputRenderer
-from ...catalog.database import Database
 
 
 def init_command(

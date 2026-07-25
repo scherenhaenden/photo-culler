@@ -2,11 +2,10 @@
 
 import os
 from pathlib import Path
-from typing import List, Generator, Optional
+from typing import Generator, Optional
 
-from .file_filter import FileFilter
 from ..core.models import FileRecord
-from ..core.enums import FileRole
+from .file_filter import FileFilter
 
 
 class DirectoryScanner:
@@ -18,15 +17,15 @@ class DirectoryScanner:
     def scan(self, directory: Path) -> Generator[FileRecord, None, None]:
         """Walk directory recursively yielding FileRecord instances."""
         root_path = directory.resolve()
-        
+
         for root, dirs, files in os.walk(root_path):
             # Exclude ignored directories in-place
             dirs[:] = [d for d in dirs if not self.filter.should_ignore_dir(d)]
-            
+
             for file_name in files:
                 if file_name.startswith("."):
                     continue
-                
+
                 path = Path(root) / file_name
                 role = self.filter.classify_role(path)
                 if role is None:

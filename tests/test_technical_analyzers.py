@@ -48,7 +48,7 @@ def test_images(tmp_path):
 
 def test_corruption_analyzer(test_images):
     analyzer = CorruptionAnalyzer()
-    
+
     # Healthy file
     ctx_healthy = AnalysisContext(test_images["sharp"])
     res_healthy = analyzer.run(ctx_healthy)
@@ -118,7 +118,7 @@ def test_sharpness_and_motion_blur(test_images):
 
 def test_noise_analyzer(test_images):
     noise_analyzer = NoiseAnalyzer()
-    
+
     # Test on noisy image
     ctx_noisy = AnalysisContext(test_images["noisy"])
     res_noisy = noise_analyzer.run(ctx_noisy)

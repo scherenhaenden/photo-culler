@@ -1,15 +1,16 @@
 """photos command for listing and searching logical photo entries."""
 
-import typer
-from pathlib import Path
-from typing import Optional, List
 import json
+from pathlib import Path
+from typing import Optional
 
-from ..context import CliContext
-from ..output import OutputRenderer
-from ..helpers.photo_selector import PhotoSelector
+import typer
+
 from ...catalog.database import Database
 from ...catalog.repositories.photo_repository import PhotoRepository
+from ..context import CliContext
+from ..helpers.photo_selector import PhotoSelector
+from ..output import OutputRenderer
 
 
 def photos_command(
@@ -45,12 +46,26 @@ def photos_command(
         else:
             rows = []
             for p in photos[:100]:  # Limit display to 100 rows in terminal
-                dt_str = p.metadata.capture_time.strftime("%Y-%m-%d %H:%M:%S") if p.metadata and p.metadata.capture_time else "-"
+                dt_str = (
+                    p.metadata.capture_time.strftime("%Y-%m-%d %H:%M:%S")
+                    if p.metadata and p.metadata.capture_time
+                    else "-"
+                )
                 cam_str = f"{p.metadata.camera_model}" if p.metadata and p.metadata.camera_model else "-"
-                rows.append([p.photo_id[:8], p.stem_name, dt_str, cam_str, p.decision.value, f"{p.score:.2f}", p.quality_tier.value.upper()])
+                rows.append(
+                    [
+                        p.photo_id[:8],
+                        p.stem_name,
+                        dt_str,
+                        cam_str,
+                        p.decision.value,
+                        f"{p.score:.2f}",
+                        p.quality_tier.value.upper(),
+                    ]
+                )
 
             renderer.render_table(
                 title=f"Photos in Catalog ({len(photos)} matched)",
                 headers=["ID", "Stem", "Captured", "Camera", "Decision", "Score", "Tier"],
-                rows=rows
+                rows=rows,
             )

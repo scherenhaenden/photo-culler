@@ -1,6 +1,7 @@
 """Motion Blur Analyzer measuring directional streak vectors and anisotropic vs defocus blur."""
 
 import numpy as np
+
 from ...engine.analyzer import Analyzer
 from ...engine.context import AnalysisContext
 from ...engine.result import AnalysisResult
@@ -21,7 +22,7 @@ class MotionBlurAnalyzer(Analyzer):
             gray = arr.astype(np.float32)
 
         gy, gx = np.gradient(gray)
-        
+
         # Calculate 2D gradient structure tensor elements
         gxx_mean = float(np.mean(gx**2))
         gyy_mean = float(np.mean(gy**2))
@@ -30,8 +31,8 @@ class MotionBlurAnalyzer(Analyzer):
         # Eigenvalue decomposition of structure tensor matrix [[gxx, gxy], [gxy, gyy]]
         trace = gxx_mean + gyy_mean
         det = gxx_mean * gyy_mean - gxy_mean**2
-        lambda1 = max(0.0, (trace / 2.0) + np.sqrt(max(0.0, (trace / 2.0)**2 - det)))
-        lambda2 = max(0.0, (trace / 2.0) - np.sqrt(max(0.0, (trace / 2.0)**2 - det)))
+        lambda1 = max(0.0, (trace / 2.0) + np.sqrt(max(0.0, (trace / 2.0) ** 2 - det)))
+        lambda2 = max(0.0, (trace / 2.0) - np.sqrt(max(0.0, (trace / 2.0) ** 2 - det)))
 
         # Anisotropy: high anisotropy indicates strong directional motion blur; low means isotropic/defocus
         anisotropy = float((lambda1 - lambda2) / (lambda1 + lambda2 + 1e-8))

@@ -1,17 +1,17 @@
 """Persistent SQLite caching layer for intermediate analyzer measurements."""
 
-import sqlite3
 import json
+import sqlite3
 import time
 from pathlib import Path
-from typing import Dict, Any, Optional, Union, List
+from typing import List, Optional, Union
 
 from .result import AnalysisResult
 
 
 class MetricCache:
     """SQLite metric store to preserve all raw intermediate analyzer outputs.
-    
+
     Prevents costly re-computation of image metrics when scoring rules,
     weights, or algorithms are modified.
     """
@@ -65,12 +65,12 @@ class MetricCache:
                 FROM analyzer_metrics
                 WHERE image_hash = ? AND analyzer_name = ? AND analyzer_version = ?
                 """,
-                (image_hash, analyzer_name, analyzer_version)
+                (image_hash, analyzer_name, analyzer_version),
             )
             row = cursor.fetchone()
             if not row:
                 return None
-            
+
             metrics = json.loads(row["metrics_json"])
             return AnalysisResult(
                 analyzer=row["analyzer_name"],
@@ -94,18 +94,20 @@ class MetricCache:
                 FROM analyzer_metrics
                 WHERE image_hash = ?
                 """,
-                (image_hash,)
+                (image_hash,),
             )
             results = []
             for row in cursor.fetchall():
-                results.append(AnalysisResult(
-                    analyzer=row["analyzer_name"],
-                    version=row["analyzer_version"],
-                    metrics=json.loads(row["metrics_json"]),
-                    confidence=float(row["confidence"]),
-                    error=None,
-                    execution_time_ms=float(row["execution_time_ms"]),
-                ))
+                results.append(
+                    AnalysisResult(
+                        analyzer=row["analyzer_name"],
+                        version=row["analyzer_version"],
+                        metrics=json.loads(row["metrics_json"]),
+                        confidence=float(row["confidence"]),
+                        error=None,
+                        execution_time_ms=float(row["execution_time_ms"]),
+                    )
+                )
             return results
         finally:
             if self.db_path != ":memory:":
@@ -138,7 +140,7 @@ class MetricCache:
                     result.confidence,
                     result.execution_time_ms,
                     time.time(),
-                )
+                ),
             )
             conn.commit()
         finally:

@@ -1,15 +1,14 @@
 """AnalysisResult data structure for the photo-culler analysis framework."""
 
-from dataclasses import dataclass, field, asdict
-from typing import Dict, Any, Optional
 import json
-import time
+from dataclasses import asdict, dataclass, field
+from typing import Any, Dict, Optional
 
 
 @dataclass
 class AnalysisResult:
     """Standard output produced by every analyzer.
-    
+
     Attributes:
         analyzer: Unique name identifier of the analyzer.
         version: Version string of the analyzer implementation.
@@ -18,6 +17,7 @@ class AnalysisResult:
         error: Optional error string if analysis encountered a non-fatal failure.
         execution_time_ms: Wall-clock execution duration in milliseconds.
     """
+
     analyzer: str
     version: str
     metrics: Dict[str, Any] = field(default_factory=dict)

@@ -1,6 +1,7 @@
 """Exposure Analyzer for evaluating exposure balance, underexposure, and overexposure probabilities."""
 
 import numpy as np
+
 from ...engine.analyzer import Analyzer
 from ...engine.context import AnalysisContext
 from ...engine.result import AnalysisResult
@@ -20,7 +21,7 @@ class ExposureAnalyzer(Analyzer):
             probs = lum_hist / total_pixels
             bins = np.arange(256)
             mean_lum = float(np.sum(bins * probs))
-            
+
             # Probability of underexposure: weight of pixels below bin 60
             under_prob = float(np.sum(probs[:60]))
             # Probability of overexposure: weight of pixels above bin 195

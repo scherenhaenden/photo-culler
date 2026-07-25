@@ -1,15 +1,12 @@
 """Volume detector and marker manager."""
 
 import json
-import uuid
 import os
 import shutil
+import uuid
 from pathlib import Path
-from typing import Optional, Dict, Any
 
 from ..core.models import VolumeRecord
-from ..core.enums import VolumeStatus
-
 
 MARKER_FILENAME = ".photo-culler-volume.json"
 
@@ -20,14 +17,14 @@ class VolumeDetector:
     def get_or_create_volume_marker(self, directory: Path) -> VolumeRecord:
         """Inspect directory path, resolve volume mount point, and read/create marker file."""
         root_dir = directory.resolve()
-        
+
         # Find mount point or fallback to root directory
         mount_point = root_dir
         while mount_point.parent != mount_point and not os.path.ismount(mount_point):
             mount_point = mount_point.parent
 
         marker_path = mount_point / MARKER_FILENAME
-        
+
         if marker_path.exists():
             try:
                 with open(marker_path, "r", encoding="utf-8") as f:

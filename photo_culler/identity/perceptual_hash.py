@@ -1,13 +1,14 @@
 """Perceptual hashing (dHash) for visual similarity matching."""
 
-from PIL import Image
 from pathlib import Path
 from typing import Optional
+
+from PIL import Image
 
 
 def compute_dhash(image_input, hash_size: int = 8) -> Optional[str]:
     """Compute difference hash (dHash) as a 16-character hexadecimal string.
-    
+
     Args:
         image_input: Path or PIL.Image instance.
         hash_size: Grid resolution (default 8 yields 64-bit hash).

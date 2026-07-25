@@ -1,8 +1,8 @@
 """Catalog package."""
 
 from .database import Database
-from .schema import Base, PhotoDB, FileDB, MetadataDB, VolumeDB, SessionDB
 from .repositories.photo_repository import PhotoRepository
+from .schema import Base, FileDB, MetadataDB, PhotoDB, SessionDB, VolumeDB
 
 __all__ = [
     "Database",

@@ -1,9 +1,9 @@
 """Metadata extractor for reading EXIF headers from image files."""
 
-from PIL import Image, ExifTags
-from pathlib import Path
 from datetime import datetime
-from typing import Optional
+from pathlib import Path
+
+from PIL import ExifTags, Image
 
 from ..core.models import MetadataRecord
 

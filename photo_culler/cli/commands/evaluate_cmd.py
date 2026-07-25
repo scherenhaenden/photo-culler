@@ -1,15 +1,15 @@
 """evaluate command for evaluating quality tiers, recoverability, and reject risks."""
 
-import typer
 from typing import Optional
-from pathlib import Path
 
-from ..context import CliContext
-from ..output import OutputRenderer
-from ..helpers.photo_selector import PhotoSelector
+import typer
+
 from ...catalog.database import Database
 from ...catalog.repositories.photo_repository import PhotoRepository
 from ...scoring.recoverability_score import RecoverabilityScorer
+from ..context import CliContext
+from ..helpers.photo_selector import PhotoSelector
+from ..output import OutputRenderer
 
 
 def evaluate_command(
@@ -33,16 +33,18 @@ def evaluate_command(
         for p in photos:
             # Estimate recoverability headroom
             rec_res = rec_scorer.calculate_recoverability({})
-            rows.append([
-                p.stem_name,
-                f"{int(p.score * 100)}",
-                f"{rec_res['overall_recoverability'] * 100:.0f}%",
-                p.decision.value,
-                p.quality_tier.value.upper(),
-            ])
+            rows.append(
+                [
+                    p.stem_name,
+                    f"{int(p.score * 100)}",
+                    f"{rec_res['overall_recoverability'] * 100:.0f}%",
+                    p.decision.value,
+                    p.quality_tier.value.upper(),
+                ]
+            )
 
         renderer.render_table(
             title=f"Evaluation Report (Profile: {profile.upper()})",
             headers=["Photo", "Tech Quality", "RAW Recoverability", "Decision", "Tier"],
-            rows=rows
+            rows=rows,
         )

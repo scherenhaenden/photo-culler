@@ -23,3 +23,25 @@ photo-culler = "photo_culler.cli.app:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["photo_culler"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+precision = 1

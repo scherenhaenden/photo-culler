@@ -1,10 +1,10 @@
 """Temporal burst sequence detector."""
 
+import uuid
 from datetime import timedelta
 from typing import List
-import uuid
 
-from ..core.models import Photo, BurstGroup
+from ..core.models import BurstGroup, Photo
 
 
 class BurstDetector:
@@ -16,8 +16,7 @@ class BurstDetector:
     def detect_bursts(self, photos: List[Photo]) -> List[BurstGroup]:
         """Detect burst groups and assign burst_id to each Photo object."""
         sorted_photos = sorted(
-            [p for p in photos if p.metadata and p.metadata.capture_time],
-            key=lambda x: x.metadata.capture_time
+            [p for p in photos if p.metadata and p.metadata.capture_time], key=lambda x: x.metadata.capture_time
         )
         if not sorted_photos:
             return []

@@ -1,10 +1,9 @@
 """SQLAlchemy ORM database schema for photo-culler catalog."""
 
-from sqlalchemy import (
-    Column, Integer, String, Float, Boolean, DateTime, ForeignKey, Text, Table
-)
-from sqlalchemy.orm import declarative_base, relationship
 from datetime import datetime
+
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 

@@ -1,8 +1,9 @@
 """Basic selection decision rules engine."""
 
-from typing import List, Dict
-from ...core.models import Photo, BurstGroup
+from typing import Dict, List
+
 from ...core.enums import DecisionState, QualityTier
+from ...core.models import BurstGroup, Photo
 
 
 class SelectionRulesEngine:

@@ -1,10 +1,10 @@
 """RAW, JPEG, and sidecar file pairer."""
 
 import hashlib
-from typing import List, Dict
 from pathlib import Path
+from typing import Dict, List
 
-from ..core.models import Photo, FileRecord
+from ..core.models import FileRecord, Photo
 from ..metadata.extractor import MetadataExtractor
 
 
@@ -22,11 +22,11 @@ class RawJpegPairer:
             # Stem grouping key: directory + stem (e.g. /path/to/DSC_1234)
             parent_dir = str(f.path.parent.resolve())
             stem = f.path.stem
-            
+
             # Normalize sidecar stems (e.g. DSC_1234.NEF.xmp -> DSC_1234)
             if stem.lower().endswith((".nef", ".cr2", ".cr3", ".arw", ".jpg", ".jpeg", ".dng")):
                 stem = Path(stem).stem
-                
+
             key = f"{parent_dir}/{stem}".lower()
             if key not in groups:
                 groups[key] = []
@@ -56,11 +56,13 @@ class RawJpegPairer:
             raw_id_str = f"{stem_name}_{time_str}_{cam_str}_{primary.size_bytes}"
             photo_id = hashlib.sha256(raw_id_str.encode("utf-8")).hexdigest()[:16]
 
-            photos.append(Photo(
-                photo_id=photo_id,
-                stem_name=stem_name,
-                files=file_records,
-                metadata=meta,
-            ))
+            photos.append(
+                Photo(
+                    photo_id=photo_id,
+                    stem_name=stem_name,
+                    files=file_records,
+                    metadata=meta,
+                )
+            )
 
         return photos

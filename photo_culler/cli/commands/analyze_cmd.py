@@ -1,22 +1,22 @@
 """analyze command for technical image measurement pipeline."""
 
-import typer
 from pathlib import Path
-from typing import Optional, List
-import json
+from typing import Optional
 
-from ..context import CliContext
-from ..output import OutputRenderer
-from ..helpers.photo_selector import PhotoSelector
-from ..helpers.asset_resolver import AnalysisAssetResolver
-from ...catalog.database import Database
-from ...catalog.repositories.photo_repository import PhotoRepository
-from ...analysis.engine.pipeline import AnalysisPipeline
-from ...analysis.engine.cache import MetricCache
-from ...scoring.technical_score import TechnicalScorer
-from ...selection.decisions.rules import SelectionRulesEngine
+import typer
 
 import photo_culler.analysis.analyzers.technical  # noqa
+
+from ...analysis.engine.cache import MetricCache
+from ...analysis.engine.pipeline import AnalysisPipeline
+from ...catalog.database import Database
+from ...catalog.repositories.photo_repository import PhotoRepository
+from ...scoring.technical_score import TechnicalScorer
+from ...selection.decisions.rules import SelectionRulesEngine
+from ..context import CliContext
+from ..helpers.asset_resolver import AnalysisAssetResolver
+from ..helpers.photo_selector import PhotoSelector
+from ..output import OutputRenderer
 
 
 def analyze_command(
@@ -46,7 +46,9 @@ def analyze_command(
         scorer = TechnicalScorer()
         rules_engine = SelectionRulesEngine()
 
-        renderer.print(f"Analyzing [bold cyan]{len(photos)}[/bold cyan] photos (Profile: [yellow]{profile}[/yellow])...")
+        renderer.print(
+            f"Analyzing [bold cyan]{len(photos)}[/bold cyan] photos (Profile: [yellow]{profile}[/yellow])..."
+        )
 
         for i, p in enumerate(photos, start=1):
             img_asset = asset_resolver.resolve(p, prefer_jpeg=True)
@@ -55,7 +57,7 @@ def analyze_command(
 
             results = pipeline.run_image(image_path=img_asset, image_hash=p.photo_id)
             tech_score = scorer.calculate_score(results)
-            
+
             p.score = tech_score["final_score"]
             p.quality_tier = tech_score["quality_tier"]
 

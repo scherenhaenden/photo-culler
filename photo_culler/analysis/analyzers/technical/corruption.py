@@ -1,7 +1,7 @@
 """Corruption Analyzer for detecting truncated, corrupt, or unreadable photo files."""
 
 from PIL import Image
-import os
+
 from ...engine.analyzer import Analyzer
 from ...engine.context import AnalysisContext
 from ...engine.result import AnalysisResult
@@ -37,11 +37,11 @@ class CorruptionAnalyzer(Analyzer):
             # Check opening and verifying file stream
             img = Image.open(context.image_path)
             img.verify()
-            
+
             # Re-open for test load since verify() mutates internal file pointer
             img_load = Image.open(context.image_path)
             img_load.load()
-            
+
             metrics["is_decodable"] = True
             metrics["corruption_status"] = "healthy"
             metrics["width"] = img_load.width

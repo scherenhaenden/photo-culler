@@ -1,6 +1,7 @@
 """Histogram Analyzer for computing color and luminance distribution statistics."""
 
 import numpy as np
+
 from ...engine.analyzer import Analyzer
 from ...engine.context import AnalysisContext
 from ...engine.result import AnalysisResult
@@ -15,7 +16,7 @@ class HistogramAnalyzer(Analyzer):
 
     def analyze(self, context: AnalysisContext) -> AnalysisResult:
         arr = context.get_numpy_array()
-        
+
         # Calculate per-channel histograms (256 bins)
         r_hist, _ = np.histogram(arr[:, :, 0], bins=256, range=(0, 256))
         g_hist, _ = np.histogram(arr[:, :, 1], bins=256, range=(0, 256))

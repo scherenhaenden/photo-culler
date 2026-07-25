@@ -1,8 +1,7 @@
 """Abstract Base Class for all Analyzers in the photo-culler framework."""
 
-from abc import ABC, abstractmethod
-from typing import Dict, Any
 import time
+from abc import ABC, abstractmethod
 
 from .context import AnalysisContext
 from .result import AnalysisResult
@@ -10,11 +9,11 @@ from .result import AnalysisResult
 
 class Analyzer(ABC):
     """Base interface for all photo analyzers.
-    
+
     Every analyzer acts as an independent execution node in the pipeline,
     extracting specific measurements without making culling decisions.
     """
-    
+
     name: str = "base_analyzer"
     version: str = "1.0"
     category: str = "general"
@@ -42,7 +41,7 @@ class Analyzer(ABC):
     @abstractmethod
     def analyze(self, context: AnalysisContext) -> AnalysisResult:
         """Perform analysis on the provided context and return AnalysisResult.
-        
+
         Subclasses must implement this method.
         """
         pass

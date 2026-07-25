@@ -1,13 +1,14 @@
 """report command for generating culling summary and statistics."""
 
-import typer
 import json
 
-from ..context import CliContext
-from ..output import OutputRenderer
+import typer
+
 from ...catalog.database import Database
 from ...catalog.repositories.photo_repository import PhotoRepository
 from ...reports.summary_report import ReportGenerator
+from ..context import CliContext
+from ..output import OutputRenderer
 
 
 def report_command(

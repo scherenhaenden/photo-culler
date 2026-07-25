@@ -1,12 +1,13 @@
 """volumes command for managing disk storage devices."""
 
-import typer
 from pathlib import Path
 
-from ..context import CliContext
-from ..output import OutputRenderer
+import typer
+
 from ...catalog.database import Database
 from ...catalog.schema import VolumeDB
+from ..context import CliContext
+from ..output import OutputRenderer
 
 
 def volumes_command(
@@ -26,6 +27,16 @@ def volumes_command(
         for v in vols:
             free_gb = round(v.available_bytes / 1e9, 1)
             total_gb = round(v.total_bytes / 1e9, 1)
-            rows.append([v.volume_id[:8], v.label, f"{free_gb} GB / {total_gb} GB", v.mount_point, "ONLINE" if v.is_online else "OFFLINE"])
+            rows.append(
+                [
+                    v.volume_id[:8],
+                    v.label,
+                    f"{free_gb} GB / {total_gb} GB",
+                    v.mount_point,
+                    "ONLINE" if v.is_online else "OFFLINE",
+                ]
+            )
 
-        renderer.render_table(title="Registered Storage Volumes", headers=["ID", "Label", "Available", "Mount Point", "Status"], rows=rows)
+        renderer.render_table(
+            title="Registered Storage Volumes", headers=["ID", "Label", "Available", "Mount Point", "Status"], rows=rows
+        )

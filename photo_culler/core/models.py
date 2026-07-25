@@ -2,15 +2,16 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Dict, Any, Optional
 from pathlib import Path
+from typing import List, Optional
 
-from .enums import FileRole, DecisionState, QualityTier
+from .enums import DecisionState, FileRole, QualityTier
 
 
 @dataclass
 class FileRecord:
     """Represents a physical file on disk."""
+
     path: Path
     role: FileRole
     size_bytes: int
@@ -23,6 +24,7 @@ class FileRecord:
 @dataclass
 class MetadataRecord:
     """EXIF and camera settings extracted from photo."""
+
     capture_time: Optional[datetime] = None
     subsecond: Optional[str] = None
     camera_make: Optional[str] = None
@@ -41,6 +43,7 @@ class MetadataRecord:
 @dataclass
 class Photo:
     """Logical representation of a photo (unifying RAW, JPEG, and sidecars)."""
+
     photo_id: str  # Unique logical identifier (e.g. hash of capture_time + camera + stem)
     stem_name: str
     files: List[FileRecord] = field(default_factory=list)
@@ -67,6 +70,7 @@ class Photo:
 @dataclass
 class VolumeRecord:
     """Represents a mounted volume or storage device."""
+
     volume_id: str
     label: str
     mount_point: Path
@@ -78,6 +82,7 @@ class VolumeRecord:
 @dataclass
 class SessionRecord:
     """Represents a photo shoot session aggregated by time continuity."""
+
     session_id: str
     name: str
     start_time: datetime
@@ -88,6 +93,7 @@ class SessionRecord:
 @dataclass
 class BurstGroup:
     """Represents a burst sequence of rapidly captured photos."""
+
     burst_id: str
     photos: List[Photo] = field(default_factory=list)
     representative_photo_id: Optional[str] = None

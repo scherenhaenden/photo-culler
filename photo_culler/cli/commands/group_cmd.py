@@ -2,11 +2,11 @@
 
 import typer
 
-from ..context import CliContext
-from ..output import OutputRenderer
 from ...catalog.database import Database
 from ...catalog.repositories.photo_repository import PhotoRepository
 from ...grouping.timeline import SessionDetector
+from ..context import CliContext
+from ..output import OutputRenderer
 
 
 def group_command(
@@ -30,7 +30,19 @@ def group_command(
 
         rows = []
         for sess in sessions:
-            rows.append([sess.session_id[:8], sess.name, sess.start_time.strftime("%H:%M:%S"), sess.end_time.strftime("%H:%M:%S"), sess.photo_count])
+            rows.append(
+                [
+                    sess.session_id[:8],
+                    sess.name,
+                    sess.start_time.strftime("%H:%M:%S"),
+                    sess.end_time.strftime("%H:%M:%S"),
+                    sess.photo_count,
+                ]
+            )
 
-        renderer.render_table(title="Timeline Shoot Sessions", headers=["Session ID", "Name", "Start Time", "End Time", "Photos"], rows=rows)
+        renderer.render_table(
+            title="Timeline Shoot Sessions",
+            headers=["Session ID", "Name", "Start Time", "End Time", "Photos"],
+            rows=rows,
+        )
         renderer.success(f"Grouped {len(photos)} photos into {len(sessions)} sessions.")

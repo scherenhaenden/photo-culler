@@ -1,6 +1,7 @@
 """Technical Quality Scorer for aggregating individual analyzer measurements."""
 
-from typing import Dict, Any
+from typing import Any, Dict
+
 from photo_culler.analysis.engine.result import AnalysisResult
 
 
@@ -59,10 +60,10 @@ class TechnicalScorer:
 
         # Weighted aggregate score
         final_score = (
-            (sharpness_score * self.w_sharpness) +
-            (exposure_score * self.w_exposure) +
-            (clipping_score * self.w_clipping) +
-            (noise_score * self.w_noise)
+            (sharpness_score * self.w_sharpness)
+            + (exposure_score * self.w_exposure)
+            + (clipping_score * self.w_clipping)
+            + (noise_score * self.w_noise)
         )
         final_score = round(max(0.0, min(1.0, final_score)), 4)
 
@@ -83,5 +84,5 @@ class TechnicalScorer:
                 "exposure": round(exposure_score, 4),
                 "clipping": round(clipping_score, 4),
                 "noise": round(noise_score, 4),
-            }
+            },
         }

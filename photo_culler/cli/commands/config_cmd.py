@@ -25,4 +25,6 @@ def config_command(
         ["safety.delete_originals", "false"],
     ]
 
-    renderer.render_table(title="System Configuration Settings", headers=["Setting Key", "Current Value"], rows=config_data)
+    renderer.render_table(
+        title="System Configuration Settings", headers=["Setting Key", "Current Value"], rows=config_data
+    )

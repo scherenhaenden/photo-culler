@@ -1,21 +1,19 @@
 """Summary and culling report generator."""
 
-from typing import List, Dict, Any
-from ..core.models import Photo, SessionRecord, BurstGroup
+from typing import Any, Dict, List
+
 from ..core.enums import DecisionState, QualityTier
+from ..core.models import BurstGroup, Photo, SessionRecord
 
 
 class ReportGenerator:
     """Generates structured summaries and statistics for processed photo sets."""
 
     def generate_summary(
-        self,
-        photos: List[Photo],
-        sessions: List[SessionRecord] = None,
-        bursts: List[BurstGroup] = None
+        self, photos: List[Photo], sessions: List[SessionRecord] = None, bursts: List[BurstGroup] = None
     ) -> Dict[str, Any]:
         total_photos = len(photos)
-        
+
         # Decision breakdown
         decisions: Dict[str, int] = {d.value: 0 for d in DecisionState}
         for p in photos:

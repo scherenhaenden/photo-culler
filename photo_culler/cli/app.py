@@ -1,24 +1,24 @@
 """Main Typer application entry point for photo-culler CLI."""
 
-import typer
 from pathlib import Path
-from typing import Optional
 
-from .context import CliContext
-from .commands.init_cmd import init_command
-from .commands.doctor_cmd import doctor_command
-from .commands.scan_cmd import scan_command
-from .commands.verify_cmd import verify_command
-from .commands.volumes_cmd import volumes_command
-from .commands.photos_cmd import photos_command
+import typer
+
 from .commands.analyze_cmd import analyze_command
+from .commands.bursts_cmd import bursts_command
+from .commands.config_cmd import config_command
+from .commands.decisions_cmd import decisions_command
+from .commands.doctor_cmd import doctor_command
 from .commands.evaluate_cmd import evaluate_command
 from .commands.group_cmd import group_command
-from .commands.bursts_cmd import bursts_command
-from .commands.sessions_cmd import sessions_command
-from .commands.decisions_cmd import decisions_command
+from .commands.init_cmd import init_command
+from .commands.photos_cmd import photos_command
 from .commands.report_cmd import report_command
-from .commands.config_cmd import config_command
+from .commands.scan_cmd import scan_command
+from .commands.sessions_cmd import sessions_command
+from .commands.verify_cmd import verify_command
+from .commands.volumes_cmd import volumes_command
+from .context import CliContext
 
 app = typer.Typer(
     name="photo-culler",

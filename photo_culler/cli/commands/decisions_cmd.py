@@ -1,21 +1,23 @@
 """decisions command for setting human culling flags."""
 
-import typer
 from typing import Optional
-from pathlib import Path
 
-from ..context import CliContext
-from ..output import OutputRenderer
-from ..helpers.photo_selector import PhotoSelector
+import typer
+
 from ...catalog.database import Database
 from ...catalog.repositories.photo_repository import PhotoRepository
 from ...core.enums import DecisionState
+from ..context import CliContext
+from ..helpers.photo_selector import PhotoSelector
+from ..output import OutputRenderer
 
 
 def decisions_command(
     ctx: typer.Context,
     action: str = typer.Argument("set", help="Action: set, list"),
-    decision: str = typer.Option(..., "--decision", "-d", help="Decision: keep, best, alternate, review, reject_technical, reject_redundant"),
+    decision: str = typer.Option(
+        ..., "--decision", "-d", help="Decision: keep, best, alternate, review, reject_technical, reject_redundant"
+    ),
     photo_id: Optional[str] = typer.Option(None, "--photo-id", help="Photo ID"),
     session: Optional[str] = typer.Option(None, "--session", help="Session filter"),
     confirm: bool = typer.Option(False, "--confirm", help="Confirm batch decision updates"),

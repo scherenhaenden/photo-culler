@@ -1,17 +1,17 @@
 """scan command for file crawler and catalog ingestion."""
 
-import typer
 import json
 from pathlib import Path
-from typing import Optional
 
-from ..context import CliContext
-from ..output import OutputRenderer
+import typer
+
 from ...catalog.database import Database
 from ...catalog.repositories.photo_repository import PhotoRepository
-from ...volumes.detector import VolumeDetector
-from ...scanner.directory_scanner import DirectoryScanner
 from ...pairing.raw_jpeg_pairer import RawJpegPairer
+from ...scanner.directory_scanner import DirectoryScanner
+from ...volumes.detector import VolumeDetector
+from ..context import CliContext
+from ..output import OutputRenderer
 
 
 def scan_command(
@@ -34,7 +34,7 @@ def scan_command(
 
     scanner = DirectoryScanner()
     file_records = list(scanner.scan(target_dir))
-    
+
     pairer = RawJpegPairer()
     photos = pairer.pair_files(file_records)
 

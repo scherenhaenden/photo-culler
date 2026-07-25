@@ -1,6 +1,7 @@
 """Noise Analyzer for estimating luminance, chroma, and shadow noise levels."""
 
 import numpy as np
+
 from ...engine.analyzer import Analyzer
 from ...engine.context import AnalysisContext
 from ...engine.result import AnalysisResult
@@ -23,7 +24,7 @@ class NoiseAnalyzer(Analyzer):
 
         # 2. Luminance Noise: High pass difference standard deviation
         lum = 0.2126 * arr[:, :, 0] + 0.7152 * arr[:, :, 1] + 0.0722 * arr[:, :, 2]
-        
+
         diff_h = np.abs(lum[1:, :] - lum[:-1, :])
         diff_v = np.abs(lum[:, 1:] - lum[:, :-1])
         lum_noise_std = float((np.std(diff_h) + np.std(diff_v)) / 2.0)

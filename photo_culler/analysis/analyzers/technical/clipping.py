@@ -1,6 +1,7 @@
 """Clipping Analyzer for measuring highlight blown-out pixels and shadow crushed pixels."""
 
 import numpy as np
+
 from ...engine.analyzer import Analyzer
 from ...engine.context import AnalysisContext
 from ...engine.result import AnalysisResult
@@ -33,7 +34,7 @@ class ClippingAnalyzer(Analyzer):
         else:
             arr = context.get_numpy_array()
             total_pixels = arr.shape[0] * arr.shape[1]
-            
+
             lum = 0.2126 * arr[:, :, 0] + 0.7152 * arr[:, :, 1] + 0.0722 * arr[:, :, 2]
             shadow_clipped = float(np.sum(lum <= 1) / total_pixels)
             highlight_clipped = float(np.sum(lum >= 254) / total_pixels)

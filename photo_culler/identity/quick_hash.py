@@ -10,11 +10,11 @@ def compute_quick_hash(path: Path, chunk_size: int = 65536) -> str:
         size = path.stat().st_size
         hasher = hashlib.sha256()
         hasher.update(str(size).encode("utf-8"))
-        
+
         with open(path, "rb") as f:
             header = f.read(chunk_size)
             hasher.update(header)
-            
+
         return hasher.hexdigest()
     except OSError:
         return ""

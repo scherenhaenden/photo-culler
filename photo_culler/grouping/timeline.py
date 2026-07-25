@@ -1,8 +1,8 @@
 """Timeline shoot session detector."""
 
-from datetime import timedelta
-from typing import List, Dict
 import uuid
+from datetime import timedelta
+from typing import List
 
 from ..core.models import Photo, SessionRecord
 
@@ -17,8 +17,7 @@ class SessionDetector:
         """Cluster photos into sessions and assign session_id to each Photo object."""
         # Sort photos by capture_time
         sorted_photos = sorted(
-            [p for p in photos if p.metadata and p.metadata.capture_time],
-            key=lambda x: x.metadata.capture_time
+            [p for p in photos if p.metadata and p.metadata.capture_time], key=lambda x: x.metadata.capture_time
         )
         if not sorted_photos:
             return []
@@ -29,7 +28,7 @@ class SessionDetector:
         for p in sorted_photos[1:]:
             prev_time = current_photos[-1].metadata.capture_time
             curr_time = p.metadata.capture_time
-            
+
             if (curr_time - prev_time) <= self.max_gap:
                 current_photos.append(p)
             else:

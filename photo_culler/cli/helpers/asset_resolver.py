@@ -2,18 +2,15 @@
 
 from pathlib import Path
 from typing import Optional
-from ...core.models import Photo
+
 from ...core.enums import FileRole
+from ...core.models import Photo
 
 
 class AnalysisAssetResolver:
     """Resolves optimal image source path for an analyzer based on availability and speed priority."""
 
-    def resolve(
-        self,
-        photo: Photo,
-        prefer_jpeg: bool = True
-    ) -> Optional[Path]:
+    def resolve(self, photo: Photo, prefer_jpeg: bool = True) -> Optional[Path]:
         """Return best available file path for image processing."""
         if not photo.files:
             return None

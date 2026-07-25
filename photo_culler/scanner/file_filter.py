@@ -2,8 +2,8 @@
 
 from pathlib import Path
 from typing import Optional
-from ..core.enums import FileRole
 
+from ..core.enums import FileRole
 
 RAW_EXTENSIONS = {".nef", ".cr2", ".cr3", ".arw", ".dng", ".orf", ".rw2", ".pef", ".raf"}
 JPEG_EXTENSIONS = {".jpg", ".jpeg"}

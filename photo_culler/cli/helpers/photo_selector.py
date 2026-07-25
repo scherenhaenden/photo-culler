@@ -1,12 +1,12 @@
 """PhotoSelector query resolver."""
 
-from typing import List, Optional
 from datetime import datetime
 from pathlib import Path
+from typing import List, Optional
 
 from ...catalog.repositories.photo_repository import PhotoRepository
-from ...core.models import Photo
 from ...core.enums import DecisionState
+from ...core.models import Photo
 
 
 class PhotoSelector:

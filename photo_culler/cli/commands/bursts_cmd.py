@@ -2,11 +2,11 @@
 
 import typer
 
-from ..context import CliContext
-from ..output import OutputRenderer
+from ...bursts.temporal_bursts import BurstDetector
 from ...catalog.database import Database
 from ...catalog.repositories.photo_repository import PhotoRepository
-from ...bursts.temporal_bursts import BurstDetector
+from ..context import CliContext
+from ..output import OutputRenderer
 
 
 def bursts_command(
@@ -31,7 +31,11 @@ def bursts_command(
 
         rows = []
         for b in bursts:
-            rows.append([b.burst_id[:8], len(b.photos), b.representative_photo_id[:8] if b.representative_photo_id else "-"])
+            rows.append(
+                [b.burst_id[:8], len(b.photos), b.representative_photo_id[:8] if b.representative_photo_id else "-"]
+            )
 
-        renderer.render_table(title="Detected Burst Sequences", headers=["Burst ID", "Photo Count", "Representative ID"], rows=rows)
+        renderer.render_table(
+            title="Detected Burst Sequences", headers=["Burst ID", "Photo Count", "Representative ID"], rows=rows
+        )
         renderer.success(f"Detected {len(bursts)} burst sequences.")

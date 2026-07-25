@@ -1,15 +1,14 @@
 """Technical analyzers package."""
 
+from ...engine.registry import default_registry
+from .clipping import ClippingAnalyzer
 from .corruption import CorruptionAnalyzer
 from .dimensions import DimensionsAnalyzer
-from .histogram import HistogramAnalyzer
-from .clipping import ClippingAnalyzer
 from .exposure import ExposureAnalyzer
-from .sharpness import SharpnessAnalyzer
+from .histogram import HistogramAnalyzer
 from .motion_blur import MotionBlurAnalyzer
 from .noise import NoiseAnalyzer
-
-from ...engine.registry import default_registry
+from .sharpness import SharpnessAnalyzer
 
 # Register all technical analyzers in global registry
 default_registry.register(CorruptionAnalyzer)

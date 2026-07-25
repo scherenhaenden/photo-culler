@@ -1,14 +1,14 @@
 """doctor command for environment and system diagnostics."""
 
-import typer
-import sys
-import shutil
 import platform
-from pathlib import Path
+import shutil
+import sys
 
+import typer
+
+from ...catalog.database import Database
 from ..context import CliContext
 from ..output import OutputRenderer
-from ...catalog.database import Database
 
 
 def doctor_command(
@@ -46,4 +46,6 @@ def doctor_command(
         ["RawTherapee", "Installed" if rawtherapee else "Not found", "INFO"],
     ]
 
-    renderer.render_table(title="Photo Culler Environment Diagnostics", headers=["Component", "Details", "Status"], rows=rows)
+    renderer.render_table(
+        title="Photo Culler Environment Diagnostics", headers=["Component", "Details", "Status"], rows=rows
+    )

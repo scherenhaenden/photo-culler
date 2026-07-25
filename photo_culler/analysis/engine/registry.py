@@ -1,6 +1,7 @@
 """Registry for managing and discovering analyzers."""
 
-from typing import Dict, Type, List, Optional
+from typing import Dict, List, Optional, Type
+
 from .analyzer import Analyzer
 
 
@@ -14,7 +15,7 @@ class AnalyzerRegistry:
         """Register an Analyzer subclass."""
         if not issubclass(analyzer_cls, Analyzer):
             raise TypeError(f"Class {analyzer_cls} must inherit from Analyzer")
-        
+
         name = analyzer_cls.name
         self._registry[name] = analyzer_cls
         return analyzer_cls

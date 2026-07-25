@@ -1,13 +1,14 @@
 """verify command for verifying file copies and streaming SHA-256 integrity."""
 
-import typer
 from pathlib import Path
 from typing import Optional
 
-from ..context import CliContext
-from ..output import OutputRenderer
+import typer
+
 from ...identity.full_hash import compute_full_hash
 from ...scanner.directory_scanner import DirectoryScanner
+from ..context import CliContext
+from ..output import OutputRenderer
 
 
 def verify_command(

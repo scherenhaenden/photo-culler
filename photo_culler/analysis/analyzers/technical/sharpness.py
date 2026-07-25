@@ -1,6 +1,7 @@
 """Sharpness Analyzer combining Laplacian variance, edge density, gradient energy, and FFT high-frequency ratio."""
 
 import numpy as np
+
 from ...engine.analyzer import Analyzer
 from ...engine.context import AnalysisContext
 from ...engine.result import AnalysisResult
@@ -15,7 +16,7 @@ class SharpnessAnalyzer(Analyzer):
 
     def analyze(self, context: AnalysisContext) -> AnalysisResult:
         arr = context.get_numpy_array()
-        
+
         # Convert to grayscale
         if arr.ndim == 3:
             gray = 0.2126 * arr[:, :, 0] + 0.7152 * arr[:, :, 1] + 0.0722 * arr[:, :, 2]
@@ -44,12 +45,12 @@ class SharpnessAnalyzer(Analyzer):
         f = np.fft.fft2(gray)
         fshift = np.fft.fftshift(f)
         magnitude_spectrum = np.abs(fshift)
-        
+
         # Mask out center low frequencies (radius = min(h,w)/10)
         r = min(h, w) // 10
         y_grid, x_grid = np.ogrid[:h, :w]
-        mask = ((y_grid - cy)**2 + (x_grid - cx)**2) > r**2
-        
+        mask = ((y_grid - cy) ** 2 + (x_grid - cx) ** 2) > r**2
+
         high_freq_power = float(np.sum(magnitude_spectrum[mask]))
         total_power = float(np.sum(magnitude_spectrum)) + 1e-8
         fft_ratio = float(high_freq_power / total_power)

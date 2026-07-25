@@ -1,10 +1,11 @@
 """Database connection and session factory for photo-culler catalog."""
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
-from pathlib import Path
-from typing import Union, Generator
 from contextlib import contextmanager
+from pathlib import Path
+from typing import Generator, Union
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
 from .schema import Base
 
@@ -20,11 +21,7 @@ class Database:
         else:
             db_uri = "sqlite:///:memory:"
 
-        self.engine = create_engine(
-            db_uri,
-            connect_args={"check_same_thread": False},
-            echo=False
-        )
+        self.engine = create_engine(db_uri, connect_args={"check_same_thread": False}, echo=False)
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         self.create_tables()
 
