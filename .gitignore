@@ -1,0 +1,40 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Database files
+*.db
+*.sqlite
+*.db*
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build & Packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# OS / Editor files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Photo Culler cache
+.photo-culler/
+previews_cache/
+demo_photos/
