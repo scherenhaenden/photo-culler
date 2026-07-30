@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from photo_culler.analysis.profiles import AnalysisProfileStore
 from photo_culler.catalog.database import Database
 from photo_culler.editing import EditService
 from photo_culler.importing import GalleryImportService
@@ -65,6 +66,7 @@ def create_app(
     app.state.db_engine = db_engine
     app.state.gallery_imports = GalleryImportService(db_engine)
     app.state.analysis_jobs = analysis.AnalysisJobManager()
+    app.state.analysis_profiles = AnalysisProfileStore(str(db_engine.db_path) + ".analysis-profiles.json")
     app.state.edit_service = EditService(db_engine)
 
     def shutdown_services() -> None:

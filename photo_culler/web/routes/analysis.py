@@ -8,10 +8,11 @@ import threading
 import time
 from typing import cast
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, Body, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 import photo_culler.analysis.analyzers.technical  # noqa: F401
+from photo_culler.analysis.profiles import ANALYZER_CATALOG, DEFAULT_PROFILES
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,10 @@ class AnalysisJobManager:
         self.processed = 0
         self.total = 0
         self.profile = "fast"
+        self.profile_name = "Fast Scan"
+        self.analyzers: list[str] = []
+        self.executed_metrics = 0
+        self.cached_metrics = 0
         self.status = "idle"
         self.message = "No hay análisis activos."
         self._listeners: list[queue.Queue[str]] = []
@@ -34,7 +39,7 @@ class AnalysisJobManager:
         self._pause_requested = False
         self._cancel_requested = False
 
-    def start_analysis(self, db_engine, profile: str = "fast", import_service=None) -> bool:
+    def start_analysis(self, db_engine, profile: dict | str = "fast", import_service=None) -> bool:
         """Start analysis unless this application already owns an active job."""
         with self._control:
             if self.is_running:
@@ -44,13 +49,20 @@ class AnalysisJobManager:
             self.progress = 0
             self.processed = 0
             self.total = 0
-            self.profile = profile
+            profile_config = profile if isinstance(profile, dict) else DEFAULT_PROFILES.get(
+                profile, DEFAULT_PROFILES["fast"]
+            )
+            self.profile = profile_config["id"]
+            self.profile_name = profile_config["name"]
+            self.analyzers = list(profile_config["analyzers"])
+            self.executed_metrics = 0
+            self.cached_metrics = 0
             self.message = "Iniciando análisis..."
             self._pause_requested = False
             self._cancel_requested = False
             self._thread = threading.Thread(
                 target=self._run_analysis,
-                args=(db_engine, profile, import_service),
+                args=(db_engine, profile_config, import_service),
                 daemon=True,
             )
             self._thread.start()
@@ -109,6 +121,10 @@ class AnalysisJobManager:
                 "processed": self.processed,
                 "total": self.total,
                 "profile": self.profile,
+                "profile_name": self.profile_name,
+                "analyzers": list(self.analyzers),
+                "executed_metrics": self.executed_metrics,
+                "cached_metrics": self.cached_metrics,
                 "message": self.message,
             }
 
@@ -125,10 +141,12 @@ class AnalysisJobManager:
             if listener in self._listeners:
                 self._listeners.remove(listener)
 
-    def _run_analysis(self, db_engine, profile: str, import_service=None) -> None:
+    def _run_analysis(self, db_engine, profile: dict, import_service=None) -> None:
         try:
             from photo_culler.analysis.engine.cache import MetricCache
             from photo_culler.analysis.engine.pipeline import AnalysisPipeline
+            from photo_culler.analysis.engine.registry import default_registry
+            from photo_culler.analysis.profiles import AnalysisProfileStore
             from photo_culler.catalog.repositories.photo_repository import PhotoRepository
             from photo_culler.cli.helpers.asset_resolver import AnalysisAssetResolver
             from photo_culler.scoring.technical_score import TechnicalScorer
@@ -159,7 +177,21 @@ class AnalysisJobManager:
             cache = MetricCache(db_path=str(db_engine.db_path) + ".metrics.db")
             pipeline = AnalysisPipeline(cache=cache, use_cache=True)
             asset_resolver = AnalysisAssetResolver()
-            scorer = TechnicalScorer(profile=profile)
+            analyzer_instances = []
+            for analyzer_name in profile["analyzers"]:
+                analyzer_class = default_registry.get(analyzer_name)
+                if analyzer_class is None:
+                    raise ValueError(f"Analyzer not registered: {analyzer_name}")
+                analyzer_instances.append(analyzer_class())
+            weights = profile["weights"]
+            scorer = TechnicalScorer(
+                profile=profile["clipping_mode"],
+                weight_sharpness=weights["sharpness"],
+                weight_exposure=weights["exposure"],
+                weight_clipping=weights["clipping"],
+                weight_noise=weights["noise"],
+            )
+            cache_namespace = AnalysisProfileStore.fingerprint(profile)
 
             for index, photo in enumerate(photos):
                 if not self._wait_for_control():
@@ -175,8 +207,12 @@ class AnalysisJobManager:
                 if image_asset and image_asset.exists():
                     results = pipeline.run_image(
                         image_path=image_asset,
-                        image_hash=photo.photo_id,
+                        image_hash=f"{photo.photo_id}:{cache_namespace}",
+                        analyzers=analyzer_instances,
                     )
+                    with self._lock:
+                        self.executed_metrics += pipeline.last_run_stats["executed"]
+                        self.cached_metrics += pipeline.last_run_stats["cached"]
                     technical_score = scorer.calculate_score(results)
                     photo.score = technical_score["final_score"]
                     photo.quality_tier = technical_score["quality_tier"]
@@ -248,23 +284,70 @@ def get_analysis_page(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="analysis.html",
-        context={"active_tab": "analysis", "job": _manager(request)},
+        context={
+            "active_tab": "analysis",
+            "job": _manager(request),
+            "profiles": request.app.state.analysis_profiles.list(),
+            "analyzer_catalog": ANALYZER_CATALOG,
+        },
     )
 
 
 @router.post("/analysis/start")
 def start_analysis(request: Request, profile: str = Form("fast")):
-    if profile not in {"fast", "technical", "concert"}:
+    profile_config = request.app.state.analysis_profiles.get(profile)
+    if profile_config is None:
         raise HTTPException(status_code=422, detail="Unknown analysis profile")
     success = _manager(request).start_analysis(
         request.app.state.db_engine,
-        profile=profile,
+        profile=profile_config,
         import_service=request.app.state.gallery_imports,
     )
     return {
         "status": "ok" if success else "error",
         "message": "Análisis iniciado" if success else "Análisis ya en ejecución",
     }
+
+
+@router.get("/analysis/profiles")
+def list_profiles(request: Request) -> dict[str, object]:
+    return {"profiles": request.app.state.analysis_profiles.list()}
+
+
+@router.post("/analysis/profiles", status_code=201)
+def create_profile(request: Request, payload: dict = Body(...)) -> dict[str, object]:
+    try:
+        return {"profile": request.app.state.analysis_profiles.save(payload)}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.put("/analysis/profiles/{profile_id}")
+def update_profile(request: Request, profile_id: str, payload: dict = Body(...)) -> dict[str, object]:
+    try:
+        return {"profile": request.app.state.analysis_profiles.save(payload, profile_id=profile_id)}
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Profile not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.delete("/analysis/profiles/{profile_id}", status_code=204)
+def delete_profile(request: Request, profile_id: str):
+    try:
+        request.app.state.analysis_profiles.delete(profile_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Profile not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/analysis/profiles/{profile_id}/restore")
+def restore_profile(request: Request, profile_id: str) -> dict[str, object]:
+    try:
+        return {"profile": request.app.state.analysis_profiles.restore(profile_id)}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/analysis/pause")

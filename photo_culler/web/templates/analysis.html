@@ -3,61 +3,80 @@
 {% block title %}Análisis - Photo Culler{% endblock %}
 
 {% block content %}
+<style>
+  .analysis-workspace { display:grid; grid-template-columns:minmax(310px, 1fr) minmax(360px, 1.12fr); gap:1rem; align-items:start; }
+  .analysis-panel { background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-lg); overflow:hidden; }
+  .analysis-panel-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:1rem 1.1rem; border-bottom:1px solid var(--border-color); }
+  .analysis-intro { color:var(--text-secondary); line-height:1.55; font-size:12px; margin:0; padding:1rem 1.1rem .35rem; }
+  .profile-list { display:flex; flex-direction:column; gap:.65rem; padding:.8rem; }
+  .profile-card { width:100%; text-align:left; color:inherit; background:var(--bg-main); border:1px solid var(--border-color); border-radius:var(--radius-lg); padding:.85rem; cursor:pointer; }
+  .profile-card:hover, .profile-card.active { border-color:var(--accent-orange); }
+  .profile-card.active { box-shadow:inset 3px 0 0 var(--accent-orange); }
+  .profile-card-top { display:flex; align-items:center; gap:.6rem; }
+  .profile-card-title { font-weight:650; flex:1; }
+  .profile-card-desc { color:var(--text-secondary); font-size:11px; line-height:1.45; margin:.45rem 0 0 1.65rem; }
+  .profile-count { color:var(--text-secondary); font-size:10px; border:1px solid var(--border-color); border-radius:99px; padding:.15rem .45rem; }
+  .profile-editor { padding:1rem 1.1rem; }
+  .empty-editor { color:var(--text-secondary); min-height:320px; display:grid; place-items:center; text-align:center; }
+  .editor-field { margin-bottom:1rem; }
+  .editor-field label, .editor-label { display:block; color:var(--text-secondary); font-size:11px; font-weight:650; margin-bottom:.4rem; text-transform:uppercase; letter-spacing:.04em; }
+  .editor-input, .editor-textarea, .editor-select { box-sizing:border-box; width:100%; color:var(--text-primary); background:var(--bg-main); border:1px solid var(--border-color); border-radius:6px; padding:.65rem .7rem; }
+  .editor-textarea { min-height:68px; resize:vertical; font-family:inherit; }
+  .analyzer-list { display:grid; gap:.45rem; }
+  .analyzer-row { display:grid; grid-template-columns:auto 1fr auto; gap:.65rem; align-items:start; background:var(--bg-main); border:1px solid var(--border-color); border-radius:7px; padding:.65rem; }
+  .analyzer-name { font-size:12px; font-weight:650; }
+  .analyzer-desc { color:var(--text-secondary); font-size:10px; line-height:1.4; margin-top:.18rem; }
+  .analyzer-cost { color:var(--text-secondary); font-size:9px; white-space:nowrap; }
+  .weights-grid { display:grid; grid-template-columns:1fr 1fr; gap:.55rem; }
+  .weight-control { background:var(--bg-main); border:1px solid var(--border-color); border-radius:7px; padding:.55rem; }
+  .weight-control span { display:flex; justify-content:space-between; font-size:10px; margin-bottom:.25rem; }
+  .weight-control input { width:100%; accent-color:var(--accent-orange); }
+  .editor-actions { display:flex; gap:.5rem; flex-wrap:wrap; padding-top:.35rem; }
+  .status-note { min-height:1.2rem; color:var(--text-secondary); font-size:11px; margin-top:.7rem; }
+  .status-note.error { color:#f85149; }
+  .progress-stats { display:flex; gap:.5rem; flex-wrap:wrap; margin-top:.75rem; font-size:10px; color:var(--text-secondary); }
+  .progress-stats span { border:1px solid var(--border-color); border-radius:99px; padding:.25rem .55rem; }
+  @media (max-width: 880px) { .analysis-workspace { grid-template-columns:1fr; } }
+</style>
+
 <div class="header-bar">
-  <h1>Ejecución de Análisis Técnico</h1>
+  <div>
+    <h1>Perfiles de análisis</h1>
+    <div style="color:var(--text-secondary);font-size:12px;">Abre un perfil para ver exactamente qué ejecuta y ajustar su comportamiento.</div>
+  </div>
+  <button type="button" class="btn btn-secondary" onclick="newProfile()">+ Nuevo perfil</button>
 </div>
 
-<div class="dashboard-panel" style="max-width: 650px;">
-  <div class="dashboard-panel-header">
-    <div class="panel-title" style="font-size: 14px;">Perfil de Análisis Técnico</div>
-    <span>⚡</span>
-  </div>
-
-  <p style="color: var(--text-secondary); line-height: 1.6; font-size: 12px; margin-bottom: 1.5rem;">
-    Selecciona el perfil de evaluación técnica para calibrar los scorers de nitidez, clipping, nivel de ruido y recuperación de rango dinámico.
-  </p>
-
-  <form style="display: flex; flex-direction: column; gap: 1rem;">
-    <!-- Profile 1 -->
-    <label class="pipeline-job-card" style="display: block; cursor: pointer; border-radius: var(--radius-lg); padding: 1rem;">
-      <div class="job-card-header" style="display: flex; align-items: center; justify-content: flex-start; gap: 10px;">
-        <input type="radio" name="profile" value="fast" checked style="accent-color: var(--accent-orange);">
-        <span class="job-name">Fast Scan Profile</span>
-      </div>
-      <p class="job-desc" style="margin-left: 24px; margin-top: 4px;">Evalúa rápidamente dimensiones básicas, rotación y nitidez en base a thumbnails de baja resolución.</p>
-    </label>
-
-    <!-- Profile 2 -->
-    <label class="pipeline-job-card" style="display: block; cursor: pointer; border-radius: var(--radius-lg); padding: 1rem;">
-      <div class="job-card-header" style="display: flex; align-items: center; justify-content: flex-start; gap: 10px;">
-        <input type="radio" name="profile" value="technical" style="accent-color: var(--accent-orange);">
-        <span class="job-name">Technical Precision Profile</span>
-      </div>
-      <p class="job-desc" style="margin-left: 24px; margin-top: 4px;">Análisis completo de histograma, clipping de luces/sombras, nitidez regional y detección de ruido con Laplacian.</p>
-    </label>
-
-    <!-- Profile 3 -->
-    <label class="pipeline-job-card" style="display: block; cursor: pointer; border-radius: var(--radius-lg); padding: 1rem;">
-      <div class="job-card-header" style="display: flex; align-items: center; justify-content: flex-start; gap: 10px;">
-        <input type="radio" name="profile" value="concert" style="accent-color: var(--accent-orange);">
-        <span class="job-name">Concert Stage Profile</span>
-      </div>
-      <p class="job-desc" style="margin-left: 24px; margin-top: 4px;">Especializado en luces intensas, sujetos en movimiento con desenfoque de acción y análisis de la zona de enfoque central.</p>
-    </label>
-
-    <div style="margin-top: 1rem;">
-      <button id="btn-start" type="button" class="btn" style="width: 100%; justify-content: center; padding: 0.8rem;" onclick="startAnalysis()">Ejecutar Análisis Técnico</button>
+<div class="analysis-workspace">
+  <section class="analysis-panel">
+    <div class="analysis-panel-head">
+      <div class="panel-title" style="font-size:14px;">Perfiles disponibles</div>
+      <span>⚡</span>
     </div>
-  </form>
+    <p class="analysis-intro">Selecciona uno para abrir sus analizadores, pesos y reglas. El botón de ejecución usa el perfil abierto.</p>
+    <div id="profile-list" class="profile-list"></div>
+  </section>
+
+  <section class="analysis-panel">
+    <div id="profile-editor" class="profile-editor">
+      <div class="empty-editor">Selecciona un perfil para inspeccionarlo.</div>
+    </div>
+  </section>
 </div>
 
-<div id="progress-container" style="margin-top: 2rem; background: var(--bg-card); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color); max-width: 600px; display: none;">
-  <h3 id="progress-title">Progreso del Análisis</h3>
-  <div style="background: var(--bg-main); border-radius: 4px; height: 20px; width: 100%; overflow: hidden; margin-top: 1rem; border: 1px solid var(--border-color);">
-    <div id="progress-bar" style="background: var(--accent-blue, #388bfd); height: 100%; width: 0%; transition: width 0.1s ease;"></div>
+<div id="progress-container" style="margin-top:1rem;background:var(--bg-card);padding:1.25rem;border-radius:8px;border:1px solid var(--border-color);display:none;">
+  <h3 id="progress-title" style="margin-top:0;">Progreso del análisis</h3>
+  <div style="background:var(--bg-main);border-radius:4px;height:14px;width:100%;overflow:hidden;margin-top:1rem;border:1px solid var(--border-color);">
+    <div id="progress-bar" style="background:var(--accent-blue, #388bfd);height:100%;width:0%;transition:width .1s ease;"></div>
   </div>
-  <div id="progress-message" style="margin-top: 0.75rem; font-size: 0.9rem; color: var(--text-secondary);">Iniciando...</div>
-  <div style="display:flex; gap:.5rem; margin-top:1rem;">
+  <div id="progress-message" style="margin-top:.75rem;font-size:.9rem;color:var(--text-secondary);">Iniciando...</div>
+  <div class="progress-stats">
+    <span id="stat-profile">Perfil: —</span>
+    <span id="stat-analyzers">0 analizadores</span>
+    <span id="stat-executed">0 cálculos nuevos</span>
+    <span id="stat-cached">0 desde caché</span>
+  </div>
+  <div style="display:flex;gap:.5rem;margin-top:1rem;">
     <button class="btn btn-secondary" id="btn-pause" type="button" onclick="controlAnalysis('pause')">Pausar</button>
     <button class="btn btn-secondary" id="btn-resume" type="button" onclick="controlAnalysis('resume')" hidden>Reanudar</button>
     <button class="btn btn-secondary" id="btn-cancel" type="button" onclick="controlAnalysis('cancel')">Cancelar</button>
@@ -65,86 +84,222 @@
 </div>
 
 <script>
+  const analyzerCatalog = {{ analyzer_catalog | list | tojson }};
+  let profiles = {{ profiles | tojson }};
+  let selectedId = profiles.length ? profiles[0].id : null;
   let eventSource = null;
 
-  function checkStatus() {
-    if (eventSource) {
-      eventSource.close();
-    }
-    eventSource = new EventSource("/analysis/progress");
-    eventSource.onmessage = function(event) {
-      const data = JSON.parse(event.data);
-      const container = document.getElementById("progress-container");
-      const bar = document.getElementById("progress-bar");
-      const msg = document.getElementById("progress-message");
-      const btn = document.getElementById("btn-start");
-      const pauseBtn = document.getElementById("btn-pause");
-      const resumeBtn = document.getElementById("btn-resume");
-      const cancelBtn = document.getElementById("btn-cancel");
+  const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, char => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+  }[char]));
 
-      if (data.status === "running") {
-        container.style.display = "block";
-        bar.style.width = data.progress + "%";
-        msg.textContent = data.message;
-        btn.disabled = true;
-        btn.textContent = "Analizando...";
-        pauseBtn.hidden = false;
-        resumeBtn.hidden = true;
-        cancelBtn.hidden = false;
-      } else if (data.status === "paused") {
-        container.style.display = "block";
-        bar.style.width = data.progress + "%";
-        msg.textContent = data.message;
-        btn.disabled = true;
-        pauseBtn.hidden = true;
-        resumeBtn.hidden = false;
-        cancelBtn.hidden = false;
-      } else if (data.status === "completed") {
-        container.style.display = "block";
-        bar.style.width = "100%";
-        msg.textContent = data.message;
-        btn.disabled = false;
-        btn.textContent = "Ejecutar Análisis Técnico";
-        pauseBtn.hidden = true;
-        resumeBtn.hidden = true;
-        cancelBtn.hidden = true;
-        eventSource.close();
-      } else if (data.status === "failed" || data.status === "cancelled") {
-        container.style.display = "block";
-        msg.textContent = data.message;
-        msg.style.color = "#da3633";
-        btn.disabled = false;
-        btn.textContent = "Ejecutar Análisis Técnico";
-        pauseBtn.hidden = true;
-        resumeBtn.hidden = true;
-        cancelBtn.hidden = true;
-        eventSource.close();
-      } else {
-        container.style.display = "none";
-      }
+  function renderProfiles() {
+    const list = document.getElementById("profile-list");
+    list.innerHTML = profiles.map(profile => `
+      <button type="button" class="profile-card ${profile.id === selectedId ? "active" : ""}" onclick="openProfile('${profile.id}')">
+        <div class="profile-card-top">
+          <input type="radio" tabindex="-1" ${profile.id === selectedId ? "checked" : ""} style="accent-color:var(--accent-orange);pointer-events:none;">
+          <span class="profile-card-title">${escapeHtml(profile.name)}</span>
+          <span class="profile-count">${profile.analyzers.length} pasos</span>
+        </div>
+        <p class="profile-card-desc">${escapeHtml(profile.description)}</p>
+      </button>`).join("");
+  }
+
+  function openProfile(profileId) {
+    selectedId = profileId;
+    renderProfiles();
+    renderEditor(profiles.find(profile => profile.id === profileId));
+  }
+
+  function analyzerRows(profile) {
+    return analyzerCatalog.map(analyzer => `
+      <label class="analyzer-row">
+        <input type="checkbox" name="analyzer" value="${analyzer.id}" ${profile.analyzers.includes(analyzer.id) ? "checked" : ""} style="accent-color:var(--accent-orange);">
+        <span>
+          <span class="analyzer-name">${escapeHtml(analyzer.name)}</span>
+          <span class="analyzer-desc">${escapeHtml(analyzer.description)}</span>
+        </span>
+        <span class="analyzer-cost">${escapeHtml(analyzer.cost)}</span>
+      </label>`).join("");
+  }
+
+  function weightControls(profile) {
+    const labels = {sharpness:"Nitidez", exposure:"Exposición", clipping:"Clipping", noise:"Ruido"};
+    return Object.entries(labels).map(([key, label]) => `
+      <label class="weight-control">
+        <span><b>${label}</b><output id="weight-${key}-value">${Math.round(profile.weights[key] * 100)}%</output></span>
+        <input id="weight-${key}" type="range" min="0" max="100" value="${Math.round(profile.weights[key] * 100)}"
+          oninput="document.getElementById('weight-${key}-value').value=this.value+'%'">
+      </label>`).join("");
+  }
+
+  function renderEditor(profile, isNew = false) {
+    const editor = document.getElementById("profile-editor");
+    editor.innerHTML = `
+      <div class="editor-field">
+        <label for="profile-name">Nombre del perfil</label>
+        <input class="editor-input" id="profile-name" value="${escapeHtml(profile.name)}">
+      </div>
+      <div class="editor-field">
+        <label for="profile-description">Qué hace</label>
+        <textarea class="editor-textarea" id="profile-description">${escapeHtml(profile.description)}</textarea>
+      </div>
+      <div class="editor-field">
+        <span class="editor-label">Analizadores incluidos</span>
+        <div class="analyzer-list">${analyzerRows(profile)}</div>
+      </div>
+      <div class="editor-field">
+        <span class="editor-label">Pesos del score (se normalizan automáticamente)</span>
+        <div class="weights-grid">${weightControls(profile)}</div>
+      </div>
+      <div class="editor-field">
+        <label for="clipping-mode">Tratamiento de luces recortadas</label>
+        <select class="editor-select" id="clipping-mode">
+          <option value="standard" ${profile.clipping_mode === "standard" ? "selected" : ""}>Estándar — penaliza luces y sombras globales</option>
+          <option value="concert" ${profile.clipping_mode === "concert" ? "selected" : ""}>Escenario — tolera focos y prioriza el centro</option>
+        </select>
+      </div>
+      <div class="editor-actions">
+        <button id="btn-start" type="button" class="btn" onclick="startAnalysis()" ${isNew ? "disabled" : ""}>▶ Ejecutar este perfil</button>
+        <button type="button" class="btn btn-secondary" onclick="saveProfile(${isNew})">${isNew ? "Crear perfil" : "Guardar ajustes"}</button>
+        ${profile.builtin && !isNew ? `<button type="button" class="btn btn-secondary" onclick="restoreProfile()">Restaurar base</button>` : ""}
+        ${!profile.builtin && !isNew ? `<button type="button" class="btn btn-secondary" onclick="deleteProfile()">Eliminar</button>` : ""}
+      </div>
+      <div id="editor-status" class="status-note"></div>`;
+  }
+
+  function newProfile() {
+    selectedId = null;
+    renderProfiles();
+    renderEditor({
+      name:"Mi perfil", description:"Perfil de análisis personalizado.",
+      analyzers:["corruption", "dimensions", "exposure", "sharpness"],
+      weights:{sharpness:.4, exposure:.25, clipping:.2, noise:.15},
+      clipping_mode:"standard", builtin:false
+    }, true);
+  }
+
+  function editorPayload() {
+    return {
+      name: document.getElementById("profile-name").value,
+      description: document.getElementById("profile-description").value,
+      analyzers: [...document.querySelectorAll('input[name="analyzer"]:checked')].map(input => input.value),
+      weights: Object.fromEntries(["sharpness","exposure","clipping","noise"].map(key => [
+        key, Number(document.getElementById(`weight-${key}`).value) / 100
+      ])),
+      clipping_mode: document.getElementById("clipping-mode").value
     };
   }
 
-  function startAnalysis() {
-    const selectedProfile = document.querySelector('input[name="profile"]:checked').value;
-    const formData = new FormData();
-    formData.append("profile", selectedProfile);
+  async function api(url, options = {}) {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      let message = "No se pudo completar la operación.";
+      try { message = (await response.json()).detail || message; } catch (_) {}
+      throw new Error(message);
+    }
+    return response.status === 204 ? null : response.json();
+  }
 
-    fetch("/analysis/start", {
-      method: "POST",
-      body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-      checkStatus();
-    });
+  async function saveProfile(isNew) {
+    const status = document.getElementById("editor-status");
+    status.className = "status-note";
+    try {
+      const result = await api(isNew ? "/analysis/profiles" : `/analysis/profiles/${selectedId}`, {
+        method: isNew ? "POST" : "PUT",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(editorPayload())
+      });
+      const saved = result.profile;
+      const index = profiles.findIndex(profile => profile.id === saved.id);
+      if (index >= 0) profiles[index] = saved; else profiles.push(saved);
+      selectedId = saved.id;
+      renderProfiles();
+      renderEditor(saved);
+      document.getElementById("editor-status").textContent = "Perfil guardado.";
+    } catch (error) {
+      status.className = "status-note error";
+      status.textContent = error.message;
+    }
+  }
+
+  async function restoreProfile() {
+    const result = await api(`/analysis/profiles/${selectedId}/restore`, {method:"POST"});
+    profiles[profiles.findIndex(profile => profile.id === selectedId)] = result.profile;
+    renderProfiles(); renderEditor(result.profile);
+    document.getElementById("editor-status").textContent = "Perfil base restaurado.";
+  }
+
+  async function deleteProfile() {
+    if (!confirm("¿Eliminar este perfil personalizado?")) return;
+    await api(`/analysis/profiles/${selectedId}`, {method:"DELETE"});
+    profiles = profiles.filter(profile => profile.id !== selectedId);
+    selectedId = profiles.length ? profiles[0].id : null;
+    renderProfiles();
+    selectedId ? openProfile(selectedId) : newProfile();
+  }
+
+  function updateProgress(data) {
+    const container = document.getElementById("progress-container");
+    const bar = document.getElementById("progress-bar");
+    const msg = document.getElementById("progress-message");
+    const btn = document.getElementById("btn-start");
+    const pauseBtn = document.getElementById("btn-pause");
+    const resumeBtn = document.getElementById("btn-resume");
+    const cancelBtn = document.getElementById("btn-cancel");
+    document.getElementById("stat-profile").textContent = `Perfil: ${data.profile_name || data.profile}`;
+    document.getElementById("stat-analyzers").textContent = `${(data.analyzers || []).length} analizadores`;
+    document.getElementById("stat-executed").textContent = `${data.executed_metrics || 0} cálculos nuevos`;
+    document.getElementById("stat-cached").textContent = `${data.cached_metrics || 0} desde caché`;
+    msg.style.color = "var(--text-secondary)";
+
+    if (["running","paused","completed","failed","cancelled"].includes(data.status)) {
+      container.style.display = "block";
+      bar.style.width = data.progress + "%";
+      msg.textContent = data.message;
+    } else {
+      container.style.display = "none";
+      return;
+    }
+    const active = ["running","paused"].includes(data.status);
+    if (btn) {
+      btn.disabled = active;
+      btn.textContent = active ? "Analizando…" : "▶ Ejecutar este perfil";
+    }
+    pauseBtn.hidden = data.status !== "running";
+    resumeBtn.hidden = data.status !== "paused";
+    cancelBtn.hidden = !active;
+    if (["failed","cancelled"].includes(data.status)) msg.style.color = "#f85149";
+    if (!active && eventSource) eventSource.close();
+  }
+
+  function checkStatus() {
+    if (eventSource) eventSource.close();
+    eventSource = new EventSource("/analysis/progress");
+    eventSource.onmessage = event => updateProgress(JSON.parse(event.data));
+  }
+
+  async function startAnalysis() {
+    if (!selectedId) return;
+    const formData = new FormData();
+    formData.append("profile", selectedId);
+    const result = await api("/analysis/start", {method:"POST", body:formData});
+    if (result.status !== "ok") {
+      document.getElementById("editor-status").className = "status-note error";
+      document.getElementById("editor-status").textContent = result.message;
+      return;
+    }
+    checkStatus();
   }
 
   function controlAnalysis(action) {
-    fetch(`/analysis/${action}`, {method: "POST"}).then(() => checkStatus());
+    fetch(`/analysis/${action}`, {method:"POST"}).then(() => checkStatus());
   }
 
-  document.addEventListener("DOMContentLoaded", function() {
+  document.addEventListener("DOMContentLoaded", () => {
+    renderProfiles();
+    if (selectedId) openProfile(selectedId);
     checkStatus();
   });
 </script>

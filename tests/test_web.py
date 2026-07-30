@@ -8,7 +8,8 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
-from photo_culler.core.models import Photo
+from photo_culler.core.enums import FileRole
+from photo_culler.core.models import FileRecord, Photo
 from photo_culler.scanner.directory_scanner import DirectoryScanner
 from photo_culler.web.app import create_app
 from photo_culler.web.routes.analysis import AnalysisJobManager
@@ -344,6 +345,86 @@ def test_import_then_immediate_analysis_waits_for_catalog(web_client, tmp_path, 
 def test_analysis_rejects_unknown_profile(web_client):
     response = web_client.post("/analysis/start", data={"profile": "imaginary"})
     assert response.status_code == 422
+
+
+def test_analysis_profiles_can_be_inspected_created_updated_and_deleted(web_client):
+    profiles = web_client.get("/analysis/profiles")
+    assert profiles.status_code == 200
+    assert {profile["id"] for profile in profiles.json()["profiles"]} >= {"fast", "technical", "concert"}
+    assert len(next(profile for profile in profiles.json()["profiles"] if profile["id"] == "fast")["analyzers"]) == 4
+
+    payload = {
+        "name": "Retrato nocturno",
+        "description": "Prioriza foco y ruido.",
+        "analyzers": ["corruption", "sharpness", "noise"],
+        "weights": {"sharpness": 0.7, "exposure": 0, "clipping": 0, "noise": 0.3},
+        "clipping_mode": "standard",
+    }
+    created = web_client.post("/analysis/profiles", json=payload)
+    assert created.status_code == 201
+    profile = created.json()["profile"]
+    assert profile["id"] == "retrato-nocturno"
+    assert profile["builtin"] is False
+
+    payload["description"] = "Ajustado por el usuario."
+    updated = web_client.put("/analysis/profiles/retrato-nocturno", json=payload)
+    assert updated.status_code == 200
+    assert updated.json()["profile"]["description"] == "Ajustado por el usuario."
+
+    deleted = web_client.delete("/analysis/profiles/retrato-nocturno")
+    assert deleted.status_code == 204
+    assert web_client.post("/analysis/start", data={"profile": "retrato-nocturno"}).status_code == 422
+
+
+def test_builtin_analysis_profile_can_be_edited_and_restored(web_client):
+    fast = next(profile for profile in web_client.get("/analysis/profiles").json()["profiles"] if profile["id"] == "fast")
+    fast["description"] = "Mi ajuste temporal"
+    updated = web_client.put("/analysis/profiles/fast", json=fast)
+    assert updated.status_code == 200
+    assert updated.json()["profile"]["description"] == "Mi ajuste temporal"
+    assert web_client.delete("/analysis/profiles/fast").status_code == 422
+
+    restored = web_client.post("/analysis/profiles/fast/restore")
+    assert restored.status_code == 200
+    assert restored.json()["profile"]["description"] != "Mi ajuste temporal"
+
+
+def test_profiles_run_distinct_analyzer_sets_and_report_cache_usage(web_client, tmp_path):
+    image_path = tmp_path / "profile-check.jpg"
+    Image.new("RGB", (96, 64), color=(90, 120, 160)).save(image_path)
+    photo = Photo(
+        "profile-check",
+        "profile-check",
+        files=[
+            FileRecord(
+                path=image_path,
+                role=FileRole.JPEG,
+                size_bytes=image_path.stat().st_size,
+                modified_time=image_path.stat().st_mtime,
+            )
+        ],
+    )
+    with web_client.app.state.db_engine.session() as session:
+        PhotoRepository(session).save_photo(photo)
+
+    def run(profile_id):
+        assert web_client.post("/analysis/start", data={"profile": profile_id}).json()["status"] == "ok"
+        deadline = time.monotonic() + 8
+        while web_client.app.state.analysis_jobs.is_running and time.monotonic() < deadline:
+            time.sleep(0.02)
+        result = web_client.app.state.analysis_jobs.snapshot()
+        assert result["status"] == "completed"
+        return result
+
+    fast = run("fast")
+    technical = run("technical")
+    technical_again = run("technical")
+    concert = run("concert")
+
+    assert (fast["executed_metrics"], fast["cached_metrics"]) == (4, 0)
+    assert (technical["executed_metrics"], technical["cached_metrics"]) == (8, 0)
+    assert (technical_again["executed_metrics"], technical_again["cached_metrics"]) == (0, 8)
+    assert (concert["executed_metrics"], concert["cached_metrics"]) == (8, 0)
 
 
 def test_analysis_manager_is_application_scoped_and_uses_bounded_listeners(tmp_path):
