@@ -8,8 +8,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from photo_culler.catalog.database import Database
+from photo_culler.editing import EditService
 from photo_culler.importing import GalleryImportService
-from photo_culler.web.routes import analysis, api, dashboard, library, photos, sessions
+from photo_culler.web.routes import analysis, api, dashboard, editing, library, photos, sessions
 
 
 def create_app(
@@ -64,6 +65,7 @@ def create_app(
     app.state.db_engine = db_engine
     app.state.gallery_imports = GalleryImportService(db_engine)
     app.state.analysis_jobs = analysis.AnalysisJobManager()
+    app.state.edit_service = EditService(db_engine)
 
     def shutdown_services() -> None:
         app.state.analysis_jobs.shutdown()
@@ -121,6 +123,7 @@ def create_app(
     app.include_router(library.router)
     app.include_router(photos.router)
     app.include_router(analysis.router)
+    app.include_router(editing.router)
     app.include_router(sessions.router)
     app.include_router(api.router)
 

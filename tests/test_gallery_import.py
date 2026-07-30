@@ -385,12 +385,13 @@ def test_versioned_migration_upgrades_legacy_photos_table(tmp_path):
     reopened = Database(path)
     with reopened.engine.connect() as connection:
         versions = connection.execute(text("SELECT version FROM schema_migrations")).scalars().all()
-    assert versions == [1, 2, 3, 4, 5]
+    assert versions == [1, 2, 3, 4, 5, 6]
     assert "gallery_id" in {column["name"] for column in inspect(reopened.engine).get_columns("photos")}
     import_job_columns = {column["name"] for column in inspect(reopened.engine).get_columns("import_jobs")}
     assert {"pause_requested", "resume_state"} <= import_job_columns
     file_columns = {column["name"] for column in inspect(reopened.engine).get_columns("files")}
     assert {"import_source_id", "last_seen_revision_id", "source_relative_path", "status"} <= file_columns
     assert "scan_revisions" in inspect(reopened.engine).get_table_names()
+    assert "edit_documents" in inspect(reopened.engine).get_table_names()
     import_source_columns = {column["name"] for column in inspect(reopened.engine).get_columns("import_sources")}
     assert "exclude_patterns" in import_source_columns

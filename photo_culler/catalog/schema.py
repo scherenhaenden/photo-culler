@@ -149,6 +149,20 @@ class MetadataDB(Base):
     photo = relationship("PhotoDB", back_populates="metadata_record")
 
 
+class EditDocumentDB(Base):
+    __tablename__ = "edit_documents"
+
+    id = Column(String(36), primary_key=True)
+    photo_id = Column(Integer, ForeignKey("photos.id"), nullable=False, unique=True, index=True)
+    contract_version = Column(Integer, default=1, nullable=False)
+    revision = Column(Integer, default=0, nullable=False)
+    recipe_json = Column(Text, default="{}", nullable=False)
+    undo_stack_json = Column(Text, default="[]", nullable=False)
+    redo_stack_json = Column(Text, default="[]", nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+
 class SessionDB(Base):
     __tablename__ = "sessions"
 

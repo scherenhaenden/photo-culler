@@ -49,6 +49,8 @@ def test_library_filters_pagination_navigation_and_decision_round_trip(tmp_path)
     assert detail.status_code == 200
     assert 'data-prev-photo-id="photo-best"' in detail.text
     assert 'data-next-photo-id="photo-reject"' in detail.text
+    assert "Edición no destructiva" in detail.text
+    assert 'id="edit-exposure"' in detail.text
 
     changed = client.post("/photos/photo-review/decision", data={"decision": "keep"})
     assert changed.status_code == 200

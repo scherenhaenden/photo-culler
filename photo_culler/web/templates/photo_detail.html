@@ -29,7 +29,7 @@
   <div class="detail-view">
     <!-- Center Premium Cinema View of Image -->
     <div class="main-image-container">
-      <img src="/thumbnails/{{ photo.photo_id }}/1600" alt="{{ photo.stem_name }}">
+      <img id="edit-preview-image" src="/api/v1/photos/{{ photo.photo_id }}/edit-preview?max_size=1600" data-original-src="/thumbnails/{{ photo.photo_id }}/1600" alt="{{ photo.stem_name }}">
     </div>
 
     <!-- Inspector Sidebar Panel -->
@@ -49,6 +49,25 @@
             {% endif %}
           </div>
         </div>
+      </div>
+
+      <div class="inspector-section">
+        <h3>Edición no destructiva</h3>
+        <label>Exposición <output id="exposure-value">0.0 EV</output>
+          <input id="edit-exposure" type="range" min="-5" max="5" step="0.1" value="0">
+        </label>
+        <label>Temperatura <output id="temperature-value">6500 K</output>
+          <input id="edit-temperature" type="range" min="2000" max="12000" step="100" value="6500">
+        </label>
+        <label>Tint <output id="tint-value">0</output>
+          <input id="edit-tint" type="range" min="-100" max="100" step="1" value="0">
+        </label>
+        <div style="display:flex; gap:.5rem; flex-wrap:wrap; margin-top:.75rem;">
+          <button class="btn btn-secondary" id="edit-undo" type="button">Undo</button>
+          <button class="btn btn-secondary" id="edit-redo" type="button">Redo</button>
+          <button class="btn btn-secondary" id="edit-before" type="button">Mantener para antes</button>
+        </div>
+        <p id="edit-status" aria-live="polite" style="color:var(--text-secondary);"></p>
       </div>
 
       <!-- Specifications Table -->
@@ -124,4 +143,84 @@
     </div>
   </div>
 </div>
+<script>
+(() => {
+  const photoId = "{{ photo.photo_id }}";
+  const image = document.getElementById("edit-preview-image");
+  const exposure = document.getElementById("edit-exposure");
+  const temperature = document.getElementById("edit-temperature");
+  const tint = document.getElementById("edit-tint");
+  const status = document.getElementById("edit-status");
+  let debounceTimer = null;
+  let requestController = null;
+
+  const syncControls = (document) => {
+    exposure.value = document.recipe.exposure;
+    temperature.value = document.recipe.temperature;
+    tint.value = document.recipe.tint;
+    document.getElementById("exposure-value").textContent = `${Number(exposure.value).toFixed(1)} EV`;
+    document.getElementById("temperature-value").textContent = `${temperature.value} K`;
+    document.getElementById("tint-value").textContent = tint.value;
+    document.getElementById("edit-undo").disabled = !document.can_undo;
+    document.getElementById("edit-redo").disabled = !document.can_redo;
+  };
+
+  const save = async (maxSize) => {
+    if (requestController) requestController.abort();
+    requestController = new AbortController();
+    try {
+      const response = await fetch(`/api/v1/photos/${photoId}/edit`, {
+        method: "PATCH",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          exposure: Number(exposure.value),
+          temperature: Number(temperature.value),
+          tint: Number(tint.value)
+        }),
+        signal: requestController.signal
+      });
+      if (!response.ok) throw new Error("No se pudo guardar la receta");
+      const document = await response.json();
+      syncControls(document);
+      image.src = `/api/v1/photos/${photoId}/edit-preview?max_size=${maxSize}&revision=${document.revision}`;
+      status.textContent = `Receta guardada · revisión ${document.revision}`;
+    } catch (error) {
+      if (error.name !== "AbortError") status.textContent = error.message;
+    }
+  };
+
+  [exposure, temperature, tint].forEach((control) => {
+    control.addEventListener("input", () => {
+      syncControls({recipe: {
+        exposure: Number(exposure.value),
+        temperature: Number(temperature.value),
+        tint: Number(tint.value)
+      }, can_undo: true, can_redo: false});
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => save(800), 120);
+    });
+    control.addEventListener("change", () => save(1600));
+  });
+
+  const historyAction = async (action) => {
+    const response = await fetch(`/api/v1/photos/${photoId}/edit/${action}`, {method: "POST"});
+    if (!response.ok) return;
+    const document = await response.json();
+    syncControls(document);
+    image.src = `/api/v1/photos/${photoId}/edit-preview?max_size=1600&revision=${document.revision}`;
+  };
+  document.getElementById("edit-undo").addEventListener("click", () => historyAction("undo"));
+  document.getElementById("edit-redo").addEventListener("click", () => historyAction("redo"));
+
+  const before = document.getElementById("edit-before");
+  before.addEventListener("pointerdown", () => { image.src = image.dataset.originalSrc; });
+  const restorePreview = () => {
+    image.src = `/api/v1/photos/${photoId}/edit-preview?max_size=1600&restore=${Date.now()}`;
+  };
+  before.addEventListener("pointerup", restorePreview);
+  before.addEventListener("pointerleave", restorePreview);
+
+  fetch(`/api/v1/photos/${photoId}/edit`).then((response) => response.json()).then(syncControls);
+})();
+</script>
 {% endblock %}

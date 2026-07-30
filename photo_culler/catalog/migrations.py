@@ -66,12 +66,35 @@ def _v5_moved_file_tracking(connection: Connection) -> None:
     _add_column(connection, "scan_revisions", "moved_files", "INTEGER NOT NULL DEFAULT 0")
 
 
+def _v6_edit_documents(connection: Connection) -> None:
+    """Create versioned non-destructive edit recipe storage."""
+    connection.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS edit_documents ("
+            "id VARCHAR(36) PRIMARY KEY, "
+            "photo_id INTEGER NOT NULL UNIQUE REFERENCES photos(id), "
+            "contract_version INTEGER NOT NULL DEFAULT 1, "
+            "revision INTEGER NOT NULL DEFAULT 0, "
+            "recipe_json TEXT NOT NULL DEFAULT '{}', "
+            "undo_stack_json TEXT NOT NULL DEFAULT '[]', "
+            "redo_stack_json TEXT NOT NULL DEFAULT '[]', "
+            "created_at DATETIME NOT NULL, "
+            "updated_at DATETIME NOT NULL"
+            ")"
+        )
+    )
+    connection.execute(
+        text("CREATE UNIQUE INDEX IF NOT EXISTS ix_edit_documents_photo_id ON edit_documents (photo_id)")
+    )
+
+
 MIGRATIONS: tuple[tuple[int, Migration], ...] = (
     (1, _v1_gallery_import),
     (2, _v2_import_pause_resume),
     (3, _v3_scan_reconciliation),
     (4, _v4_import_exclusions),
     (5, _v5_moved_file_tracking),
+    (6, _v6_edit_documents),
 )
 
 

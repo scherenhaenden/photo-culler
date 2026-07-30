@@ -28,6 +28,9 @@ Web / pywebview / future Tauri / future egui
 - `AnalysisJobManager` is also constructed per FastAPI application. It owns one
   cooperative worker, bounded SSE listener queues and explicit pause/resume/
   cancel controls; catalogs cannot leak analysis state into each other.
+- `photo_culler/editing` owns versioned edit recipes, bounded preview caching
+  and deterministic rendering. The inspector consumes its API and never writes
+  pixels or edit state directly to original files.
 
 ## Gallery import milestone
 
