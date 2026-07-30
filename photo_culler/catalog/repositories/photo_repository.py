@@ -174,6 +174,7 @@ class PhotoRepository:
                     quick_hash=f.quick_hash,
                     full_hash=f.full_hash,
                     file_id=f.id,
+                    status=f.status,
                 )
             )
 

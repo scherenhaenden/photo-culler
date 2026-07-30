@@ -36,6 +36,7 @@ class GalleryImportRequest(BaseModel):
 
     path: str = Field(min_length=1, max_length=2048)
     recursive: bool = True
+    exclude_patterns: list[str] = Field(default_factory=list, max_length=50)
 
 
 class GalleryImportEstimateRequest(BaseModel):
@@ -43,6 +44,7 @@ class GalleryImportEstimateRequest(BaseModel):
 
     path: str = Field(min_length=1, max_length=2048)
     recursive: bool = True
+    exclude_patterns: list[str] = Field(default_factory=list, max_length=50)
 
 
 @router.get("/health")
@@ -84,12 +86,27 @@ def create_gallery(request: Request, payload: GalleryCreateRequest) -> dict[str,
     return {"contract_version": 1, "id": gallery_id, "name": payload.name.strip()}
 
 
+@router.get("/v1/galleries/{gallery_id}/sources")
+def list_gallery_sources(gallery_id: str, request: Request) -> dict[str, object]:
+    """List configured physical sources for one logical gallery."""
+    galleries = _gallery_import_service(request).list_galleries()
+    if not any(gallery["id"] == gallery_id for gallery in galleries):
+        raise HTTPException(status_code=404, detail="Gallery not found")
+    return {
+        "contract_version": 1,
+        "items": _gallery_import_service(request).list_sources(gallery_id),
+    }
+
+
 @router.post("/v1/galleries/{gallery_id}/imports", status_code=status.HTTP_202_ACCEPTED)
 def import_gallery(gallery_id: str, request: Request, payload: GalleryImportRequest) -> dict[str, object]:
     """Queue a persistent import job."""
     try:
         job_id = _gallery_import_service(request).start_import(
-            gallery_id, Path(payload.path), recursive=payload.recursive
+            gallery_id,
+            Path(payload.path),
+            recursive=payload.recursive,
+            exclude_patterns=payload.exclude_patterns,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Import source does not exist") from exc
@@ -100,11 +117,24 @@ def import_gallery(gallery_id: str, request: Request, payload: GalleryImportRequ
     return {"contract_version": 1, "job_id": job_id, "state": "queued"}
 
 
+@router.post("/v1/galleries/{gallery_id}/rescan", status_code=status.HTTP_202_ACCEPTED)
+def rescan_gallery(gallery_id: str, request: Request) -> dict[str, object]:
+    """Rescan all configured sources and report unavailable ones."""
+    try:
+        return _gallery_import_service(request).rescan_gallery(gallery_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @router.post("/v1/import-estimates")
 def estimate_gallery_import(request: Request, payload: GalleryImportEstimateRequest) -> dict[str, object]:
     """Return a lightweight source estimate before import confirmation."""
     try:
-        return _gallery_import_service(request).estimate_import(Path(payload.path), recursive=payload.recursive)
+        return _gallery_import_service(request).estimate_import(
+            Path(payload.path),
+            recursive=payload.recursive,
+            exclude_patterns=payload.exclude_patterns,
+        )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Import source does not exist") from exc
     except ValueError as exc:
@@ -126,6 +156,22 @@ def list_import_jobs(request: Request, limit: int = 20) -> dict[str, object]:
     return {
         "contract_version": 1,
         "items": _gallery_import_service(request).list_jobs(limit=limit),
+    }
+
+
+@router.get("/v1/scan-revisions")
+def list_scan_revisions(
+    request: Request,
+    gallery_id: str | None = None,
+    limit: int = 20,
+) -> dict[str, object]:
+    """List persisted source reconciliation results."""
+    return {
+        "contract_version": 1,
+        "items": _gallery_import_service(request).list_scan_revisions(
+            gallery_id=gallery_id,
+            limit=limit,
+        ),
     }
 
 

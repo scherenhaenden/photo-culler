@@ -29,6 +29,9 @@ def get_library(
     if active_gallery_id is None and galleries:
         active_gallery_id = str(galleries[0]["id"])
     active_gallery = gallery_by_id.get(active_gallery_id) if active_gallery_id else None
+    gallery_sources = (
+        request.app.state.gallery_imports.list_sources(active_gallery_id) if active_gallery_id is not None else []
+    )
 
     # Make sure we don't have negative pages/limits
     if page < 1:
@@ -54,6 +57,10 @@ def get_library(
         total_photos = repo.count_filtered(filters)
 
     import_jobs = request.app.state.gallery_imports.list_jobs()
+    scan_revisions = request.app.state.gallery_imports.list_scan_revisions(
+        gallery_id=active_gallery_id,
+        limit=10,
+    )
 
     total_pages = (total_photos + limit - 1) // limit if total_photos > 0 else 1
 
@@ -74,6 +81,8 @@ def get_library(
             "galleries": galleries,
             "active_gallery": active_gallery,
             "active_gallery_id": active_gallery_id,
+            "gallery_sources": gallery_sources,
             "import_jobs": import_jobs,
+            "scan_revisions": scan_revisions,
         },
     )

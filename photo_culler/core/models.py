@@ -19,6 +19,7 @@ class FileRecord:
     quick_hash: Optional[str] = None
     full_hash: Optional[str] = None
     file_id: Optional[int] = None
+    status: str = "present"
 
 
 @dataclass
@@ -65,6 +66,18 @@ class Photo:
         if jpegs:
             return jpegs[0]
         return self.files[0] if self.files else None
+
+    @property
+    def availability_status(self) -> str:
+        """Summarize whether at least one physical representation is usable."""
+        statuses = {file.status for file in self.files}
+        if "present" in statuses:
+            return "present"
+        if "offline" in statuses:
+            return "offline"
+        if "missing" in statuses:
+            return "missing"
+        return "unknown"
 
 
 @dataclass

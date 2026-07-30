@@ -120,13 +120,20 @@ add multiple source folders to it. File symlinks inside a source are skipped by
 default so discovery cannot escape the selected tree. SQLite schema changes are
 tracked in `schema_migrations`.
 
+Each import now owns a persisted scan revision. Rescans report newly discovered,
+modified, moved and newly missing files. Quick hashes preserve logical photo
+identity for unambiguous moves without collapsing identical files that still
+exist at separate paths. Unavailable sources and their files are marked
+`offline`, not deleted or incorrectly reported as missing. Source-relative glob
+exclusions are persisted and reused by preflight, import, resume and rescan.
+
 This is **partially implemented**, not a complete RAW workflow: resume after a
 process restart performs a fresh idempotent scan of the persisted source,
-moved/offline reconciliation, scan revisions, edit recipes and real
-exposure/white-balance rendering, export, PostgreSQL operations, Tauri, and
-egui remain planned or prototype-only. The percentages above predate this
-milestone and must not be treated as newly measured results; the exact
-validation results for a change belong in its PR/CI output.
+full hashes still run only through explicit identity tools rather than a
+background tier, and edit recipes, real exposure/white-balance rendering,
+export, PostgreSQL operations, Tauri, and egui remain planned or prototype-only.
+The percentages above must only be updated from measured test and coverage
+output.
 
 ### 1. Iniciar Servidor Web Local (`FastAPI` + `HTMX`)
 

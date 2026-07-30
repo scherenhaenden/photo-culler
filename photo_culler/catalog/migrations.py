@@ -29,9 +29,49 @@ def _v2_import_pause_resume(connection: Connection) -> None:
         connection.execute(text("ALTER TABLE import_jobs ADD COLUMN resume_state VARCHAR(32)"))
 
 
+def _add_column(connection: Connection, table: str, name: str, definition: str) -> None:
+    """Add one nullable/defaulted column when upgrading an existing SQLite catalog."""
+    columns = {column["name"] for column in inspect(connection).get_columns(table)}
+    if name not in columns:
+        connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {definition}"))
+
+
+def _v3_scan_reconciliation(connection: Connection) -> None:
+    """Add source/revision state used to reconcile rescans and offline volumes."""
+    _add_column(connection, "import_sources", "status", "VARCHAR(32) NOT NULL DEFAULT 'online'")
+    _add_column(connection, "import_sources", "last_seen_at", "DATETIME")
+    _add_column(connection, "import_jobs", "scan_revision_id", "VARCHAR(36)")
+    _add_column(connection, "files", "import_source_id", "VARCHAR(36)")
+    _add_column(connection, "files", "last_seen_revision_id", "VARCHAR(36)")
+    _add_column(connection, "files", "source_relative_path", "VARCHAR(1024)")
+    _add_column(connection, "files", "status", "VARCHAR(32) NOT NULL DEFAULT 'present'")
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_import_sources_status ON import_sources (status)"))
+    connection.execute(
+        text("CREATE INDEX IF NOT EXISTS ix_import_jobs_scan_revision_id ON import_jobs (scan_revision_id)")
+    )
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_files_import_source_id ON files (import_source_id)"))
+    connection.execute(
+        text("CREATE INDEX IF NOT EXISTS ix_files_last_seen_revision_id ON files (last_seen_revision_id)")
+    )
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_files_status ON files (status)"))
+
+
+def _v4_import_exclusions(connection: Connection) -> None:
+    """Persist source exclusion patterns for repeatable rescans."""
+    _add_column(connection, "import_sources", "exclude_patterns", "TEXT NOT NULL DEFAULT '[]'")
+
+
+def _v5_moved_file_tracking(connection: Connection) -> None:
+    """Record unambiguous quick-hash move matches per scan revision."""
+    _add_column(connection, "scan_revisions", "moved_files", "INTEGER NOT NULL DEFAULT 0")
+
+
 MIGRATIONS: tuple[tuple[int, Migration], ...] = (
     (1, _v1_gallery_import),
     (2, _v2_import_pause_resume),
+    (3, _v3_scan_reconciliation),
+    (4, _v4_import_exclusions),
+    (5, _v5_moved_file_tracking),
 )
 
 

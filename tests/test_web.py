@@ -68,9 +68,22 @@ def test_gallery_import_api_and_empty_state(web_client, tmp_path):
     assert jobs.json()["items"][0]["id"] == queued.json()["job_id"]
     galleries = web_client.get("/api/v1/galleries").json()
     assert galleries["items"][0]["name"] == "Wedding"
+    sources = web_client.get(f"/api/v1/galleries/{gallery_id}/sources")
+    assert sources.status_code == 200
+    assert sources.json()["items"][0]["status"] == "online"
+    assert web_client.get("/api/v1/galleries/unknown/sources").status_code == 404
     library = web_client.get("/library").text
     assert "Importaciones recientes" in library
+    assert "Fuentes configuradas" in library
     assert 'name="gallery_id"' in library
+    assert "Revisiones de escaneo" in library
+    revisions = web_client.get(f"/api/v1/scan-revisions?gallery_id={gallery_id}")
+    assert revisions.status_code == 200
+    assert revisions.json()["items"][0]["gallery_id"] == gallery_id
+    rescanned = web_client.post(f"/api/v1/galleries/{gallery_id}/rescan")
+    assert rescanned.status_code == 202
+    assert len(rescanned.json()["job_ids"]) == 1
+    assert web_client.post("/api/v1/galleries/unknown/rescan").status_code == 404
 
 
 def test_import_estimate_api(web_client, tmp_path):
@@ -81,12 +94,12 @@ def test_import_estimate_api(web_client, tmp_path):
 
     estimate = web_client.post(
         "/api/v1/import-estimates",
-        json={"path": str(source), "recursive": True},
+        json={"path": str(source), "recursive": True, "exclude_patterns": ["*.nef"]},
     )
 
     assert estimate.status_code == 200
     assert estimate.json()["logical_photos"] == 1
-    assert estimate.json()["total_files"] == 2
+    assert estimate.json()["total_files"] == 1
     assert (
         web_client.post(
             "/api/v1/import-estimates",

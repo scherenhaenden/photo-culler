@@ -8,6 +8,7 @@
     <h1>Biblioteca de Fotografías</h1>
     {% if active_gallery %}
     <span style="color:var(--text-secondary);">Galería activa: <strong>{{ active_gallery.name }}</strong></span>
+    <button class="btn btn-secondary" id="rescan-gallery" data-gallery-id="{{ active_gallery.id }}" type="button">Reescanear</button>
     {% endif %}
   </div>
   <div style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; background: rgba(255, 255, 255, 0.05); padding: 4px 12px; border-radius: 9999px;">
@@ -40,6 +41,7 @@
     {% endif %}
     <label>Carpeta local <input name="path" required placeholder="/ruta/a/mis/fotos"></label>
     <label><input name="recursive" type="checkbox" checked> Incluir subdirectorios</label>
+    <label>Excluir patrones <input name="exclude_patterns" placeholder="previews/**, *.tmp"></label>
     <button class="btn" id="submit-gallery-import" type="submit">Importar galería</button>
     <output id="gallery-import-status" aria-live="polite"></output>
     <div id="gallery-import-controls" hidden style="display:flex; gap:.5rem;">
@@ -55,9 +57,10 @@ document.getElementById('gallery-import-form').addEventListener('submit', async 
   const form = new FormData(event.currentTarget);
   const output = document.getElementById('gallery-import-status');
   const submitButton = document.getElementById('submit-gallery-import');
+  const exclusions = String(form.get('exclude_patterns') || '').split(',').map((pattern) => pattern.trim()).filter(Boolean);
   if (event.currentTarget.dataset.confirmed !== 'true') {
     output.textContent = 'Analizando carpeta…';
-    const estimateResponse = await fetch('/api/v1/import-estimates', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:form.get('path'), recursive:form.has('recursive')})});
+    const estimateResponse = await fetch('/api/v1/import-estimates', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:form.get('path'), recursive:form.has('recursive'), exclude_patterns:exclusions})});
     if (!estimateResponse.ok) { output.textContent = 'La carpeta no es válida o no está disponible.'; return; }
     const estimate = await estimateResponse.json();
     const types = Object.entries(estimate.extensions).map(([extension, count]) => `${extension}: ${count}`).join(', ');
@@ -74,7 +77,7 @@ document.getElementById('gallery-import-form').addEventListener('submit', async 
     if (!gallery.ok) { output.textContent = 'No se pudo crear la galería.'; return; }
     galleryId = (await gallery.json()).id;
   }
-  const queued = await fetch(`/api/v1/galleries/${galleryId}/imports`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:form.get('path'), recursive:form.has('recursive')})});
+  const queued = await fetch(`/api/v1/galleries/${galleryId}/imports`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:form.get('path'), recursive:form.has('recursive'), exclude_patterns:exclusions})});
   if (!queued.ok) { output.textContent = 'La carpeta no es válida o no está disponible.'; return; }
   const job = await queued.json();
   const controls = document.getElementById('gallery-import-controls');
@@ -113,7 +116,61 @@ document.querySelector('#gallery-import-form input[name="path"]').addEventListen
   form.dataset.confirmed = 'false';
   document.getElementById('submit-gallery-import').textContent = 'Importar galería';
 });
+document.querySelector('#gallery-import-form input[name="exclude_patterns"]').addEventListener('input', (event) => {
+  const form = event.currentTarget.form;
+  form.dataset.confirmed = 'false';
+  document.getElementById('submit-gallery-import').textContent = 'Importar galería';
+});
 </script>
+
+{% if gallery_sources %}
+<section class="dashboard-panel" style="margin-bottom:1.5rem;">
+  <h2>Fuentes configuradas</h2>
+  <div style="display:grid; gap:.5rem;">
+    {% for source in gallery_sources %}
+    <div>
+      <strong>{{ source.status }}</strong>
+      · <span style="font-family:var(--font-mono);">{{ source.path }}</span>
+      · {% if source.recursive %}recursiva{% else %}solo carpeta{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if scan_revisions %}
+<section class="dashboard-panel" style="margin-bottom:1.5rem;">
+  <h2>Revisiones de escaneo</h2>
+  <div style="display:grid; gap:.5rem;">
+    {% for revision in scan_revisions %}
+    <div>
+      <strong>{{ revision.state }}</strong>
+      · {{ revision.discovered }} detectados
+      · {{ revision.new_files }} nuevos
+      · {{ revision.modified_files }} modificados
+      · {{ revision.moved_files }} movidos
+      · {{ revision.missing_files }} ausentes
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% if active_gallery %}
+<script>
+document.getElementById('rescan-gallery').addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  button.textContent = 'Reescaneando…';
+  const response = await fetch(`/api/v1/galleries/${button.dataset.galleryId}/rescan`, {method:'POST'});
+  if (response.ok) location.reload();
+  else {
+    button.disabled = false;
+    button.textContent = 'Reescanear';
+  }
+});
+</script>
+{% endif %}
 
 {% if import_jobs %}
 <section class="dashboard-panel" style="margin-bottom:1.5rem;">

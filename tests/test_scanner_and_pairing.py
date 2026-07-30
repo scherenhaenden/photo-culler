@@ -58,3 +58,20 @@ def test_scanner_does_not_follow_file_symlinks_outside_source(tmp_path):
     (source / "linked.jpg").symlink_to(external_photo)
 
     assert list(DirectoryScanner().scan(source)) == []
+
+
+def test_scanner_applies_source_relative_exclusion_patterns(tmp_path):
+    nested = tmp_path / "previews"
+    nested.mkdir()
+    (tmp_path / "keep.jpg").write_bytes(b"keep")
+    (tmp_path / "skip.jpg").write_bytes(b"skip")
+    (nested / "cached.jpg").write_bytes(b"cached")
+
+    records = list(
+        DirectoryScanner().scan(
+            tmp_path,
+            exclude_patterns=["skip*.jpg", "previews/**"],
+        )
+    )
+
+    assert [record.path.name for record in records] == ["keep.jpg"]

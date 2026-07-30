@@ -31,7 +31,26 @@ class ImportSourceDB(Base):
     path = Column(String(2048), nullable=False)
     normalized_path = Column(String(2048), nullable=False)
     recursive = Column(Boolean, default=True, nullable=False)
+    exclude_patterns = Column(Text, default="[]", nullable=False)
+    status = Column(String(32), default="online", nullable=False, index=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class ScanRevisionDB(Base):
+    __tablename__ = "scan_revisions"
+
+    id = Column(String(36), primary_key=True)
+    gallery_id = Column(String(36), ForeignKey("galleries.id"), nullable=False, index=True)
+    source_id = Column(String(36), ForeignKey("import_sources.id"), nullable=False, index=True)
+    state = Column(String(32), nullable=False, index=True)
+    discovered = Column(Integer, default=0, nullable=False)
+    new_files = Column(Integer, default=0, nullable=False)
+    modified_files = Column(Integer, default=0, nullable=False)
+    moved_files = Column(Integer, default=0, nullable=False)
+    missing_files = Column(Integer, default=0, nullable=False)
+    started_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
 
 
 class ImportJobDB(Base):
@@ -40,6 +59,7 @@ class ImportJobDB(Base):
     id = Column(String(36), primary_key=True)
     gallery_id = Column(String(36), ForeignKey("galleries.id"), nullable=False, index=True)
     source_id = Column(String(36), ForeignKey("import_sources.id"), nullable=False, index=True)
+    scan_revision_id = Column(String(36), ForeignKey("scan_revisions.id"), nullable=True, index=True)
     state = Column(String(32), nullable=False, index=True)
     discovered = Column(Integer, default=0, nullable=False)
     imported = Column(Integer, default=0, nullable=False)
@@ -92,7 +112,11 @@ class FileDB(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     photo_id = Column(Integer, ForeignKey("photos.id"), nullable=False)
     volume_id = Column(Integer, ForeignKey("volumes.id"), nullable=True)
+    import_source_id = Column(String(36), ForeignKey("import_sources.id"), nullable=True, index=True)
+    last_seen_revision_id = Column(String(36), ForeignKey("scan_revisions.id"), nullable=True, index=True)
     relative_path = Column(String(1024), nullable=False)
+    source_relative_path = Column(String(1024), nullable=True)
+    status = Column(String(32), default="present", nullable=False, index=True)
     role = Column(String(32), nullable=False)
     size_bytes = Column(Integer, nullable=False)
     modified_time = Column(Float, nullable=False)

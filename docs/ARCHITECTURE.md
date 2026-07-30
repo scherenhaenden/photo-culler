@@ -45,13 +45,20 @@ The first gallery contract is deliberately narrow and operational:
 - the library selects an active logical gallery and scopes catalog queries to
   it instead of mixing photos from unrelated collections;
 - file symlinks within an imported tree are skipped by default;
+- source-relative exclusion globs are persisted and reused by every scan;
+- every job owns a `ScanRevision` with new/modified/moved/missing counters;
+- sparse quick hashes preserve identity for an unambiguous move only when the
+  prior path is absent from the current scan; identical files at extant paths
+  remain distinct;
+- an unavailable source and its files become `offline`, while files absent
+  from an available source become `missing`;
 - schema changes are recorded by `schema_migrations` rather than relying only
   on SQLAlchemy `create_all()`.
 
-Moved-file reconciliation, full/perceptual hashes in the background, managed
-copies, and scan revisions remain planned. The current worker provides Tier 0
-discovery and initial pairing/catalog insertion; it is not the complete
-priority scheduler described in the product direction.
+Full/perceptual hashes in the background and managed copies remain planned.
+The current worker provides Tier 0 discovery, a lightweight quick-hash identity
+step, and initial pairing/catalog insertion; it is not the complete priority
+scheduler described in the product direction.
 
 The current pywebview application uses the same local FastAPI UI as the browser build. Its random loopback port, per-launch session token, restricted Host header, and native API bridge are desktop concerns and do not leak into analysis engines.
 

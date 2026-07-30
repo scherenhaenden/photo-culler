@@ -8,6 +8,8 @@ from PIL import Image
 from sqlalchemy import inspect, text
 
 from photo_culler.catalog.database import Database
+from photo_culler.catalog.repositories.photo_repository import PhotoRepository
+from photo_culler.catalog.schema import FileDB, ImportSourceDB
 from photo_culler.importing import CancelResult, GalleryImportService, PauseResult, ResumeResult
 from photo_culler.scanner.directory_scanner import DirectoryScanner
 
@@ -87,6 +89,7 @@ def test_import_estimate_reports_logical_pairing_types_and_size(tmp_path):
 
     estimate = service.estimate_import(source)
     shallow = service.estimate_import(source, recursive=False)
+    excluded = service.estimate_import(source, exclude_patterns=["nested/**"])
 
     assert estimate["total_files"] == 4
     assert estimate["logical_photos"] == 2
@@ -94,6 +97,145 @@ def test_import_estimate_reports_logical_pairing_types_and_size(tmp_path):
     assert estimate["extensions"] == {".jpg": 1, ".nef": 1, ".png": 1, ".xmp": 1}
     assert estimate["roles"] == {"image": 1, "jpeg": 1, "raw": 1, "sidecar": 1}
     assert shallow["logical_photos"] == 1
+    assert excluded["total_files"] == 3
+    assert excluded["logical_photos"] == 1
+
+
+def test_import_exclusions_persist_across_rescans(tmp_path):
+    source = tmp_path / "shoot"
+    source.mkdir()
+    Image.new("RGB", (16, 16)).save(source / "keep.jpg")
+    Image.new("RGB", (16, 16)).save(source / "skip.jpg")
+    service = GalleryImportService(Database(tmp_path / "catalog.db"))
+    gallery_id = service.create_gallery("Exclusions")
+
+    job = wait_for_job(
+        service,
+        service.start_import(gallery_id, source, exclude_patterns=["skip*.jpg"]),
+    )
+    assert job["discovered"] == 1
+    assert service.list_galleries()[0]["photo_count"] == 1
+
+    Image.new("RGB", (16, 16)).save(source / "skip-new.jpg")
+    rescan = service.rescan_gallery(gallery_id)
+    rescanned = wait_for_job(service, rescan["job_ids"][0])
+    assert rescanned["discovered"] == 1
+    assert service.list_galleries()[0]["photo_count"] == 1
+
+
+def test_rescan_detects_new_modified_and_missing_files(tmp_path):
+    source = tmp_path / "shoot"
+    source.mkdir()
+    first_path = source / "first.jpg"
+    missing_path = source / "missing.jpg"
+    Image.new("RGB", (16, 16), "red").save(first_path)
+    Image.new("RGB", (16, 16), "blue").save(missing_path)
+    service = GalleryImportService(Database(tmp_path / "catalog.db"))
+    gallery_id = service.create_gallery("Reconciliation")
+
+    first_job = wait_for_job(service, service.start_import(gallery_id, source))
+    first_revision = service.list_scan_revisions(gallery_id)[0]
+    assert first_job["scan_revision_id"] == first_revision["id"]
+    assert first_revision["new_files"] == 2
+    assert first_revision["modified_files"] == 0
+    assert first_revision["missing_files"] == 0
+
+    Image.new("RGB", (32, 32), "green").save(first_path)
+    missing_path.unlink()
+    Image.new("RGB", (16, 16), "yellow").save(source / "new.jpg")
+    rescan = service.rescan_gallery(gallery_id)
+    assert rescan["offline_source_ids"] == []
+    assert len(rescan["job_ids"]) == 1
+    wait_for_job(service, rescan["job_ids"][0])
+
+    latest = service.list_scan_revisions(gallery_id)[0]
+    assert latest["state"] == "completed"
+    assert latest["new_files"] == 1
+    assert latest["modified_files"] == 1
+    assert latest["moved_files"] == 0
+    assert latest["missing_files"] == 1
+    with service.database.session() as session:
+        statuses = {
+            row.source_relative_path: row.status for row in session.query(FileDB).order_by(FileDB.source_relative_path)
+        }
+    assert statuses == {
+        "first.jpg": "present",
+        "missing.jpg": "missing",
+        "new.jpg": "present",
+    }
+
+
+def test_rescan_marks_unavailable_source_and_files_offline(tmp_path):
+    source = tmp_path / "shoot"
+    source.mkdir()
+    Image.new("RGB", (16, 16)).save(source / "frame.jpg")
+    service = GalleryImportService(Database(tmp_path / "catalog.db"))
+    gallery_id = service.create_gallery("External drive")
+    wait_for_job(service, service.start_import(gallery_id, source))
+    detached = tmp_path / "detached"
+    source.rename(detached)
+
+    rescan = service.rescan_gallery(gallery_id)
+
+    assert rescan["job_ids"] == []
+    assert len(rescan["offline_source_ids"]) == 1
+    assert service.list_scan_revisions(gallery_id)[0]["state"] == "offline"
+    assert service.list_sources(gallery_id)[0]["status"] == "offline"
+    with service.database.session() as session:
+        source_row = session.query(ImportSourceDB).one()
+        file_row = session.query(FileDB).one()
+        assert source_row.status == "offline"
+        assert file_row.status == "offline"
+    with service.database.session() as session:
+        photo = PhotoRepository(session).list_all()[0]
+    assert photo.availability_status == "offline"
+
+
+def test_rescan_preserves_photo_identity_for_unambiguous_file_move(tmp_path):
+    source = tmp_path / "shoot"
+    source.mkdir()
+    original_path = source / "original.jpg"
+    Image.new("RGB", (16, 16), "red").save(original_path)
+    service = GalleryImportService(Database(tmp_path / "catalog.db"))
+    gallery_id = service.create_gallery("Move detection")
+    wait_for_job(service, service.start_import(gallery_id, source))
+    with service.database.session() as session:
+        original_photo_id = PhotoRepository(session).list_all()[0].photo_id
+    moved_path = source / "renamed.jpg"
+    original_path.rename(moved_path)
+
+    rescan = service.rescan_gallery(gallery_id)
+    wait_for_job(service, rescan["job_ids"][0])
+
+    latest = service.list_scan_revisions(gallery_id)[0]
+    assert latest["moved_files"] == 1
+    assert latest["new_files"] == 0
+    assert latest["missing_files"] == 0
+    assert service.list_galleries()[0]["photo_count"] == 1
+    with service.database.session() as session:
+        photo = PhotoRepository(session).list_all()[0]
+        file_row = session.query(FileDB).one()
+        persisted_path = file_row.relative_path
+        persisted_status = file_row.status
+    assert photo.photo_id == original_photo_id
+    assert photo.stem_name == "renamed"
+    assert persisted_path == str(moved_path)
+    assert persisted_status == "present"
+
+
+def test_identical_files_at_existing_paths_are_not_collapsed_as_moves(tmp_path):
+    source = tmp_path / "shoot"
+    source.mkdir()
+    payload = b"same-content"
+    (source / "first.jpg").write_bytes(payload)
+    (source / "second.jpg").write_bytes(payload)
+    service = GalleryImportService(Database(tmp_path / "catalog.db"))
+    gallery_id = service.create_gallery("Exact duplicates")
+
+    wait_for_job(service, service.start_import(gallery_id, source))
+
+    assert service.list_galleries()[0]["photo_count"] == 2
+    assert service.list_scan_revisions(gallery_id)[0]["moved_files"] == 0
 
 
 def test_import_rejects_missing_and_non_directory_sources(tmp_path):
@@ -243,7 +385,12 @@ def test_versioned_migration_upgrades_legacy_photos_table(tmp_path):
     reopened = Database(path)
     with reopened.engine.connect() as connection:
         versions = connection.execute(text("SELECT version FROM schema_migrations")).scalars().all()
-    assert versions == [1, 2]
+    assert versions == [1, 2, 3, 4, 5]
     assert "gallery_id" in {column["name"] for column in inspect(reopened.engine).get_columns("photos")}
     import_job_columns = {column["name"] for column in inspect(reopened.engine).get_columns("import_jobs")}
     assert {"pause_requested", "resume_state"} <= import_job_columns
+    file_columns = {column["name"] for column in inspect(reopened.engine).get_columns("files")}
+    assert {"import_source_id", "last_seen_revision_id", "source_relative_path", "status"} <= file_columns
+    assert "scan_revisions" in inspect(reopened.engine).get_table_names()
+    import_source_columns = {column["name"] for column in inspect(reopened.engine).get_columns("import_sources")}
+    assert "exclude_patterns" in import_source_columns
