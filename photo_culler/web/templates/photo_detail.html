@@ -4,9 +4,25 @@
 {% block photo_id %}{{ photo.photo_id }}{% endblock %}
 
 {% block content %}
+<!-- Prefetch nearby photos for instant loading -->
+{% if prefetch_ids %}
+  {% for pref_id in prefetch_ids %}
+    <link rel="prefetch" href="/thumbnails/{{ pref_id }}/1600">
+    <link rel="prefetch" href="/thumbnails/{{ pref_id }}/800">
+  {% endfor %}
+{% endif %}
+
 <div id="photo-detail-view" style="display: flex; flex-direction: column; height: 100%; width: 100%;">
-  <div class="header-bar">
-    <a href="/library" class="btn btn-secondary">← Volver a Biblioteca</a>
+  <div class="header-bar" data-prev-photo-id="{{ prev_photo_id or '' }}" data-next-photo-id="{{ next_photo_id or '' }}">
+    <div style="display: flex; gap: 0.5rem;">
+      <a href="/library" class="btn btn-secondary">← Biblioteca</a>
+      {% if prev_photo_id %}
+        <a href="/photos/{{ prev_photo_id }}" class="btn btn-secondary">← Anterior</a>
+      {% endif %}
+      {% if next_photo_id %}
+        <a href="/photos/{{ next_photo_id }}" class="btn btn-secondary">Siguiente →</a>
+      {% endif %}
+    </div>
     <h2>{{ photo.stem_name }}</h2>
   </div>
 

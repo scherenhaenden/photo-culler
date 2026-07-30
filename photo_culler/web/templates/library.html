@@ -6,8 +6,50 @@
 <div class="header-bar">
   <h1>Biblioteca de Fotografías</h1>
   <div style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; background: rgba(255, 255, 255, 0.05); padding: 4px 12px; border-radius: 9999px;">
-    Total: <span style="color: #ffffff;">{{ photos|length }}</span> fotos
+    Mostrando <span style="color: #ffffff;">{{ photos|length }}</span> de {{ total_photos }} fotos
   </div>
+</div>
+
+<!-- Filters and Sorting Bar -->
+<div style="background: var(--bg-card); padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 1.5rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+  <form method="get" action="/library" style="display: flex; gap: 1.5rem; align-items: center; width: 100%; flex-wrap: wrap;">
+    <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+      <label style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600;">Estado de Decisión</label>
+      <select name="decision" style="background: var(--bg-main); color: var(--text-primary); border: 1px solid var(--border-color); padding: 0.4rem; border-radius: 4px; font-family: inherit;" onchange="this.form.submit()">
+        <option value="">Todos</option>
+        <option value="unprocessed" {% if decision == 'unprocessed' %}selected{% endif %}>Unprocessed</option>
+        <option value="best" {% if decision == 'best' %}selected{% endif %}>Best</option>
+        <option value="keep" {% if decision == 'keep' %}selected{% endif %}>Keep</option>
+        <option value="review" {% if decision == 'review' %}selected{% endif %}>Review</option>
+        <option value="reject" {% if decision == 'reject' %}selected{% endif %}>Reject</option>
+      </select>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+      <label style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600;">Calidad</label>
+      <select name="quality_tier" style="background: var(--bg-main); color: var(--text-primary); border: 1px solid var(--border-color); padding: 0.4rem; border-radius: 4px; font-family: inherit;" onchange="this.form.submit()">
+        <option value="">Todos</option>
+        <option value="best" {% if quality_tier == 'best' %}selected{% endif %}>Best</option>
+        <option value="good" {% if quality_tier == 'good' %}selected{% endif %}>Good</option>
+        <option value="fair" {% if quality_tier == 'fair' %}selected{% endif %}>Fair</option>
+        <option value="poor" {% if quality_tier == 'poor' %}selected{% endif %}>Poor</option>
+      </select>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+      <label style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600;">Ordenar por</label>
+      <select name="sort" style="background: var(--bg-main); color: var(--text-primary); border: 1px solid var(--border-color); padding: 0.4rem; border-radius: 4px; font-family: inherit;" onchange="this.form.submit()">
+        <option value="name_asc" {% if sort == 'name_asc' or not sort %}selected{% endif %}>Nombre (A-Z)</option>
+        <option value="name_desc" {% if sort == 'name_desc' %}selected{% endif %}>Nombre (Z-A)</option>
+        <option value="score_desc" {% if sort == 'score_desc' %}selected{% endif %}>Score (Mayor a menor)</option>
+        <option value="score_asc" {% if sort == 'score_asc' %}selected{% endif %}>Score (Menor a mayor)</option>
+      </select>
+    </div>
+
+    <noscript>
+      <button type="submit" class="btn">Filtrar</button>
+    </noscript>
+  </form>
 </div>
 
 <div class="photo-grid">
@@ -15,4 +57,25 @@
     {% include "partials/photo_card.html" %}
   {% endfor %}
 </div>
+
+<!-- Pagination Footer -->
+{% if total_pages > 1 %}
+<div style="display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
+  {% if page > 1 %}
+    <a href="/library?page={{ page - 1 }}&sort={{ sort or '' }}&decision={{ decision or '' }}&quality_tier={{ quality_tier or '' }}" class="btn btn-secondary" style="text-decoration: none; display: inline-block;">Anterior</a>
+  {% else %}
+    <span class="btn btn-secondary" style="opacity: 0.5; cursor: not-allowed;">Anterior</span>
+  {% endif %}
+
+  <span style="font-size: 0.9rem; color: var(--text-secondary);">
+    Página <strong>{{ page }}</strong> de <strong>{{ total_pages }}</strong>
+  </span>
+
+  {% if page < total_pages %}
+    <a href="/library?page={{ page + 1 }}&sort={{ sort or '' }}&decision={{ decision or '' }}&quality_tier={{ quality_tier or '' }}" class="btn btn-secondary" style="text-decoration: none; display: inline-block;">Siguiente</a>
+  {% else %}
+    <span class="btn btn-secondary" style="opacity: 0.5; cursor: not-allowed;">Siguiente</span>
+  {% endif %}
+</div>
+{% endif %}
 {% endblock %}

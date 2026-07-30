@@ -46,8 +46,77 @@
     </label>
 
     <div style="margin-top: 1rem;">
-      <button type="button" class="btn" style="width: 100%; justify-content: center; padding: 0.8rem;">Ejecutar Análisis Técnico</button>
+      <button id="btn-start" type="button" class="btn" style="width: 100%; justify-content: center; padding: 0.8rem;" onclick="startAnalysis()">Ejecutar Análisis Técnico</button>
     </div>
   </form>
 </div>
+
+<div id="progress-container" style="margin-top: 2rem; background: var(--bg-card); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color); max-width: 600px; display: none;">
+  <h3 id="progress-title">Progreso del Análisis</h3>
+  <div style="background: var(--bg-main); border-radius: 4px; height: 20px; width: 100%; overflow: hidden; margin-top: 1rem; border: 1px solid var(--border-color);">
+    <div id="progress-bar" style="background: var(--accent-blue, #388bfd); height: 100%; width: 0%; transition: width 0.1s ease;"></div>
+  </div>
+  <div id="progress-message" style="margin-top: 0.75rem; font-size: 0.9rem; color: var(--text-secondary);">Iniciando...</div>
+</div>
+
+<script>
+  let eventSource = null;
+
+  function checkStatus() {
+    if (eventSource) {
+      eventSource.close();
+    }
+    eventSource = new EventSource("/analysis/progress");
+    eventSource.onmessage = function(event) {
+      const data = JSON.parse(event.data);
+      const container = document.getElementById("progress-container");
+      const bar = document.getElementById("progress-bar");
+      const msg = document.getElementById("progress-message");
+      const btn = document.getElementById("btn-start");
+
+      if (data.status === "running") {
+        container.style.display = "block";
+        bar.style.width = data.progress + "%";
+        msg.textContent = data.message;
+        btn.disabled = true;
+        btn.textContent = "Analizando...";
+      } else if (data.status === "completed") {
+        container.style.display = "block";
+        bar.style.width = "100%";
+        msg.textContent = data.message;
+        btn.disabled = false;
+        btn.textContent = "Ejecutar Análisis Técnico";
+        eventSource.close();
+      } else if (data.status === "failed") {
+        container.style.display = "block";
+        msg.textContent = data.message;
+        msg.style.color = "#da3633";
+        btn.disabled = false;
+        btn.textContent = "Ejecutar Análisis Técnico";
+        eventSource.close();
+      } else {
+        container.style.display = "none";
+      }
+    };
+  }
+
+  function startAnalysis() {
+    const selectedProfile = document.querySelector('input[name="profile"]:checked').value;
+    const formData = new FormData();
+    formData.append("profile", selectedProfile);
+
+    fetch("/analysis/start", {
+      method: "POST",
+      body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+      checkStatus();
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", function() {
+    checkStatus();
+  });
+</script>
 {% endblock %}

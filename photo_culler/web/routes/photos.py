@@ -17,14 +17,43 @@ def inspect_photo(photo_id: str, request: Request):
     with db_engine.session() as session:
         repo = PhotoRepository(session)
         photo = repo.get_by_id(photo_id)
+        if not photo:
+            raise HTTPException(status_code=404, detail="Photo not found")
 
-    if not photo:
-        raise HTTPException(status_code=404, detail="Photo not found")
+        # Get all photos to calculate prev, next, and prefetch lists
+        photos = repo.list_page(offset=0, limit=10000, sort="name_asc")
+        idx = -1
+        for i, p in enumerate(photos):
+            if p.photo_id == photo_id:
+                idx = i
+                break
+
+        prev_photo_id = None
+        next_photo_id = None
+        prefetch_ids = []
+
+        if idx != -1:
+            if idx > 0:
+                prev_photo_id = photos[idx - 1].photo_id
+            if idx < len(photos) - 1:
+                next_photo_id = photos[idx + 1].photo_id
+
+            # Prefetch 2 previous and 2 next photos
+            for offset in (-2, -1, 1, 2):
+                pos = idx + offset
+                if 0 <= pos < len(photos):
+                    prefetch_ids.append(photos[pos].photo_id)
 
     return templates.TemplateResponse(
         request=request,
         name="photo_detail.html",
-        context={"active_tab": "library", "photo": photo},
+        context={
+            "active_tab": "library",
+            "photo": photo,
+            "prev_photo_id": prev_photo_id,
+            "next_photo_id": next_photo_id,
+            "prefetch_ids": prefetch_ids,
+        },
     )
 
 
