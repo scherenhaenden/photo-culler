@@ -1,9 +1,11 @@
 """web CLI subcommand."""
 
 import webbrowser
+
 import typer
 import uvicorn
 from rich.console import Console
+
 from photo_culler.cli.context import get_cli_context
 from photo_culler.web.app import create_app
 

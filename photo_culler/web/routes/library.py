@@ -44,6 +44,8 @@ def get_library(
         photos = repo.list_page(offset=offset, limit=limit, sort=sort, filters=filters)
         total_photos = repo.count_filtered(filters)
 
+    galleries = request.app.state.gallery_imports.list_galleries()
+
     total_pages = (total_photos + limit - 1) // limit if total_photos > 0 else 1
 
     return templates.TemplateResponse(
@@ -60,5 +62,6 @@ def get_library(
             "decision": decision,
             "quality_tier": quality_tier,
             "session_id": session_id,
+            "galleries": galleries,
         },
     )

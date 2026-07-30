@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
-from photo_culler.catalog.database import Database
+
 from photo_culler.web.services.library_service import LibraryService
 
 router = APIRouter()

@@ -11,6 +11,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
+from .migrations import migrate
 from .schema import Base
 
 
@@ -81,8 +82,10 @@ class Database:
         self.create_tables()
 
     def create_tables(self):
-        """Create database tables if they do not exist."""
+        """Create a fresh schema and run versioned upgrades for existing catalogs."""
         Base.metadata.create_all(bind=self.engine)
+        with self.engine.begin() as connection:
+            migrate(connection)
 
     @contextmanager
     def session(self) -> Generator[Session, None, None]:

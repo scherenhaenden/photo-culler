@@ -1,13 +1,13 @@
 """Unit tests for scanner and RAW/JPEG pairing."""
 
-import pytest
 from pathlib import Path
+
 from PIL import Image
 
+from photo_culler.core.enums import FileRole
+from photo_culler.pairing.raw_jpeg_pairer import RawJpegPairer
 from photo_culler.scanner.directory_scanner import DirectoryScanner
 from photo_culler.scanner.file_filter import FileFilter
-from photo_culler.pairing.raw_jpeg_pairer import RawJpegPairer
-from photo_culler.core.enums import FileRole
 
 
 def test_file_filter():

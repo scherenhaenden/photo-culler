@@ -14,13 +14,15 @@ class DirectoryScanner:
     def __init__(self, file_filter: Optional[FileFilter] = None):
         self.filter = file_filter or FileFilter()
 
-    def scan(self, directory: Path) -> Generator[FileRecord, None, None]:
-        """Walk directory recursively yielding FileRecord instances."""
+    def scan(self, directory: Path, recursive: bool = True) -> Generator[FileRecord, None, None]:
+        """Yield FileRecord instances, descending into subdirectories when recursive."""
         root_path = directory.resolve()
 
         for root, dirs, files in os.walk(root_path):
             # Exclude ignored directories in-place
             dirs[:] = [d for d in dirs if not self.filter.should_ignore_dir(d)]
+            if not recursive:
+                dirs.clear()
 
             for file_name in files:
                 if file_name.startswith("."):

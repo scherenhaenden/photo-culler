@@ -10,6 +10,39 @@
   </div>
 </div>
 
+{% if total_photos == 0 %}
+<section class="dashboard-panel" style="text-align:center; padding:4rem 2rem; margin-bottom:1.5rem;">
+  <div style="font-size:3rem;" aria-hidden="true">▦</div>
+  <h2>{% if galleries %}Esta galería todavía está vacía{% else %}Crea tu primera galería fotográfica{% endif %}</h2>
+  <p style="color:var(--text-secondary); max-width:42rem; margin:0 auto 1.5rem;">
+    Una galería es una colección lógica: los originales permanecen en sus carpetas y Photo Culler nunca los modifica.
+  </p>
+  <form id="gallery-import-form" style="display:grid; gap:.75rem; max-width:34rem; margin:auto; text-align:left;">
+    <label>Nombre de galería <input name="name" required maxlength="255" value="Mi galería"></label>
+    <label>Carpeta local <input name="path" required placeholder="/ruta/a/mis/fotos"></label>
+    <label><input name="recursive" type="checkbox" checked> Incluir subdirectorios</label>
+    <button class="btn" type="submit">Importar galería</button>
+    <output id="gallery-import-status" aria-live="polite"></output>
+  </form>
+</section>
+<script>
+document.getElementById('gallery-import-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  const output = document.getElementById('gallery-import-status');
+  output.textContent = 'Preparando importación…';
+  const gallery = await fetch('/api/v1/galleries', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:form.get('name')})});
+  if (!gallery.ok) { output.textContent = 'No se pudo crear la galería.'; return; }
+  const created = await gallery.json();
+  const queued = await fetch(`/api/v1/galleries/${created.id}/imports`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:form.get('path'), recursive:form.has('recursive')})});
+  if (!queued.ok) { output.textContent = 'La carpeta no es válida o no está disponible.'; return; }
+  const job = await queued.json();
+  output.textContent = `Importación ${job.state}. Las fotos aparecerán progresivamente.`;
+  setTimeout(() => location.reload(), 750);
+});
+</script>
+{% endif %}
+
 <!-- Filters and Sorting Bar -->
 <div style="background: var(--bg-card); padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 1.5rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
   <form method="get" action="/library" style="display: flex; gap: 1.5rem; align-items: center; width: 100%; flex-wrap: wrap;">

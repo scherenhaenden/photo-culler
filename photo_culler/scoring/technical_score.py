@@ -1,6 +1,7 @@
 """Technical Quality Scorer for aggregating individual analyzer measurements with context awareness and explicit measurement confidence."""
 
 from typing import Any, Dict
+
 from photo_culler.analysis.engine.result import AnalysisResult
 
 

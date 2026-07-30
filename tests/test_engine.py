@@ -1,17 +1,14 @@
 """Unit tests for core analysis engine, registry, SQLite cache, and pipeline."""
 
 import pytest
-import os
-import tempfile
-from pathlib import Path
 from PIL import Image
 
-from photo_culler.analysis.engine.context import AnalysisContext
-from photo_culler.analysis.engine.result import AnalysisResult
 from photo_culler.analysis.engine.analyzer import Analyzer
-from photo_culler.analysis.engine.registry import AnalyzerRegistry
 from photo_culler.analysis.engine.cache import MetricCache
+from photo_culler.analysis.engine.context import AnalysisContext
 from photo_culler.analysis.engine.pipeline import AnalysisPipeline
+from photo_culler.analysis.engine.registry import AnalyzerRegistry
+from photo_culler.analysis.engine.result import AnalysisResult
 
 
 class MockAnalyzer(Analyzer):

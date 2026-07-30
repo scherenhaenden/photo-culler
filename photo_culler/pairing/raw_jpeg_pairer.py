@@ -2,7 +2,7 @@
 
 import hashlib
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, Iterable, List
 
 from ..core.models import FileRecord, Photo
 from ..metadata.extractor import MetadataExtractor
@@ -14,7 +14,7 @@ class RawJpegPairer:
     def __init__(self, metadata_extractor: MetadataExtractor = None):
         self.meta_extractor = metadata_extractor or MetadataExtractor()
 
-    def pair_files(self, files: List[FileRecord]) -> List[Photo]:
+    def pair_files(self, files: Iterable[FileRecord]) -> List[Photo]:
         """Group files by directory path and filename stem, creating unified Photo entities."""
         groups: Dict[str, List[FileRecord]] = {}
 

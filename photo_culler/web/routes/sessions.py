@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
+
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
 
 router = APIRouter()

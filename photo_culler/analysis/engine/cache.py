@@ -48,7 +48,7 @@ class MetricCache:
             )
         """)
         conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_metrics_hash 
+            CREATE INDEX IF NOT EXISTS idx_metrics_hash
             ON analyzer_metrics (image_hash)
         """)
         conn.commit()
@@ -123,7 +123,7 @@ class MetricCache:
         try:
             conn.execute(
                 """
-                INSERT INTO analyzer_metrics 
+                INSERT INTO analyzer_metrics
                 (image_hash, analyzer_name, analyzer_version, metrics_json, confidence, execution_time_ms, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(image_hash, analyzer_name, analyzer_version) DO UPDATE SET

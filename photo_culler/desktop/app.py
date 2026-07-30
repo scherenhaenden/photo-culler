@@ -20,6 +20,7 @@ def find_free_port() -> int:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
 
+
 def wait_until_ready(url: str, token: str, timeout: float = 10.0) -> None:
     """Wait for the local FastAPI server to become responsive by polling its health endpoint with the token."""
     deadline = time.monotonic() + timeout
@@ -30,7 +31,7 @@ def wait_until_ready(url: str, token: str, timeout: float = 10.0) -> None:
             with urllib.request.urlopen(health_url, timeout=0.25) as response:
                 if response.status == 200:
                     return
-        except (OSError, urllib.error.URLError):
+        except OSError, urllib.error.URLError:
             time.sleep(0.05)
 
     raise RuntimeError("Photo Culler server did not start")
@@ -48,6 +49,7 @@ class DesktopApi:
     def select_folder(self) -> Optional[str]:
         """Open native OS directory selection dialog."""
         from photo_culler.desktop.dialogs import select_folder_dialog
+
         return select_folder_dialog(self._window)
 
     def save_file(self) -> Optional[str]:
@@ -55,6 +57,7 @@ class DesktopApi:
         if self._window:
             try:
                 import webview
+
                 result = self._window.create_file_dialog(webview.SAVE_DIALOG)
                 if result and isinstance(result, (list, tuple)) and len(result) > 0:
                     return result[0]
@@ -85,6 +88,7 @@ class DesktopApi:
         import subprocess
         import sys
         from pathlib import Path
+
         try:
             path_obj = Path(path).resolve()
             if not path_obj.exists():
@@ -105,6 +109,7 @@ class DesktopApi:
     def get_platform_info(self) -> dict:
         """Retrieve platform and operating system details."""
         import platform
+
         return {
             "system": platform.system(),
             "release": platform.release(),
