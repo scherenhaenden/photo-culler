@@ -11,9 +11,47 @@ from photo_culler.catalog.database import Database
 from photo_culler.web.routes import analysis, api, dashboard, library, photos, sessions
 
 
-def create_app(catalog_path: Optional[Union[str, Path]] = None) -> FastAPI:
+def create_app(
+    catalog_path: Optional[Union[str, Path]] = None,
+    desktop_token: Optional[str] = None,
+) -> FastAPI:
     """Create and configure FastAPI application instance."""
     app = FastAPI(title="Photo Culler", version="0.1.0")
+
+    if desktop_token:
+        app.state.desktop_token = desktop_token
+
+        from fastapi import Response
+
+        @app.middleware("http")
+        async def validate_desktop_token(request, call_next):
+            # Strict Host validation
+            host_header = request.headers.get("host", "")
+            is_local = any(host_header.startswith(prefix) for prefix in ("127.0.0.1", "localhost"))
+            if not is_local:
+                return Response(content="Forbidden: Access only allowed via localhost/127.0.0.1", status_code=403)
+
+            token_param = request.query_params.get("token")
+            token_cookie = request.cookies.get("desktop_token")
+            expected_token = request.app.state.desktop_token
+
+            if token_param == expected_token or token_cookie == expected_token:
+                response = await call_next(request)
+                if token_param == expected_token and token_cookie != expected_token:
+                    response.set_cookie(
+                        key="desktop_token",
+                        value=expected_token,
+                        httponly=True,
+                        samesite="strict",
+                        secure=False,
+                    )
+                # Inject security headers
+                response.headers["Content-Security-Policy"] = "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:"
+                response.headers["X-Frame-Options"] = "DENY"
+                response.headers["Referrer-Policy"] = "no-referrer"
+                return response
+
+            return Response(content="Forbidden: Invalid desktop session token", status_code=403)
 
     # Catalog DB setup
     cat_path = Path(catalog_path) if catalog_path else Path("catalog.db")

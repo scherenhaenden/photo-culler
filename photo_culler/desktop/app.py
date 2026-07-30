@@ -18,6 +18,103 @@ def find_free_port() -> int:
         return s.getsockname()[1]
 
 
+import secrets
+import urllib.request
+import urllib.error
+
+def wait_until_ready(url: str, token: str, timeout: float = 10.0) -> None:
+    """Wait for the local FastAPI server to become responsive by polling its health endpoint with the token."""
+    deadline = time.monotonic() + timeout
+
+    while time.monotonic() < deadline:
+        try:
+            health_url = f"{url}/api/health?token={token}"
+            with urllib.request.urlopen(health_url, timeout=0.25) as response:
+                if response.status == 200:
+                    return
+        except (OSError, urllib.error.URLError):
+            time.sleep(0.05)
+
+    raise RuntimeError("Photo Culler server did not start")
+
+
+class DesktopApi:
+    """pywebview JS API bridge exposing native OS-specific actions to the frontend."""
+
+    def __init__(self) -> None:
+        self._window = None
+
+    def set_window(self, window) -> None:
+        self._window = window
+
+    def select_folder(self) -> Optional[str]:
+        """Open native OS directory selection dialog."""
+        from photo_culler.desktop.dialogs import select_folder_dialog
+        return select_folder_dialog(self._window)
+
+    def save_file(self) -> Optional[str]:
+        """Open native OS save file dialog."""
+        if self._window:
+            try:
+                import webview
+                result = self._window.create_file_dialog(webview.SAVE_DIALOG)
+                if result and isinstance(result, (list, tuple)) and len(result) > 0:
+                    return result[0]
+                elif result and isinstance(result, str):
+                    return result
+            except Exception:
+                pass
+        return None
+
+    def toggle_fullscreen(self) -> None:
+        """Toggle fullscreen mode of the desktop window."""
+        if self._window:
+            try:
+                self._window.toggle_fullscreen()
+            except Exception:
+                pass
+
+    def show_notification(self, title: str, message: str) -> None:
+        """Display a system notification or window alert."""
+        if self._window:
+            try:
+                self._window.evaluate_js(f"alert('{title}: {message}');")
+            except Exception:
+                pass
+
+    def reveal_in_file_manager(self, path: str) -> bool:
+        """Open file manager showing/highlighting the specified file or directory."""
+        import subprocess
+        import sys
+        from pathlib import Path
+        try:
+            path_obj = Path(path).resolve()
+            if not path_obj.exists():
+                return False
+
+            if sys.platform == "win32":
+                subprocess.run(["explorer", "/select,", str(path_obj)], check=False)
+            elif sys.platform == "darwin":
+                subprocess.run(["open", "-R", str(path_obj)], check=False)
+            else:
+                # Linux: open parent folder via xdg-open
+                parent = path_obj.parent if path_obj.is_file() else path_obj
+                subprocess.run(["xdg-open", str(parent)], check=False)
+            return True
+        except Exception:
+            return False
+
+    def get_platform_info(self) -> dict:
+        """Retrieve platform and operating system details."""
+        import platform
+        return {
+            "system": platform.system(),
+            "release": platform.release(),
+            "version": platform.version(),
+            "machine": platform.machine(),
+        }
+
+
 def run_desktop(
     catalog_path: Optional[Union[str, Path]] = None,
     fullscreen: bool = False,
@@ -31,7 +128,8 @@ def run_desktop(
         raise RuntimeError("pywebview is not installed. Install with: pip install 'photo-culler[desktop]'")
 
     port = find_free_port()
-    app = create_app(catalog_path=catalog_path)
+    token = secrets.token_urlsafe(16)
+    app = create_app(catalog_path=catalog_path, desktop_token=token)
 
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
     server = uvicorn.Server(config)
@@ -41,15 +139,22 @@ def run_desktop(
     server_thread.start()
 
     url = f"http://127.0.0.1:{port}"
-    time.sleep(0.5)  # Wait for server bind
+    wait_until_ready(url, token=token)
 
-    webview.create_window(
+    api = DesktopApi()
+    window = webview.create_window(
         title="Photo Culler",
-        url=url,
+        url=f"{url}/?token={token}",
         width=width,
         height=height,
         min_size=(1000, 650),
         fullscreen=fullscreen,
+        js_api=api,
     )
+    api.set_window(window)
 
     webview.start()
+
+    # Graceful shutdown after webview window exits
+    server.should_exit = True
+    server_thread.join(timeout=5.0)

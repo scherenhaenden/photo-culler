@@ -22,6 +22,21 @@ class Database:
             db_uri = "sqlite:///:memory:"
 
         self.engine = create_engine(db_uri, connect_args={"check_same_thread": False}, echo=False)
+
+        # Configure WAL mode and synchronous settings on connect
+        from sqlalchemy import event
+        @event.listens_for(self.engine, "connect")
+        def set_sqlite_pragma(dbapi_connection, connection_record):
+            cursor = dbapi_connection.cursor()
+            try:
+                cursor.execute("PRAGMA journal_mode=WAL;")
+                cursor.execute("PRAGMA synchronous=NORMAL;")
+                cursor.execute("PRAGMA busy_timeout=5000;")
+            except Exception:
+                pass
+            finally:
+                cursor.close()
+
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         self.create_tables()
 

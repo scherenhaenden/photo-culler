@@ -98,9 +98,57 @@ class PhotoRepository:
         db_photos = self.session.query(PhotoDB).all()
         return [self._to_domain(p) for p in db_photos]
 
+    def list_page(
+        self,
+        offset: int = 0,
+        limit: int = 150,
+        sort: Optional[str] = None,
+        filters: Optional[dict] = None,
+    ) -> List[Photo]:
+        """Return a page of photos from catalog as domain objects with optional sorting and filtering."""
+        query = self.session.query(PhotoDB)
+
+        # Apply filters if any
+        if filters:
+            if "decision" in filters and filters["decision"]:
+                query = query.filter(PhotoDB.decision == filters["decision"])
+            if "quality_tier" in filters and filters["quality_tier"]:
+                query = query.filter(PhotoDB.quality_tier == filters["quality_tier"])
+            if "session_id" in filters and filters["session_id"]:
+                query = query.filter(PhotoDB.session_id == filters["session_id"])
+
+        # Apply sort
+        if sort:
+            if sort == "score_desc":
+                query = query.order_by(PhotoDB.score.desc())
+            elif sort == "score_asc":
+                query = query.order_by(PhotoDB.score.asc())
+            elif sort == "name_asc":
+                query = query.order_by(PhotoDB.stem_name.asc())
+            elif sort == "name_desc":
+                query = query.order_by(PhotoDB.stem_name.desc())
+        else:
+            # Default sort by stem_name
+            query = query.order_by(PhotoDB.stem_name.asc())
+
+        db_photos = query.offset(offset).limit(limit).all()
+        return [self._to_domain(p) for p in db_photos]
+
     def count(self) -> int:
         """Return total photo count."""
         return self.session.query(PhotoDB).count()
+
+    def count_filtered(self, filters: Optional[dict] = None) -> int:
+        """Return total photo count matching filters."""
+        query = self.session.query(PhotoDB)
+        if filters:
+            if "decision" in filters and filters["decision"]:
+                query = query.filter(PhotoDB.decision == filters["decision"])
+            if "quality_tier" in filters and filters["quality_tier"]:
+                query = query.filter(PhotoDB.quality_tier == filters["quality_tier"])
+            if "session_id" in filters and filters["session_id"]:
+                query = query.filter(PhotoDB.session_id == filters["session_id"])
+        return query.count()
 
     def _to_domain(self, db_photo: PhotoDB) -> Photo:
         files = []

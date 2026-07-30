@@ -21,4 +21,23 @@ document.addEventListener('keydown', function(e) {
     const btn = document.querySelector(`[data-decision="${decision}"]`);
     if (btn) btn.click();
   }
+
+  // Handle Left and Right Arrow navigation
+  if (e.key === 'ArrowLeft') {
+    const headerBar = document.querySelector('.header-bar');
+    if (headerBar) {
+      const prevId = headerBar.dataset.prevPhotoId;
+      if (prevId) {
+        window.location.href = `/photos/${prevId}`;
+      }
+    }
+  } else if (e.key === 'ArrowRight') {
+    const headerBar = document.querySelector('.header-bar');
+    if (headerBar) {
+      const nextId = headerBar.dataset.nextPhotoId;
+      if (nextId) {
+        window.location.href = `/photos/${nextId}`;
+      }
+    }
+  }
 });
