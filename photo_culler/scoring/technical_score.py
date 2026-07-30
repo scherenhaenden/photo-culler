@@ -1,6 +1,7 @@
 """Technical Quality Scorer for aggregating individual analyzer measurements with context awareness and explicit measurement confidence."""
 
 from typing import Any, Dict
+
 from photo_culler.analysis.engine.result import AnalysisResult
 
 
@@ -16,10 +17,13 @@ class TechnicalScorer:
         weight_noise: float = 0.15,
     ):
         self.profile = profile
-        self.w_sharpness = weight_sharpness
-        self.w_exposure = weight_exposure
-        self.w_clipping = weight_clipping
-        self.w_noise = weight_noise
+        total_weight = weight_sharpness + weight_exposure + weight_clipping + weight_noise
+        if total_weight <= 0:
+            raise ValueError("At least one technical score weight must be positive")
+        self.w_sharpness = weight_sharpness / total_weight
+        self.w_exposure = weight_exposure / total_weight
+        self.w_clipping = weight_clipping / total_weight
+        self.w_noise = weight_noise / total_weight
 
     def calculate_score(self, results: Dict[str, AnalysisResult]) -> Dict[str, Any]:
         """Compute composite score, component breakdowns, and overall confidence score."""
@@ -85,12 +89,26 @@ class TechnicalScorer:
         # Overall measurement confidence ratio
         overall_confidence = round(confidence_sum / max(1, analyzers_present), 4) if analyzers_present > 0 else 0.0
 
-        # Weighted aggregate score
+        # Weighted aggregate score. A profile may deliberately omit analyzers, so
+        # only measurements that actually ran participate in the denominator.
+        weighted_components = (
+            (sharpness_score, self.w_sharpness, "sharpness"),
+            (exposure_score, self.w_exposure, "exposure"),
+            (clipping_score, self.w_clipping, "clipping"),
+            (noise_score, self.w_noise, "noise"),
+        )
+        active_weight = sum(
+            weight for _, weight, name in weighted_components if name in results and not results[name].error
+        )
         final_score = (
-            (sharpness_score * self.w_sharpness)
-            + (exposure_score * self.w_exposure)
-            + (clipping_score * self.w_clipping)
-            + (noise_score * self.w_noise)
+            sum(
+                score * weight
+                for score, weight, name in weighted_components
+                if name in results and not results[name].error
+            )
+            / active_weight
+            if active_weight > 0
+            else 0.0
         )
         final_score = round(max(0.0, min(1.0, final_score)), 4)
 

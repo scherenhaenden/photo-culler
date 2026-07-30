@@ -1,6 +1,5 @@
 """Unit tests for scoring modules with profile context and confidence evaluation."""
 
-import pytest
 from photo_culler.analysis.engine.result import AnalysisResult
 from photo_culler.scoring.recoverability_score import RecoverabilityScorer
 from photo_culler.scoring.technical_score import TechnicalScorer

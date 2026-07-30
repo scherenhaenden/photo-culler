@@ -1,7 +1,8 @@
 """Single Photo Inspector & Decision Toggle Route."""
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, Form, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse
+
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
 from photo_culler.web.services.decision_service import DecisionService
 from photo_culler.web.services.thumbnail_service import ThumbnailService
@@ -10,21 +11,62 @@ router = APIRouter()
 
 
 @router.get("/photos/{photo_id}", response_class=HTMLResponse)
-def inspect_photo(photo_id: str, request: Request):
+def inspect_photo(photo_id: str, request: Request, group: str | None = Query(default=None)):
     db_engine = request.app.state.db_engine
     templates = request.app.state.templates
 
     with db_engine.session() as session:
         repo = PhotoRepository(session)
         photo = repo.get_by_id(photo_id)
+        if not photo:
+            raise HTTPException(status_code=404, detail="Photo not found")
+        analysis_summary = repo.get_analysis_summary(photo_id)
 
-    if not photo:
-        raise HTTPException(status_code=404, detail="Photo not found")
+        # When opened from a similarity group, navigation stays within that group.
+        photos = repo.list_page(offset=0, limit=10000, sort="name_asc")
+        active_group_id = group if group and group.startswith("similar-") else None
+        if active_group_id:
+            photos = [item for item in photos if item.burst_id == active_group_id]
+            photos.sort(
+                key=lambda item: (
+                    item.metadata.capture_time.isoformat() if item.metadata and item.metadata.capture_time else "",
+                    item.stem_name.lower(),
+                )
+            )
+        idx = -1
+        for i, p in enumerate(photos):
+            if p.photo_id == photo_id:
+                idx = i
+                break
+
+        prev_photo_id = None
+        next_photo_id = None
+        prefetch_ids = []
+
+        if idx != -1:
+            if idx > 0:
+                prev_photo_id = photos[idx - 1].photo_id
+            if idx < len(photos) - 1:
+                next_photo_id = photos[idx + 1].photo_id
+
+            # Prefetch 2 previous and 2 next photos
+            for offset in (-2, -1, 1, 2):
+                pos = idx + offset
+                if 0 <= pos < len(photos):
+                    prefetch_ids.append(photos[pos].photo_id)
 
     return templates.TemplateResponse(
         request=request,
         name="photo_detail.html",
-        context={"active_tab": "library", "photo": photo},
+        context={
+            "active_tab": "library",
+            "photo": photo,
+            "analysis_summary": analysis_summary,
+            "prev_photo_id": prev_photo_id,
+            "next_photo_id": next_photo_id,
+            "prefetch_ids": prefetch_ids,
+            "active_group_id": active_group_id,
+        },
     )
 
 

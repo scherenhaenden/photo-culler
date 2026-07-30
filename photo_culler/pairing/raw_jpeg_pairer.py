@@ -2,10 +2,13 @@
 
 import hashlib
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, Iterable, List
 
 from ..core.models import FileRecord, Photo
 from ..metadata.extractor import MetadataExtractor
+from ..scanner.file_filter import IMAGE_EXTENSIONS, JPEG_EXTENSIONS, RAW_EXTENSIONS
+
+MEDIA_EXTENSIONS = RAW_EXTENSIONS | JPEG_EXTENSIONS | IMAGE_EXTENSIONS
 
 
 class RawJpegPairer:
@@ -14,20 +17,26 @@ class RawJpegPairer:
     def __init__(self, metadata_extractor: MetadataExtractor = None):
         self.meta_extractor = metadata_extractor or MetadataExtractor()
 
-    def pair_files(self, files: List[FileRecord]) -> List[Photo]:
+    @staticmethod
+    def logical_stem(path: Path) -> str:
+        """Return the shared logical stem used for media and compound sidecars."""
+        stem = path.stem
+        if Path(stem).suffix.lower() in MEDIA_EXTENSIONS:
+            stem = Path(stem).stem
+        return stem
+
+    @classmethod
+    def group_key(cls, path: Path) -> str:
+        """Return the normalized grouping key without reading image metadata."""
+        return f"{path.parent.resolve()}/{cls.logical_stem(path)}".lower()
+
+    def pair_files(self, files: Iterable[FileRecord]) -> List[Photo]:
         """Group files by directory path and filename stem, creating unified Photo entities."""
         groups: Dict[str, List[FileRecord]] = {}
 
         for f in files:
             # Stem grouping key: directory + stem (e.g. /path/to/DSC_1234)
-            parent_dir = str(f.path.parent.resolve())
-            stem = f.path.stem
-
-            # Normalize sidecar stems (e.g. DSC_1234.NEF.xmp -> DSC_1234)
-            if stem.lower().endswith((".nef", ".cr2", ".cr3", ".arw", ".jpg", ".jpeg", ".dng")):
-                stem = Path(stem).stem
-
-            key = f"{parent_dir}/{stem}".lower()
+            key = self.group_key(f.path)
             if key not in groups:
                 groups[key] = []
             groups[key].append(f)
@@ -35,9 +44,7 @@ class RawJpegPairer:
         photos: List[Photo] = []
 
         for group_key, file_records in groups.items():
-            stem_name = file_records[0].path.stem
-            if stem_name.lower().endswith((".nef", ".cr2", ".cr3", ".arw", ".jpg", ".jpeg", ".dng")):
-                stem_name = Path(stem_name).stem
+            stem_name = self.logical_stem(file_records[0].path)
 
             # Extract EXIF metadata from primary file (RAW preferred)
             primary = None

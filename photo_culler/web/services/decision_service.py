@@ -1,6 +1,7 @@
 """Decision Service for updating photo culling states non-destructively."""
 
 from typing import Optional
+
 from photo_culler.catalog.database import Database
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
 from photo_culler.core.enums import DecisionState

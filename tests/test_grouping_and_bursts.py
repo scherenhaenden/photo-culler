@@ -1,11 +1,11 @@
 """Unit tests for grouping and burst detection."""
 
-import pytest
 from datetime import datetime, timedelta
 
-from photo_culler.core.models import Photo, MetadataRecord
-from photo_culler.grouping.timeline import SessionDetector
 from photo_culler.bursts.temporal_bursts import BurstDetector
+from photo_culler.core.models import MetadataRecord, Photo
+from photo_culler.grouping.similarity import SimilarityGrouper
+from photo_culler.grouping.timeline import SessionDetector
 
 
 def test_session_detector():
@@ -38,3 +38,29 @@ def test_burst_detector():
     burst = bursts[0]
     assert len(burst.photos) == 3
     assert burst.representative_photo_id == "p2"
+
+
+def test_similarity_grouper_assigns_representative_for_nearby_visual_matches(tmp_path):
+    from PIL import Image
+
+    base_time = datetime(2026, 7, 25, 18, 0, 0)
+    first = tmp_path / "first.jpg"
+    second = tmp_path / "second.jpg"
+    distant = tmp_path / "distant.jpg"
+    Image.new("RGB", (80, 60), (100, 80, 60)).save(first)
+    Image.new("RGB", (80, 60), (100, 80, 60)).save(second)
+    Image.new("RGB", (80, 60), (10, 200, 20)).save(distant)
+    photos = [
+        Photo("first", "first", metadata=MetadataRecord(capture_time=base_time), score=0.6),
+        Photo("second", "second", metadata=MetadataRecord(capture_time=base_time + timedelta(seconds=2)), score=0.9),
+        Photo("distant", "distant", metadata=MetadataRecord(capture_time=base_time + timedelta(minutes=30)), score=0.8),
+    ]
+    assets = {"first": first, "second": second, "distant": distant}
+
+    groups, skipped = SimilarityGrouper().group(photos, lambda photo: assets[photo.photo_id])
+
+    assert skipped == 0
+    assert len(groups) == 1
+    assert groups[0].representative_photo_id == "second"
+    assert photos[0].burst_id == photos[1].burst_id
+    assert photos[2].burst_id is None

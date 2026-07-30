@@ -8,20 +8,95 @@
   <link rel="stylesheet" href="/static/css/gallery.css">
 </head>
 <body data-current-photo-id="{% block photo_id %}{% endblock %}">
+  {% set stats = get_sidebar_stats() %}
   <aside class="sidebar">
-    <div class="brand">
-      <span>📷</span> Photo Culler
+    <div class="sidebar-top">
+      <div class="brand">
+        <div class="brand-icon">📷</div>
+        <div class="brand-details">
+          <div class="brand-title">Photo Culler</div>
+          <div class="brand-subtitle">Local Archive</div>
+        </div>
+      </div>
+
+      <ul class="nav-links">
+        <li>
+          <a href="/" class="{% if active_tab == 'dashboard' %}active{% endif %}">
+            <span>📊</span> Dashboard
+          </a>
+        </li>
+        <li>
+          <a href="/library" class="{% if active_tab == 'library' %}active{% endif %}">
+            <span>🖼️</span> Biblioteca
+          </a>
+        </li>
+        <li>
+          <a href="/analysis" class="{% if active_tab == 'analysis' %}active{% endif %}">
+            <span>⚡</span> Análisis
+          </a>
+        </li>
+        <li>
+          <a href="/groups" class="{% if active_tab == 'groups' %}active{% endif %}">
+            <span>🧩</span> Grupos
+          </a>
+        </li>
+        <li>
+          <a href="/sessions" class="{% if active_tab == 'sessions' %}active{% endif %}">
+            <span>📁</span> Sesiones
+          </a>
+        </li>
+      </ul>
+
+      <div class="nav-divider"></div>
+
+      <!-- Selection Stats Panel -->
+      <div class="sidebar-stats">
+        <div class="stats-title">Selection Stats</div>
+        <div class="stats-list">
+          <div class="stat-item">
+            <span class="stat-label">
+              <span class="stat-dot kept"></span> Kept
+            </span>
+            <span class="stat-value kept">{{ stats.kept }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">
+              <span class="stat-dot alt"></span> Alt
+            </span>
+            <span class="stat-value alt">{{ stats.alt }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">
+              <span class="stat-dot rejected"></span> Rejected
+            </span>
+            <span class="stat-value rejected">{{ stats.rejected }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">
+              <span class="stat-dot unrated"></span> Unrated
+            </span>
+            <span class="stat-value unrated">{{ stats.unrated }}</span>
+          </div>
+        </div>
+      </div>
     </div>
-    <ul class="nav-links">
-      <li><a href="/" class="{% if active_tab == 'dashboard' %}active{% endif %}">Dashboard</a></li>
-      <li><a href="/library" class="{% if active_tab == 'library' %}active{% endif %}">Biblioteca</a></li>
-      <li><a href="/analysis" class="{% if active_tab == 'analysis' %}active{% endif %}">Análisis</a></li>
-      <li><a href="/sessions" class="{% if active_tab == 'sessions' %}active{% endif %}">Sesiones</a></li>
-    </ul>
+
+    <!-- Active Operator Footer -->
+    <div class="sidebar-footer">
+      <div class="operator-avatar" aria-hidden="true">OP</div>
+      <div class="operator-details">
+        <div class="operator-name">OPERATOR_01</div>
+        <div class="operator-status">
+          <span class="status-pulse"></span> ACTIVE SESSION
+        </div>
+      </div>
+    </div>
   </aside>
 
   <main class="main-content">
-    {% block content %}{% endblock %}
+    <div class="content-container">
+      {% block content %}{% endblock %}
+    </div>
   </main>
 
   <script src="/static/js/htmx.min.js"></script>

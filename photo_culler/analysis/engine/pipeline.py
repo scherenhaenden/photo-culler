@@ -19,6 +19,7 @@ class AnalysisPipeline:
         self.registry = registry or default_registry
         self.cache = cache
         self.use_cache = use_cache
+        self.last_run_stats = {"executed": 0, "cached": 0}
 
     def run_image(
         self,
@@ -38,6 +39,7 @@ class AnalysisPipeline:
             analyzers = self.registry.instantiate_all(enabled_only=True)
 
         results: Dict[str, AnalysisResult] = {}
+        self.last_run_stats = {"executed": 0, "cached": 0}
 
         try:
             for analyzer in analyzers:
@@ -50,11 +52,13 @@ class AnalysisPipeline:
 
                 if cached_result:
                     results[analyzer.name] = cached_result
+                    self.last_run_stats["cached"] += 1
                     continue
 
                 # 2. Execute analyzer
                 result = analyzer.run(context)
                 results[analyzer.name] = result
+                self.last_run_stats["executed"] += 1
 
                 # 3. Cache metric if valid and caching enabled
                 if self.use_cache and self.cache and not result.error:

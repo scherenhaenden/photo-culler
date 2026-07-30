@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Grupos similares - Photo Culler{% endblock %}
+
+{% block content %}
+<div class="header-bar">
+  <div>
+    <h1>Grupos de fotos parecidas</h1>
+    <div style="color:var(--text-secondary);font-size:12px;">{{ groups|length }} grupos · {{ grouped_photo_count }} fotos. La primera de cada grupo es la recomendada por la puntuación técnica.</div>
+  </div>
+  <a href="/analysis" class="btn btn-secondary">← Volver a análisis</a>
+</div>
+
+{% if groups %}
+  <div style="display:grid;gap:1.25rem;">
+  {% for group in groups %}
+    <section class="dashboard-panel">
+      <div style="display:flex;justify-content:space-between;gap:1rem;align-items:baseline;margin-bottom:.8rem;">
+        <div>
+          <strong>Grupo {{ loop.index }}</strong>
+          <span style="color:var(--text-secondary);font-size:11px;">· {{ group.photos|length }} tomas parecidas</span>
+        </div>
+        <a href="/photos/{{ group.recommended.photo_id }}?group={{ group.id }}" style="font-size:11px;color:var(--accent-teal);">Recomendada: {{ group.recommended.stem_name }} · {{ (group.recommended.score * 100)|round|int }}/100</a>
+      </div>
+      <div class="photo-grid">
+        {% for photo in group.photos %}
+          <div style="position:relative;">
+            {% if photo.photo_id == group.recommended.photo_id %}
+              <span style="position:absolute;z-index:1;left:.45rem;top:.45rem;background:var(--accent-teal);color:#061410;border-radius:99px;padding:.18rem .45rem;font-size:9px;font-weight:800;">RECOMENDADA</span>
+            {% endif %}
+            {% set group_id = group.id %}
+            {% include "partials/photo_card.html" %}
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+  {% endfor %}
+  </div>
+{% else %}
+  <section class="dashboard-panel" style="text-align:center;padding:3rem;">
+    <h2>Todavía no hay grupos</h2>
+    <p style="color:var(--text-secondary);">Ve a Análisis y pulsa “Agrupar ahora”. Las fotos similares tomadas cerca en el tiempo aparecerán aquí.</p>
+    <a href="/analysis" class="btn">Ir a análisis</a>
+  </section>
+{% endif %}
+{% endblock %}

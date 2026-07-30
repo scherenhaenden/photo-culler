@@ -1,9 +1,8 @@
 """Unit tests for Typer CLI commands and helpers."""
 
 import pytest
-from typer.testing import CliRunner
 from PIL import Image
-from pathlib import Path
+from typer.testing import CliRunner
 
 from photo_culler.cli.app import app
 

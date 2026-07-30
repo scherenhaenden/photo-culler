@@ -1,13 +1,14 @@
 """Unit tests for catalog database and PhotoRepository."""
 
-import pytest
 from datetime import datetime
 from pathlib import Path
 
-from photo_culler.catalog.database import Database
+import pytest
+
+from photo_culler.catalog.database import CatalogBackend, CatalogConfig, Database
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
-from photo_culler.core.models import Photo, FileRecord, MetadataRecord
-from photo_culler.core.enums import FileRole, DecisionState, QualityTier
+from photo_culler.core.enums import DecisionState, FileRole, QualityTier
+from photo_culler.core.models import FileRecord, MetadataRecord, Photo
 
 
 @pytest.fixture
@@ -64,3 +65,14 @@ def test_photo_repository(memory_db):
         assert retrieved.metadata.camera_model == "Z6"
         assert retrieved.decision == DecisionState.KEEP
         assert retrieved.score == 0.88
+
+
+def test_catalog_config_supports_sqlite_urls_and_rejects_unknown_backends(tmp_path):
+    config = CatalogConfig.resolve(db_url=f"sqlite:///{tmp_path / 'catalog.db'}")
+    assert config.backend is CatalogBackend.SQLITE
+
+    db = Database(db_url=config.url)
+    assert db.config == config
+
+    with pytest.raises(ValueError, match="Unsupported catalog backend"):
+        CatalogConfig.resolve(db_url="mysql://localhost/photo_culler")

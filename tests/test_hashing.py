@@ -1,12 +1,10 @@
 """Unit tests for hashing algorithms."""
 
-import pytest
 from PIL import Image
-from pathlib import Path
 
-from photo_culler.identity.quick_hash import compute_quick_hash
 from photo_culler.identity.full_hash import compute_full_hash
 from photo_culler.identity.perceptual_hash import compute_dhash, hamming_distance
+from photo_culler.identity.quick_hash import compute_quick_hash
 
 
 def test_quick_and_full_hash(tmp_path):

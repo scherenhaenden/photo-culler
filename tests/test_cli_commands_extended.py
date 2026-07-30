@@ -1,8 +1,9 @@
 """Extended unit tests for CLI subcommands."""
 
 import pytest
-from typer.testing import CliRunner
 from PIL import Image
+from typer.testing import CliRunner
+
 from photo_culler.cli.app import app
 
 runner = CliRunner()

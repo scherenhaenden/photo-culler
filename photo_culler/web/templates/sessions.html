@@ -7,7 +7,32 @@
   <h1>Sesiones y Ráfagas</h1>
 </div>
 
-<div style="background: var(--bg-card); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color);">
-  <p style="color: var(--text-secondary);">Actualmente hay {{ photo_count }} fotografías registradas. Utiliza la CLI para agrupar sesiones automáticamente por intervalo de tiempo (ej. 15 minutos) o ráfagas continuas de disparos.</p>
+<div class="dashboard-panel" style="max-width: 800px; margin-bottom: 2rem;">
+  <div class="dashboard-panel-header">
+    <div class="panel-title" style="font-size: 14px;">Administración de Sesiones</div>
+    <span class="panel-badge" style="background-color: var(--accent-teal);">{{ photo_count }} fotos registradas</span>
+  </div>
+
+  <p style="color: var(--text-secondary); line-height: 1.6; font-size: 12px; margin-bottom: 1.5rem;">
+    Actualmente hay <strong style="color: #ffffff;">{{ photo_count }}</strong> fotografías registradas en el catálogo. Utiliza los potentes algoritmos del motor de agrupación para clasificar automáticamente tus sesiones y detectar ráfagas de alta frecuencia.
+  </p>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-top: 1.5rem;">
+    <div class="pipeline-job-card">
+      <div class="job-card-header">
+        <span class="job-name">Timeline Engine</span>
+        <span>⏱️ Active</span>
+      </div>
+      <p class="job-desc" style="margin-top: 0.5rem;">Agrupación cronológica por intervalos de inactividad (umbral configurable de 15 minutos).</p>
+    </div>
+
+    <div class="pipeline-job-card">
+      <div class="job-card-header">
+        <span class="job-name">Burst Analyzer</span>
+        <span>⚡ Ready</span>
+      </div>
+      <p class="job-desc" style="margin-top: 0.5rem;">Identificación de disparos continuos a alta velocidad (intervalo menor de 1.5 segundos).</p>
+    </div>
+  </div>
 </div>
 {% endblock %}

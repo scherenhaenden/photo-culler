@@ -1,19 +1,22 @@
 """Unit tests for scanner and RAW/JPEG pairing."""
 
-import pytest
 from pathlib import Path
+
 from PIL import Image
 
+from photo_culler.core.enums import FileRole
+from photo_culler.pairing.raw_jpeg_pairer import RawJpegPairer
 from photo_culler.scanner.directory_scanner import DirectoryScanner
 from photo_culler.scanner.file_filter import FileFilter
-from photo_culler.pairing.raw_jpeg_pairer import RawJpegPairer
-from photo_culler.core.enums import FileRole
 
 
 def test_file_filter():
     filter_inst = FileFilter()
     assert filter_inst.classify_role(Path("test.NEF")) == FileRole.RAW
+    assert filter_inst.classify_role(Path("test.NRW")) == FileRole.RAW
     assert filter_inst.classify_role(Path("test.JPG")) == FileRole.JPEG
+    assert filter_inst.classify_role(Path("test.PNG")) == FileRole.IMAGE
+    assert filter_inst.classify_role(Path("test.HEIC")) == FileRole.IMAGE
     assert filter_inst.classify_role(Path("test.xmp")) == FileRole.SIDECAR
     assert filter_inst.classify_role(Path("test.txt")) is None
 
@@ -43,3 +46,32 @@ def test_scanner_and_pairing(tmp_path):
     assert photo.stem_name == "DSC_100"
     assert len(photo.files) == 3
     assert photo.primary_file.role == FileRole.RAW
+
+
+def test_scanner_does_not_follow_file_symlinks_outside_source(tmp_path):
+    source = tmp_path / "source"
+    outside = tmp_path / "outside"
+    source.mkdir()
+    outside.mkdir()
+    external_photo = outside / "external.jpg"
+    external_photo.write_bytes(b"external")
+    (source / "linked.jpg").symlink_to(external_photo)
+
+    assert list(DirectoryScanner().scan(source)) == []
+
+
+def test_scanner_applies_source_relative_exclusion_patterns(tmp_path):
+    nested = tmp_path / "previews"
+    nested.mkdir()
+    (tmp_path / "keep.jpg").write_bytes(b"keep")
+    (tmp_path / "skip.jpg").write_bytes(b"skip")
+    (nested / "cached.jpg").write_bytes(b"cached")
+
+    records = list(
+        DirectoryScanner().scan(
+            tmp_path,
+            exclude_patterns=["skip*.jpg", "previews/**"],
+        )
+    )
+
+    assert [record.path.name for record in records] == ["keep.jpg"]

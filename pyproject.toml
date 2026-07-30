@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "High performance automated photo culling and modular analysis framework"
 authors = [{ name = "Edward Flores" }]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.14"
 dependencies = [
     "pillow>=9.0.0",
     "numpy>=1.21.0",
@@ -26,23 +26,39 @@ dependencies = [
 desktop = [
     "pywebview>=4.0.0",
 ]
+linux = [
+    "pywebview>=4.0.0",
+    "PyQt6>=6.5.0",
+]
+build = [
+    "pyinstaller>=6.0.0",
+]
+test = [
+    "httpx2>=0.28.0",
+    "mypy>=1.15.0",
+    "pytest>=9.0.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.11.0",
+    "websockets>=15.0",
+]
 
 [project.scripts]
 photo-culler = "photo_culler.cli.app:main"
+photo-culler-desktop = "photo_culler.desktop.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
 
 [tool.ruff]
 line-length = 120
-target-version = "py311"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
 ignore = ["E501"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.14"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
@@ -54,3 +70,8 @@ branch = true
 [tool.coverage.report]
 show_missing = true
 precision = 1
+
+[tool.pytest.ini_options]
+markers = [
+    "e2e: real browser end-to-end tests",
+]
