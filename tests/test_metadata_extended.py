@@ -1,8 +1,7 @@
 """Extended unit tests for metadata extraction."""
 
-import pytest
 from PIL import Image
-from pathlib import Path
+
 from photo_culler.metadata.extractor import MetadataExtractor
 
 

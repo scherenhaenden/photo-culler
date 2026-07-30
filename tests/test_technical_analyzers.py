@@ -1,21 +1,20 @@
 """Unit tests for Tier 1 technical analyzers."""
 
-import pytest
 import numpy as np
+import pytest
 from PIL import Image, ImageDraw
-from pathlib import Path
 
-from photo_culler.analysis.engine.context import AnalysisContext
 from photo_culler.analysis.analyzers.technical import (
+    ClippingAnalyzer,
     CorruptionAnalyzer,
     DimensionsAnalyzer,
-    HistogramAnalyzer,
-    ClippingAnalyzer,
     ExposureAnalyzer,
-    SharpnessAnalyzer,
+    HistogramAnalyzer,
     MotionBlurAnalyzer,
     NoiseAnalyzer,
+    SharpnessAnalyzer,
 )
+from photo_culler.analysis.engine.context import AnalysisContext
 
 
 @pytest.fixture

@@ -1,8 +1,7 @@
 """Unit tests for thumbnail preview generator."""
 
-import pytest
 from PIL import Image
-from pathlib import Path
+
 from photo_culler.previews.generator import PreviewGenerator
 
 

@@ -1,8 +1,12 @@
 """Unit tests for FastAPI Web UI application and endpoints."""
 
+import time
+from threading import Event
+
 import pytest
 from fastapi.testclient import TestClient
 
+from photo_culler.scanner.directory_scanner import DirectoryScanner
 from photo_culler.web.app import create_app
 
 
@@ -58,6 +62,73 @@ def test_gallery_import_api_and_empty_state(web_client, tmp_path):
     assert job.json()["contract_version"] == 1
     galleries = web_client.get("/api/v1/galleries").json()
     assert galleries["items"][0]["name"] == "Wedding"
+
+
+@pytest.mark.parametrize("name", ["", "   \t\n"])
+def test_create_gallery_rejects_blank_names(web_client, name):
+    response = web_client.post("/api/v1/galleries", json={"name": name})
+    assert response.status_code == 422
+
+
+def test_import_api_maps_invalid_sources(web_client, tmp_path):
+    created = web_client.post("/api/v1/galleries", json={"name": "Events"})
+    gallery_id = created.json()["id"]
+
+    missing = web_client.post(
+        f"/api/v1/galleries/{gallery_id}/imports",
+        json={"path": str(tmp_path / "missing"), "recursive": True},
+    )
+    assert missing.status_code == 404
+
+    file_source = tmp_path / "single.jpg"
+    file_source.write_bytes(b"not-an-image")
+    not_directory = web_client.post(
+        f"/api/v1/galleries/{gallery_id}/imports",
+        json={"path": str(file_source), "recursive": True},
+    )
+    assert not_directory.status_code == 422
+
+    unknown_gallery = web_client.post(
+        "/api/v1/galleries/unknown/imports",
+        json={"path": str(tmp_path), "recursive": True},
+    )
+    assert unknown_gallery.status_code == 404
+
+
+def test_cancel_import_api_distinguishes_job_states(web_client, tmp_path, monkeypatch):
+    source = tmp_path / "photos"
+    source.mkdir()
+    scan_started = Event()
+    release_scan = Event()
+
+    def blocking_scan(self, directory, recursive=True):
+        scan_started.set()
+        release_scan.wait(timeout=2)
+        yield from ()
+
+    monkeypatch.setattr(DirectoryScanner, "scan", blocking_scan)
+    created = web_client.post("/api/v1/galleries", json={"name": "Wedding"})
+    gallery_id = created.json()["id"]
+    queued = web_client.post(
+        f"/api/v1/galleries/{gallery_id}/imports",
+        json={"path": str(source), "recursive": True},
+    )
+    job_id = queued.json()["job_id"]
+    assert scan_started.wait(timeout=2)
+
+    cancelled = web_client.post(f"/api/v1/import-jobs/{job_id}/cancel")
+    assert cancelled.status_code == 202
+    release_scan.set()
+
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        job = web_client.get(f"/api/v1/import-jobs/{job_id}").json()
+        if job["state"] == "cancelled":
+            break
+        time.sleep(0.01)
+    assert job["state"] == "cancelled"
+    assert web_client.post(f"/api/v1/import-jobs/{job_id}/cancel").status_code == 409
+    assert web_client.post("/api/v1/import-jobs/unknown/cancel").status_code == 404
 
 
 def test_desktop_token_middleware_blocked(tmp_path):

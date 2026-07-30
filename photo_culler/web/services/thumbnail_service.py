@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Optional
+
 from photo_culler.catalog.database import Database
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
 from photo_culler.previews.generator import PreviewGenerator

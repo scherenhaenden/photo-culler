@@ -1,12 +1,15 @@
 """Integration tests for persistent, idempotent gallery imports."""
 
 import time
+from threading import Event
 
+import pytest
 from PIL import Image
 from sqlalchemy import inspect, text
 
 from photo_culler.catalog.database import Database
-from photo_culler.importing import GalleryImportService
+from photo_culler.importing import CancelResult, GalleryImportService
+from photo_culler.scanner.directory_scanner import DirectoryScanner
 
 
 def wait_for_job(service: GalleryImportService, job_id: str) -> dict[str, object]:
@@ -44,7 +47,7 @@ def test_import_is_persistent_and_idempotent(tmp_path):
     assert reopened.get_job(str(first["id"])) is not None
 
 
-def test_non_recursive_import_and_invalid_source(tmp_path):
+def test_non_recursive_import_ignores_nested_files(tmp_path):
     source = tmp_path / "shoot"
     nested = source / "nested"
     nested.mkdir(parents=True)
@@ -57,6 +60,48 @@ def test_non_recursive_import_and_invalid_source(tmp_path):
 
     assert job["discovered"] == 1
     assert service.list_galleries()[0]["photo_count"] == 1
+
+
+def test_import_rejects_missing_and_non_directory_sources(tmp_path):
+    service = GalleryImportService(Database(tmp_path / "catalog.db"))
+    gallery_id = service.create_gallery("Invalid sources")
+
+    with pytest.raises(FileNotFoundError):
+        service.start_import(gallery_id, tmp_path / "missing")
+
+    file_source = tmp_path / "single.jpg"
+    file_source.write_bytes(b"not-an-image")
+    with pytest.raises(ValueError, match="must be a directory"):
+        service.start_import(gallery_id, file_source)
+
+
+def test_import_can_be_cooperatively_cancelled(tmp_path, monkeypatch):
+    source = tmp_path / "shoot"
+    source.mkdir()
+    scan_started = Event()
+    release_scan = Event()
+
+    def blocking_scan(self, directory, recursive=True):
+        scan_started.set()
+        release_scan.wait(timeout=2)
+        yield from ()
+
+    monkeypatch.setattr(DirectoryScanner, "scan", blocking_scan)
+    service = GalleryImportService(Database(tmp_path / "catalog.db"))
+    gallery_id = service.create_gallery("Cancellation")
+    job_id = service.start_import(gallery_id, source)
+    assert scan_started.wait(timeout=2)
+
+    assert service.cancel(job_id) is CancelResult.CANCEL_REQUESTED
+    release_scan.set()
+    job = wait_for_job(service, job_id)
+
+    assert job["state"] == "cancelled"
+    assert job["cancel_requested"] is True
+    assert job["discovered"] == 0
+    assert job["imported"] == 0
+    assert service.cancel(job_id) is CancelResult.NOT_CANCELLABLE
+    assert service.cancel("unknown") is CancelResult.NOT_FOUND
 
 
 def test_versioned_migration_upgrades_legacy_photos_table(tmp_path):

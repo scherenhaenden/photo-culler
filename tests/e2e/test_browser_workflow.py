@@ -67,7 +67,7 @@ def test_operator_pages_render_in_real_chrome(tmp_path):
 
         detail = render_in_chrome(f"http://127.0.0.1:{port}/photos/browser-photo")
         assert "[2] Mark as Keep" in detail
-        assert "data-current-photo-id=\"browser-photo\"" in detail
+        assert 'data-current-photo-id="browser-photo"' in detail
     finally:
         server.should_exit = True
         thread.join(timeout=5)

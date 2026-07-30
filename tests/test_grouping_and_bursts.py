@@ -1,11 +1,10 @@
 """Unit tests for grouping and burst detection."""
 
-import pytest
 from datetime import datetime, timedelta
 
-from photo_culler.core.models import Photo, MetadataRecord
-from photo_culler.grouping.timeline import SessionDetector
 from photo_culler.bursts.temporal_bursts import BurstDetector
+from photo_culler.core.models import MetadataRecord, Photo
+from photo_culler.grouping.timeline import SessionDetector
 
 
 def test_session_detector():

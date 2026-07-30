@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
+
 from photo_culler.core.enums import DecisionState
 
 

@@ -2,6 +2,7 @@
 
 import typer
 from rich.console import Console
+
 from photo_culler.cli.context import get_cli_context
 from photo_culler.desktop.app import run_desktop
 

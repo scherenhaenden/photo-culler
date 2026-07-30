@@ -1,6 +1,7 @@
 """Library Service for retrieving catalog statistics, photo counts, and volume status."""
 
 from typing import Any, Dict
+
 from photo_culler.catalog.database import Database
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
 

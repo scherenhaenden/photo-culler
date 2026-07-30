@@ -15,7 +15,7 @@ class DirectoryScanner:
         self.filter = file_filter or FileFilter()
 
     def scan(self, directory: Path, recursive: bool = True) -> Generator[FileRecord, None, None]:
-        """Walk directory recursively yielding FileRecord instances."""
+        """Yield FileRecord instances, descending into subdirectories when recursive."""
         root_path = directory.resolve()
 
         for root, dirs, files in os.walk(root_path):
