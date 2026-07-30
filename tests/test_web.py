@@ -378,7 +378,9 @@ def test_analysis_profiles_can_be_inspected_created_updated_and_deleted(web_clie
 
 
 def test_builtin_analysis_profile_can_be_edited_and_restored(web_client):
-    fast = next(profile for profile in web_client.get("/analysis/profiles").json()["profiles"] if profile["id"] == "fast")
+    fast = next(
+        profile for profile in web_client.get("/analysis/profiles").json()["profiles"] if profile["id"] == "fast"
+    )
     fast["description"] = "Mi ajuste temporal"
     updated = web_client.put("/analysis/profiles/fast", json=fast)
     assert updated.status_code == 200

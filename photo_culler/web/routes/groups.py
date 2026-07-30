@@ -29,5 +29,9 @@ def get_similarity_groups_page(request: Request):
     return request.app.state.templates.TemplateResponse(
         request=request,
         name="groups.html",
-        context={"active_tab": "groups", "groups": groups, "grouped_photo_count": sum(len(group["photos"]) for group in groups)},
+        context={
+            "active_tab": "groups",
+            "groups": groups,
+            "grouped_photo_count": sum(len(group["photos"]) for group in groups),
+        },
     )

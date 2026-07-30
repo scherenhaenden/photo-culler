@@ -49,8 +49,8 @@ class AnalysisJobManager:
             self.progress = 0
             self.processed = 0
             self.total = 0
-            profile_config = profile if isinstance(profile, dict) else DEFAULT_PROFILES.get(
-                profile, DEFAULT_PROFILES["fast"]
+            profile_config = (
+                profile if isinstance(profile, dict) else DEFAULT_PROFILES.get(profile, DEFAULT_PROFILES["fast"])
             )
             self.profile = profile_config["id"]
             self.profile_name = profile_config["name"]

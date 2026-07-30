@@ -18,9 +18,7 @@ class SimilarityGrouper:
         self.max_distance = max_distance
         self.max_gap = timedelta(minutes=max_gap_minutes)
 
-    def group(
-        self, photos: list[Photo], resolve_asset: Callable[[Photo], Path | None]
-    ) -> tuple[list[BurstGroup], int]:
+    def group(self, photos: list[Photo], resolve_asset: Callable[[Photo], Path | None]) -> tuple[list[BurstGroup], int]:
         """Assign stable group ids and return groups plus photos without a readable asset."""
         skipped = 0
         for photo in photos:
@@ -34,9 +32,9 @@ class SimilarityGrouper:
 
         candidates = [photo for photo in photos if photo.perceptual_hash]
         candidates.sort(
-            key=lambda photo: photo.metadata.capture_time.isoformat()
-            if photo.metadata and photo.metadata.capture_time
-            else ""
+            key=lambda photo: (
+                photo.metadata.capture_time.isoformat() if photo.metadata and photo.metadata.capture_time else ""
+            )
         )
         parent = list(range(len(candidates)))
 
@@ -89,6 +87,6 @@ class SimilarityGrouper:
             return left.stem_name[:12] == right.stem_name[:12]
         try:
             return abs(left_time.timestamp() - right_time.timestamp()) <= self.max_gap.total_seconds()
-        except (OSError, TypeError, ValueError):
+        except OSError, TypeError, ValueError:
             # Mixed/invalid EXIF timezone data must not make grouping fail.
             return left.stem_name[:12] == right.stem_name[:12]
