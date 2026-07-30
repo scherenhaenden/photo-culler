@@ -5,7 +5,6 @@ import json
 import queue
 import threading
 import time
-from typing import Optional
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, StreamingResponse

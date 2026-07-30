@@ -2,7 +2,7 @@
 
 import pytest
 from fastapi.testclient import TestClient
-from PIL import Image
+
 from photo_culler.web.app import create_app
 
 

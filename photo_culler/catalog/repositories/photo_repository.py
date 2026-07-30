@@ -111,7 +111,11 @@ class PhotoRepository:
         # Apply filters if any
         if filters:
             if "decision" in filters and filters["decision"]:
-                query = query.filter(PhotoDB.decision == filters["decision"])
+                decision = str(filters["decision"]).upper()
+                if decision == "REJECT":
+                    query = query.filter(PhotoDB.decision.in_(["REJECT_TECHNICAL", "REJECT_REDUNDANT"]))
+                else:
+                    query = query.filter(PhotoDB.decision == decision)
             if "quality_tier" in filters and filters["quality_tier"]:
                 query = query.filter(PhotoDB.quality_tier == filters["quality_tier"])
             if "session_id" in filters and filters["session_id"]:
@@ -143,7 +147,11 @@ class PhotoRepository:
         query = self.session.query(PhotoDB)
         if filters:
             if "decision" in filters and filters["decision"]:
-                query = query.filter(PhotoDB.decision == filters["decision"])
+                decision = str(filters["decision"]).upper()
+                if decision == "REJECT":
+                    query = query.filter(PhotoDB.decision.in_(["REJECT_TECHNICAL", "REJECT_REDUNDANT"]))
+                else:
+                    query = query.filter(PhotoDB.decision == decision)
             if "quality_tier" in filters and filters["quality_tier"]:
                 query = query.filter(PhotoDB.quality_tier == filters["quality_tier"])
             if "session_id" in filters and filters["session_id"]:

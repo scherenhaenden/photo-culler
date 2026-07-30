@@ -1,0 +1,16 @@
+[workspace]
+members = [
+    "crates/photo-culler-core",
+    "apps/photo-culler-cli",
+    "apps/photo-culler-egui",
+    "apps/photo-culler-tauri",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+photo-culler-core = { path = "crates/photo-culler-core" }

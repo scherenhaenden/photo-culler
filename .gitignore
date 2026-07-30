@@ -23,7 +23,10 @@ htmlcov/
 
 # Build & Packaging
 build/
+builds/
 dist/
+*.spec
+target/
 *.egg-info/
 .eggs/
 

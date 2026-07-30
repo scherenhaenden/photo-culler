@@ -1,8 +1,11 @@
 """Native pywebview Desktop Window Launcher."""
 
+import secrets
 import socket
 import threading
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Optional, Union
 
@@ -16,11 +19,6 @@ def find_free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
-
-
-import secrets
-import urllib.request
-import urllib.error
 
 def wait_until_ready(url: str, token: str, timeout: float = 10.0) -> None:
     """Wait for the local FastAPI server to become responsive by polling its health endpoint with the token."""

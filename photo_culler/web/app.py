@@ -13,6 +13,7 @@ from photo_culler.web.routes import analysis, api, dashboard, library, photos, s
 
 def create_app(
     catalog_path: Optional[Union[str, Path]] = None,
+    database_url: Optional[str] = None,
     desktop_token: Optional[str] = None,
 ) -> FastAPI:
     """Create and configure FastAPI application instance."""
@@ -55,7 +56,7 @@ def create_app(
 
     # Catalog DB setup
     cat_path = Path(catalog_path) if catalog_path else Path("catalog.db")
-    db_engine = Database(cat_path)
+    db_engine = Database(cat_path, db_url=database_url)
     db_engine.create_tables()
     app.state.db_engine = db_engine
 

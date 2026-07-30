@@ -29,7 +29,7 @@
       <label style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600;">Calidad</label>
       <select name="quality_tier" style="background: var(--bg-main); color: var(--text-primary); border: 1px solid var(--border-color); padding: 0.4rem; border-radius: 4px; font-family: inherit;" onchange="this.form.submit()">
         <option value="">Todos</option>
-        <option value="best" {% if quality_tier == 'best' %}selected{% endif %}>Best</option>
+        <option value="excellent" {% if quality_tier == 'excellent' %}selected{% endif %}>Excellent</option>
         <option value="good" {% if quality_tier == 'good' %}selected{% endif %}>Good</option>
         <option value="fair" {% if quality_tier == 'fair' %}selected{% endif %}>Fair</option>
         <option value="poor" {% if quality_tier == 'poor' %}selected{% endif %}>Poor</option>

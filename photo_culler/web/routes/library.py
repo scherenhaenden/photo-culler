@@ -1,13 +1,14 @@
 """Library Web Route."""
 
+from typing import Optional
+
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
+
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
 
 router = APIRouter()
 
-
-from typing import Optional
 
 @router.get("/library", response_class=HTMLResponse)
 def get_library(

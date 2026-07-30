@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse
+
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
 from photo_culler.web.services.decision_service import DecisionService
 from photo_culler.web.services.thumbnail_service import ThumbnailService
