@@ -25,6 +25,9 @@ Web / pywebview / future Tauri / future egui
 - `photo_culler/importing` owns gallery/import orchestration. Its coordinator is
   constructed per FastAPI application and persists every job transition; no
   frontend or process-global singleton owns import state.
+- `AnalysisJobManager` is also constructed per FastAPI application. It owns one
+  cooperative worker, bounded SSE listener queues and explicit pause/resume/
+  cancel controls; catalogs cannot leak analysis state into each other.
 
 ## Gallery import milestone
 

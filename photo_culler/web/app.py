@@ -63,8 +63,10 @@ def create_app(
     db_engine.create_tables()
     app.state.db_engine = db_engine
     app.state.gallery_imports = GalleryImportService(db_engine)
+    app.state.analysis_jobs = analysis.AnalysisJobManager()
 
     def shutdown_services() -> None:
+        app.state.analysis_jobs.shutdown()
         app.state.gallery_imports.shutdown()
         db_engine.close()
 

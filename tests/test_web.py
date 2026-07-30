@@ -10,6 +10,7 @@ from photo_culler.catalog.repositories.photo_repository import PhotoRepository
 from photo_culler.core.models import Photo
 from photo_culler.scanner.directory_scanner import DirectoryScanner
 from photo_culler.web.app import create_app
+from photo_culler.web.routes.analysis import AnalysisJobManager
 
 
 @pytest.fixture
@@ -281,3 +282,39 @@ def test_analysis_start_and_sse_progress(web_client):
                 assert "status" in data
                 assert "progress" in data
                 break
+
+
+def test_analysis_manager_is_application_scoped_and_uses_bounded_listeners(tmp_path):
+    first_app = create_app(catalog_path=tmp_path / "first.db")
+    second_app = create_app(catalog_path=tmp_path / "second.db")
+    assert first_app.state.analysis_jobs is not second_app.state.analysis_jobs
+
+    manager = AnalysisJobManager()
+    listener = manager.register_listener()
+    for index in range(20):
+        manager.message = str(index)
+        manager._notify_listeners()
+    assert listener.qsize() == 8
+    manager.unregister_listener(listener)
+    first_app.state.db_engine.close()
+    second_app.state.db_engine.close()
+
+
+def test_analysis_cooperative_controls_and_idle_conflicts(web_client):
+    manager = web_client.app.state.analysis_jobs
+    manager.is_running = True
+
+    assert manager.pause() is True
+    assert manager.snapshot()["status"] == "paused"
+    assert manager.resume() is True
+    assert manager.snapshot()["status"] == "running"
+    assert manager.cancel() is True
+
+    manager.is_running = False
+    assert web_client.post("/analysis/pause").status_code == 409
+    assert web_client.post("/analysis/resume").status_code == 409
+    assert web_client.post("/analysis/cancel").status_code == 409
+    page = web_client.get("/analysis")
+    assert "Pausar" in page.text
+    assert "Reanudar" in page.text
+    assert "Cancelar" in page.text

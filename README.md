@@ -127,6 +127,12 @@ exist at separate paths. Unavailable sources and their files are marked
 `offline`, not deleted or incorrectly reported as missing. Source-relative glob
 exclusions are persisted and reused by preflight, import, resume and rescan.
 
+Technical analysis coordination is application-scoped rather than process
+global. Progress fan-out uses bounded queues, the production worker contains no
+artificial sleeps, and pause, resume, cancel and shutdown are cooperative at
+photo boundaries. Analysis-job persistence and viewport-priority scheduling
+remain separate follow-up milestones.
+
 This is **partially implemented**, not a complete RAW workflow: resume after a
 process restart performs a fresh idempotent scan of the persisted source,
 full hashes still run only through explicit identity tools rather than a

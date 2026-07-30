@@ -57,6 +57,11 @@
     <div id="progress-bar" style="background: var(--accent-blue, #388bfd); height: 100%; width: 0%; transition: width 0.1s ease;"></div>
   </div>
   <div id="progress-message" style="margin-top: 0.75rem; font-size: 0.9rem; color: var(--text-secondary);">Iniciando...</div>
+  <div style="display:flex; gap:.5rem; margin-top:1rem;">
+    <button class="btn btn-secondary" id="btn-pause" type="button" onclick="controlAnalysis('pause')">Pausar</button>
+    <button class="btn btn-secondary" id="btn-resume" type="button" onclick="controlAnalysis('resume')" hidden>Reanudar</button>
+    <button class="btn btn-secondary" id="btn-cancel" type="button" onclick="controlAnalysis('cancel')">Cancelar</button>
+  </div>
 </div>
 
 <script>
@@ -73,6 +78,9 @@
       const bar = document.getElementById("progress-bar");
       const msg = document.getElementById("progress-message");
       const btn = document.getElementById("btn-start");
+      const pauseBtn = document.getElementById("btn-pause");
+      const resumeBtn = document.getElementById("btn-resume");
+      const cancelBtn = document.getElementById("btn-cancel");
 
       if (data.status === "running") {
         container.style.display = "block";
@@ -80,19 +88,36 @@
         msg.textContent = data.message;
         btn.disabled = true;
         btn.textContent = "Analizando...";
+        pauseBtn.hidden = false;
+        resumeBtn.hidden = true;
+        cancelBtn.hidden = false;
+      } else if (data.status === "paused") {
+        container.style.display = "block";
+        bar.style.width = data.progress + "%";
+        msg.textContent = data.message;
+        btn.disabled = true;
+        pauseBtn.hidden = true;
+        resumeBtn.hidden = false;
+        cancelBtn.hidden = false;
       } else if (data.status === "completed") {
         container.style.display = "block";
         bar.style.width = "100%";
         msg.textContent = data.message;
         btn.disabled = false;
         btn.textContent = "Ejecutar Análisis Técnico";
+        pauseBtn.hidden = true;
+        resumeBtn.hidden = true;
+        cancelBtn.hidden = true;
         eventSource.close();
-      } else if (data.status === "failed") {
+      } else if (data.status === "failed" || data.status === "cancelled") {
         container.style.display = "block";
         msg.textContent = data.message;
         msg.style.color = "#da3633";
         btn.disabled = false;
         btn.textContent = "Ejecutar Análisis Técnico";
+        pauseBtn.hidden = true;
+        resumeBtn.hidden = true;
+        cancelBtn.hidden = true;
         eventSource.close();
       } else {
         container.style.display = "none";
@@ -113,6 +138,10 @@
     .then(data => {
       checkStatus();
     });
+  }
+
+  function controlAnalysis(action) {
+    fetch(`/analysis/${action}`, {method: "POST"}).then(() => checkStatus());
   }
 
   document.addEventListener("DOMContentLoaded", function() {
