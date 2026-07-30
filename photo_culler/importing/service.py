@@ -392,6 +392,12 @@ class GalleryImportService:
             )
             return [self._job_to_dto(job) for job in jobs]
 
+    def active_job_count(self) -> int:
+        """Return imports that are still changing the catalog."""
+        active_states = {"queued", "discovering", "previewing", "analyzing"}
+        with self.database.session() as session:
+            return session.scalar(select(func.count(ImportJobDB.id)).where(ImportJobDB.state.in_(active_states))) or 0
+
     def list_scan_revisions(self, gallery_id: str | None = None, limit: int = 20) -> list[dict[str, object]]:
         """Return recent scan reconciliation results."""
         safe_limit = min(max(limit, 1), 100)

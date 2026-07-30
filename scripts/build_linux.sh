@@ -12,19 +12,22 @@ if [[ ! -x "${python_bin}" ]]; then
 fi
 
 cd "${project_root}"
+mkdir -p builds/.pyinstaller builds/linux
 "${python_bin}" -m PyInstaller \
   --noconfirm \
   --clean \
   --onefile \
   --windowed \
   --name photo-culler \
+  --workpath "builds/.pyinstaller/work" \
+  --specpath "builds/.pyinstaller" \
   --distpath "builds/linux" \
   --exclude-module PyQt5 \
   --exclude-module PyQt6 \
   --exclude-module gi \
   --exclude-module webview \
-  --add-data "photo_culler/web/static:photo_culler/web/static" \
-  --add-data "photo_culler/web/templates:photo_culler/web/templates" \
+  --add-data "${project_root}/photo_culler/web/static:photo_culler/web/static" \
+  --add-data "${project_root}/photo_culler/web/templates:photo_culler/web/templates" \
   photo_culler/desktop/linux_launcher.py
 
 chmod +x builds/linux/photo-culler

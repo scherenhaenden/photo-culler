@@ -5,6 +5,7 @@ from threading import Event
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
 from photo_culler.core.models import Photo
@@ -37,6 +38,8 @@ def test_library_page(web_client):
     response = web_client.get("/library")
     assert response.status_code == 200
     assert "Biblioteca de Fotografías" in response.text
+    assert "Confirmar importación" not in response.text
+    assert "/api/v1/import-estimates" not in response.text
 
 
 def test_library_pagination_and_filters(web_client):
@@ -281,7 +284,66 @@ def test_analysis_start_and_sse_progress(web_client):
                 data = json.loads(line[5:].strip())
                 assert "status" in data
                 assert "progress" in data
+                assert "profile" in data
                 break
+
+
+def test_import_then_immediate_analysis_waits_for_catalog(web_client, tmp_path, monkeypatch):
+    """One import action followed immediately by analysis must include imported photos."""
+    source = tmp_path / "photos"
+    source.mkdir()
+    Image.new("RGB", (48, 32), color=(120, 80, 40)).save(source / "frame.jpg")
+    scan_started = Event()
+    release_scan = Event()
+    original_scan = DirectoryScanner.scan
+
+    def blocking_scan(self, directory, recursive=True):
+        scan_started.set()
+        assert release_scan.wait(timeout=2)
+        yield from original_scan(self, directory, recursive=recursive)
+
+    monkeypatch.setattr(DirectoryScanner, "scan", blocking_scan)
+    gallery_id = web_client.post("/api/v1/galleries", json={"name": "Immediate"}).json()["id"]
+    queued = web_client.post(
+        f"/api/v1/galleries/{gallery_id}/imports",
+        json={"path": str(source), "recursive": True},
+    )
+    assert queued.status_code == 202
+    assert scan_started.wait(timeout=2)
+
+    analysis = web_client.post("/analysis/start", data={"profile": "fast"})
+    assert analysis.json()["status"] == "ok"
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        if "Importación en curso" in str(web_client.app.state.analysis_jobs.snapshot()["message"]):
+            break
+        time.sleep(0.01)
+    assert "Importación en curso" in str(web_client.app.state.analysis_jobs.snapshot()["message"])
+
+    release_scan.set()
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline and web_client.app.state.analysis_jobs.is_running:
+        time.sleep(0.02)
+
+    job = web_client.get(f"/api/v1/import-jobs/{queued.json()['job_id']}").json()
+    analysis_result = web_client.app.state.analysis_jobs.snapshot()
+    assert job["state"] == "completed"
+    assert job["imported"] == 1
+    assert analysis_result["status"] == "completed"
+    assert analysis_result["total"] == 1
+    assert analysis_result["processed"] == 1
+    assert analysis_result["profile"] == "fast"
+    assert "1 fotos analizadas" in str(analysis_result["message"])
+    assert len(web_client.get("/api/photos").json()) == 1
+    thumbnail = web_client.get("/thumbnails/" + web_client.get("/api/photos").json()[0]["photo_id"] + "/800")
+    assert thumbnail.status_code == 200
+    assert thumbnail.headers["content-type"] == "image/jpeg"
+    assert len(thumbnail.content) > 0
+
+
+def test_analysis_rejects_unknown_profile(web_client):
+    response = web_client.post("/analysis/start", data={"profile": "imaginary"})
+    assert response.status_code == 422
 
 
 def test_analysis_manager_is_application_scoped_and_uses_bounded_listeners(tmp_path):

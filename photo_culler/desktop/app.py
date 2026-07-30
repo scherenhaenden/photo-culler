@@ -1,11 +1,13 @@
 """Native pywebview Desktop Window Launcher."""
 
+import os
 import secrets
 import socket
 import threading
 import time
 import urllib.error
 import urllib.request
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional, Union
 
@@ -14,11 +16,43 @@ import uvicorn
 from photo_culler.web.app import create_app
 
 
+def default_desktop_catalog_path() -> Path:
+    """Return a stable user-data path independent of the launch directory."""
+    data_root = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    return data_root / "photo-culler" / "catalog.db"
+
+
+def default_desktop_log_path() -> Path:
+    """Return the persistent desktop diagnostic log path."""
+    state_root = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
+    return state_root / "photo-culler" / "photo-culler.log"
+
+
+def configure_desktop_logging() -> Path:
+    """Write background failures somewhere useful for a windowed executable."""
+    import logging
+
+    log_path = default_desktop_log_path()
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    root_logger = logging.getLogger()
+    resolved_log = log_path.resolve()
+    already_configured = any(
+        isinstance(handler, RotatingFileHandler) and Path(handler.baseFilename).resolve() == resolved_log
+        for handler in root_logger.handlers
+    )
+    if not already_configured:
+        handler = RotatingFileHandler(log_path, maxBytes=2_000_000, backupCount=3, encoding="utf-8")
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+        root_logger.addHandler(handler)
+    root_logger.setLevel(logging.INFO)
+    return log_path
+
+
 def find_free_port() -> int:
     """Find an available local TCP port on 127.0.0.1."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+        return int(s.getsockname()[1])
 
 
 def wait_until_ready(url: str, token: str, timeout: float = 10.0) -> None:
@@ -50,7 +84,8 @@ class DesktopApi:
         """Open native OS directory selection dialog."""
         from photo_culler.desktop.dialogs import select_folder_dialog
 
-        return select_folder_dialog(self._window)
+        selected = select_folder_dialog(self._window)
+        return selected if isinstance(selected, str) else None
 
     def save_file(self) -> Optional[str]:
         """Open native OS save file dialog."""
@@ -130,9 +165,13 @@ def run_desktop(
     except ImportError:
         raise RuntimeError("pywebview is not installed. Install with: pip install 'photo-culler[desktop]'")
 
+    configure_desktop_logging()
     port = find_free_port()
     token = secrets.token_urlsafe(16)
-    app = create_app(catalog_path=catalog_path, desktop_token=token)
+    app = create_app(
+        catalog_path=catalog_path or default_desktop_catalog_path(),
+        desktop_token=token,
+    )
 
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning")
     server = uvicorn.Server(config)

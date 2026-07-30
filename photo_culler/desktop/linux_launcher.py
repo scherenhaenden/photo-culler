@@ -8,7 +8,12 @@ import threading
 
 import uvicorn
 
-from photo_culler.desktop.app import find_free_port, wait_until_ready
+from photo_culler.desktop.app import (
+    configure_desktop_logging,
+    default_desktop_catalog_path,
+    find_free_port,
+    wait_until_ready,
+)
 from photo_culler.web.app import create_app
 
 
@@ -18,9 +23,13 @@ def main() -> None:
     if not chrome:
         raise RuntimeError("Photo Culler requires Google Chrome or Chromium on Linux")
 
+    configure_desktop_logging()
     port = find_free_port()
     token = secrets.token_urlsafe(16)
-    app = create_app(desktop_token=token)
+    app = create_app(
+        catalog_path=default_desktop_catalog_path(),
+        desktop_token=token,
+    )
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
     server_thread = threading.Thread(target=server.run, daemon=True)
     server_thread.start()

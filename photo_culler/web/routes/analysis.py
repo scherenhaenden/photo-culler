@@ -5,10 +5,13 @@ import json
 import logging
 import queue
 import threading
+import time
 from typing import cast
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
+
+import photo_culler.analysis.analyzers.technical  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +24,7 @@ class AnalysisJobManager:
         self.progress = 0
         self.processed = 0
         self.total = 0
+        self.profile = "fast"
         self.status = "idle"
         self.message = "No hay análisis activos."
         self._listeners: list[queue.Queue[str]] = []
@@ -30,7 +34,7 @@ class AnalysisJobManager:
         self._pause_requested = False
         self._cancel_requested = False
 
-    def start_analysis(self, db_engine, profile: str = "fast") -> bool:
+    def start_analysis(self, db_engine, profile: str = "fast", import_service=None) -> bool:
         """Start analysis unless this application already owns an active job."""
         with self._control:
             if self.is_running:
@@ -40,12 +44,13 @@ class AnalysisJobManager:
             self.progress = 0
             self.processed = 0
             self.total = 0
+            self.profile = profile
             self.message = "Iniciando análisis..."
             self._pause_requested = False
             self._cancel_requested = False
             self._thread = threading.Thread(
                 target=self._run_analysis,
-                args=(db_engine, profile),
+                args=(db_engine, profile, import_service),
                 daemon=True,
             )
             self._thread.start()
@@ -103,6 +108,7 @@ class AnalysisJobManager:
                 "progress": self.progress,
                 "processed": self.processed,
                 "total": self.total,
+                "profile": self.profile,
                 "message": self.message,
             }
 
@@ -119,7 +125,7 @@ class AnalysisJobManager:
             if listener in self._listeners:
                 self._listeners.remove(listener)
 
-    def _run_analysis(self, db_engine, profile: str) -> None:
+    def _run_analysis(self, db_engine, profile: str, import_service=None) -> None:
         try:
             from photo_culler.analysis.engine.cache import MetricCache
             from photo_culler.analysis.engine.pipeline import AnalysisPipeline
@@ -127,6 +133,18 @@ class AnalysisJobManager:
             from photo_culler.cli.helpers.asset_resolver import AnalysisAssetResolver
             from photo_culler.scoring.technical_score import TechnicalScorer
             from photo_culler.selection.decisions.rules import SelectionRulesEngine
+
+            while import_service is not None and import_service.active_job_count() > 0:
+                if not self._wait_for_control():
+                    self._finish("cancelled", "Análisis cancelado.")
+                    return
+                with self._lock:
+                    self.message = (
+                        "Importación en curso. El análisis comenzará automáticamente "
+                        "cuando las fotos estén en el catálogo…"
+                    )
+                self._notify_listeners()
+                time.sleep(0.05)
 
             with db_engine.session() as session:
                 photos = PhotoRepository(session).list_all()
@@ -141,7 +159,7 @@ class AnalysisJobManager:
             cache = MetricCache(db_path=str(db_engine.db_path) + ".metrics.db")
             pipeline = AnalysisPipeline(cache=cache, use_cache=True)
             asset_resolver = AnalysisAssetResolver()
-            scorer = TechnicalScorer()
+            scorer = TechnicalScorer(profile=profile)
 
             for index, photo in enumerate(photos):
                 if not self._wait_for_control():
@@ -175,9 +193,12 @@ class AnalysisJobManager:
                 "completed",
                 f"Análisis finalizado con éxito. {self.total} fotos analizadas.",
             )
-        except Exception:
+        except Exception as exc:
             logger.exception("Technical analysis job failed")
-            self._finish("failed", "El análisis falló; revisa los logs locales.")
+            self._finish(
+                "failed",
+                f"El análisis falló: {type(exc).__name__}: {exc}. Revisa el log local para más detalles.",
+            )
         finally:
             with self._lock:
                 self.is_running = False
@@ -233,9 +254,12 @@ def get_analysis_page(request: Request):
 
 @router.post("/analysis/start")
 def start_analysis(request: Request, profile: str = Form("fast")):
+    if profile not in {"fast", "technical", "concert"}:
+        raise HTTPException(status_code=422, detail="Unknown analysis profile")
     success = _manager(request).start_analysis(
         request.app.state.db_engine,
         profile=profile,
+        import_service=request.app.state.gallery_imports,
     )
     return {
         "status": "ok" if success else "error",

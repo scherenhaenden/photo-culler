@@ -55,7 +55,7 @@ PHOTO_CULLER_DATABASE_URL=sqlite:////absolute/path/catalog.db photo-culler web
 
 ## 📊 Estado de Desarrollo y Cobertura de Código (Coverage Table)
 
-### 🎯 Cobertura Global de Código: **82.6%** (67 Pruebas Superadas)
+### 🎯 Cobertura Global de Código: **84.0%** (72 Pruebas Superadas)
 
 Measured on Linux/Python 3.14 with statement and branch coverage enabled:
 
@@ -80,7 +80,7 @@ Measured on Linux/Python 3.14 with statement and branch coverage enabled:
 | **`photo_culler/selection/`** (Reglas de decisión) | 29 | 13 | **51.1%** |
 | **`photo_culler/validation/`** (Corpus & benchmark runner) | 39 | 4 | **81.6%** |
 | **`photo_culler/volumes/`** (Detector de volúmenes) | 38 | 13 | **66.7%** |
-| **TOTAL PROYECTO** | **3,304** | **459** | **82.6%** |
+| **TOTAL PROYECTO** | **3,345** | **423** | **84.0%** |
 
 ---
 
@@ -99,7 +99,7 @@ Measured on Linux/Python 3.14 with statement and branch coverage enabled:
 | **Desktop Rust (Tauri + WebGL)** | 0% | **7%** | Workspace, contratos y viewport WebGL2 inicial; runtime Tauri pendiente |
 | **Desktop Rust nativo (egui + wgpu)** | 0% | **5%** | Workspace y estado nativo inicial; runtime egui/wgpu pendiente |
 | **Validación Fotográfica Real** | 38% | **70%** | Infraestructura de corpus (`BenchmarkEvaluator`) con F1-score, FRR y FAR |
-| **Integración Continua (CI & Testing)** | 70% | **94%** | 67 pruebas Python (incluye integración + Chrome E2E), 2 pruebas Rust y CI Python 3.14 |
+| **Integración Continua (CI & Testing)** | 70% | **94%** | 72 pruebas Python (incluye Importar → miniatura → Analizar en Chrome real), 2 pruebas Rust y CI Python 3.14 |
 | **Readiness para Uso Experimental Real** | 62% | **85%** | Listo para escanear, analizar y clasificar visualmente mediante CLI, Web o Desktop |
 | **Readiness Producción con Miles de Fotos** | 35% | **72%** | Modo asistido por UI con atajos de teclado y salvaguardas no destructivas |
 
@@ -115,11 +115,14 @@ logical galleries, index supported files without copying originals, persist
 progress/cancellation state, pause and resume cooperatively, recover interrupted
 jobs as resumable after restart, and avoid duplicates on a rescan. Recent jobs
 remain visible in the library so their controls survive a page or application
-reload. A read-only preflight reports logical-photo/file counts, extensions and
-bytes before confirmation; the library keeps an explicit active gallery and can
-add multiple source folders to it. File symlinks inside a source are skipped by
-default so discovery cannot escape the selected tree. SQLite schema changes are
-tracked in `schema_migrations`.
+reload. Import is a single-action workflow: the first click creates or selects
+the gallery and immediately starts indexing, without a misleading confirmation
+stage. Analysis started during an active import waits for it and then reads the
+updated catalog automatically. A read-only preflight API remains available to
+other clients; the library keeps an explicit active gallery and can add multiple
+source folders to it. File symlinks inside a source are skipped by default so
+discovery cannot escape the selected tree. SQLite schema changes are tracked in
+`schema_migrations`.
 
 Each import now owns a persisted scan revision. Rescans report newly discovered,
 modified, moved and newly missing files. Quick hashes preserve logical photo
@@ -173,7 +176,7 @@ uv pip install -e '.[linux,build]'
 ./builds/linux/photo-culler
 ```
 
-The generated `builds/linux/photo-culler` is a single executable containing the Python application, templates, and static assets. Double-clicking it opens an isolated Google Chrome/Chromium app window; closing that window also stops the protected local server.
+The generated `builds/linux/photo-culler` is a single executable containing the Python application, templates, and static assets. All PyInstaller output, including temporary work files, stays under `builds/`. Double-clicking it opens an isolated Google Chrome/Chromium app window; closing that window also stops the protected local server. The replaceable build directory never stores the user's catalog: on Linux the desktop catalog lives at `${XDG_DATA_HOME:-~/.local/share}/photo-culler/catalog.db`.
 
 ### 4. Rust workspace, CLI, and frontend bootstraps
 

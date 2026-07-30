@@ -13,7 +13,7 @@ class ThumbnailService:
 
     def __init__(self, db_engine: Database, cache_dir: Optional[Path] = None):
         self.db = db_engine
-        self.generator = PreviewGenerator(cache_dir=cache_dir)
+        self.generator = PreviewGenerator() if cache_dir is None else PreviewGenerator(cache_dir=cache_dir)
 
     def get_thumbnail_path(self, photo_id: str, size: str = "800") -> Optional[Path]:
         """Resolve or generate thumbnail image file for photo_id."""
@@ -31,4 +31,5 @@ class ThumbnailService:
                 return None
 
             thumbnails = self.generator.generate_thumbnails(photo_id=photo_id, image_path=img_path)
-            return thumbnails.get(preset)
+            thumbnail = thumbnails.get(preset)
+            return thumbnail if isinstance(thumbnail, Path) else None

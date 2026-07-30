@@ -58,27 +58,27 @@ document.getElementById('gallery-import-form').addEventListener('submit', async 
   const output = document.getElementById('gallery-import-status');
   const submitButton = document.getElementById('submit-gallery-import');
   const exclusions = String(form.get('exclude_patterns') || '').split(',').map((pattern) => pattern.trim()).filter(Boolean);
-  if (event.currentTarget.dataset.confirmed !== 'true') {
-    output.textContent = 'Analizando carpeta…';
-    const estimateResponse = await fetch('/api/v1/import-estimates', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:form.get('path'), recursive:form.has('recursive'), exclude_patterns:exclusions})});
-    if (!estimateResponse.ok) { output.textContent = 'La carpeta no es válida o no está disponible.'; return; }
-    const estimate = await estimateResponse.json();
-    const types = Object.entries(estimate.extensions).map(([extension, count]) => `${extension}: ${count}`).join(', ');
-    const size = new Intl.NumberFormat(undefined, {style:'unit', unit:'megabyte', maximumFractionDigits:1}).format(estimate.total_bytes / 1048576);
-    output.textContent = `${estimate.logical_photos} fotos, ${estimate.total_files} archivos, ${size}; ${types || 'sin formatos compatibles'}. Revisa la estimación y confirma.`;
-    event.currentTarget.dataset.confirmed = 'true';
-    submitButton.textContent = 'Confirmar importación';
-    return;
-  }
-  output.textContent = 'Preparando importación…';
+  submitButton.disabled = true;
+  submitButton.textContent = 'Importando…';
+  output.textContent = 'Iniciando importación…';
   let galleryId = form.get('gallery_id');
   if (!galleryId) {
     const gallery = await fetch('/api/v1/galleries', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:form.get('name')})});
-    if (!gallery.ok) { output.textContent = 'No se pudo crear la galería.'; return; }
+    if (!gallery.ok) {
+      output.textContent = 'No se pudo crear la galería.';
+      submitButton.disabled = false;
+      submitButton.textContent = 'Importar galería';
+      return;
+    }
     galleryId = (await gallery.json()).id;
   }
   const queued = await fetch(`/api/v1/galleries/${galleryId}/imports`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:form.get('path'), recursive:form.has('recursive'), exclude_patterns:exclusions})});
-  if (!queued.ok) { output.textContent = 'La carpeta no es válida o no está disponible.'; return; }
+  if (!queued.ok) {
+    output.textContent = 'La carpeta no es válida o no está disponible.';
+    submitButton.disabled = false;
+    submitButton.textContent = 'Importar galería';
+    return;
+  }
   const job = await queued.json();
   const controls = document.getElementById('gallery-import-controls');
   const pauseButton = document.getElementById('pause-import');
@@ -104,22 +104,14 @@ document.getElementById('gallery-import-form').addEventListener('submit', async 
     resumeButton.hidden = !paused;
     if (['completed', 'failed', 'cancelled'].includes(progress.state)) {
       controls.hidden = true;
+      submitButton.disabled = false;
+      submitButton.textContent = 'Importar galería';
       if (progress.state === 'completed') setTimeout(() => location.reload(), 500);
       return;
     }
     setTimeout(poll, 250);
   };
   poll();
-});
-document.querySelector('#gallery-import-form input[name="path"]').addEventListener('input', (event) => {
-  const form = event.currentTarget.form;
-  form.dataset.confirmed = 'false';
-  document.getElementById('submit-gallery-import').textContent = 'Importar galería';
-});
-document.querySelector('#gallery-import-form input[name="exclude_patterns"]').addEventListener('input', (event) => {
-  const form = event.currentTarget.form;
-  form.dataset.confirmed = 'false';
-  document.getElementById('submit-gallery-import').textContent = 'Importar galería';
 });
 </script>
 
