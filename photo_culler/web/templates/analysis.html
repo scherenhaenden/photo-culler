@@ -107,7 +107,7 @@
   function renderProfiles() {
     const list = document.getElementById("profile-list");
     list.innerHTML = profiles.map(profile => `
-      <button type="button" class="profile-card ${profile.id === selectedId ? "active" : ""}" onclick="openProfile('${profile.id}')">
+      <button type="button" class="profile-card ${profile.id === selectedId ? "active" : ""}" data-profile-id="${escapeHtml(profile.id)}" onclick="openProfile('${profile.id}')">
         <div class="profile-card-top">
           <input type="radio" tabindex="-1" ${profile.id === selectedId ? "checked" : ""} style="accent-color:var(--accent-orange);pointer-events:none;">
           <span class="profile-card-title">${escapeHtml(profile.name)}</span>

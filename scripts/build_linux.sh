@@ -2,13 +2,20 @@
 set -euo pipefail
 
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-python_bin="${project_root}/.venv/bin/python"
+python_bin="${PHOTO_CULLER_PYTHON:-${project_root}/.venv/bin/python}"
 
 if [[ ! -x "${python_bin}" ]]; then
-  echo "Missing .venv. Create it and install the Linux build extras first:"
-  echo "  uv venv --python 3.14"
-  echo "  uv pip install -e '.[linux,build]'"
-  exit 1
+  # CI installs the project into the runner Python rather than a local .venv.
+  # Keep the local virtual environment as the default, but make the script
+  # usable in both contexts without duplicating the build command.
+  if command -v python3 >/dev/null 2>&1; then
+    python_bin="$(command -v python3)"
+  elif command -v python >/dev/null 2>&1; then
+    python_bin="$(command -v python)"
+  else
+    echo "No Python interpreter found. Create .venv and install '.[linux,build]'."
+    exit 1
+  fi
 fi
 
 cd "${project_root}"

@@ -48,7 +48,10 @@ class ChromeDevTools:
         chrome = shutil.which("google-chrome")
         if not chrome:
             pytest.skip("google-chrome is not installed")
-        self._profile = tempfile.TemporaryDirectory(prefix="photo-culler-e2e-")
+        # Chromium may leave a short-lived helper writing into the profile just
+        # after its main process exits. The test profile is disposable, so do
+        # not turn that cleanup race into a product test failure.
+        self._profile = tempfile.TemporaryDirectory(prefix="photo-culler-e2e-", ignore_cleanup_errors=True)
         self._port = free_port()
         self._process = subprocess.Popen(
             [
@@ -222,7 +225,7 @@ def test_single_click_import_and_every_analysis_profile_in_real_chrome(tmp_path)
             browser.evaluate(
                 f"""
                 (() => {{
-                  document.querySelector('input[value="{profile}"]').checked = true;
+                  document.querySelector(`[data-profile-id="{profile}"]`).click();
                   document.querySelector('#btn-start').click();
                 }})()
                 """
