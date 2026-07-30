@@ -146,9 +146,11 @@ class AnalysisJobManager:
             from photo_culler.analysis.engine.cache import MetricCache
             from photo_culler.analysis.engine.pipeline import AnalysisPipeline
             from photo_culler.analysis.engine.registry import default_registry
+            from photo_culler.analysis.explanation import build_score_explanation
             from photo_culler.analysis.profiles import AnalysisProfileStore
             from photo_culler.catalog.repositories.photo_repository import PhotoRepository
             from photo_culler.cli.helpers.asset_resolver import AnalysisAssetResolver
+            from photo_culler.grouping import SimilarityGrouper
             from photo_culler.scoring.technical_score import TechnicalScorer
             from photo_culler.selection.decisions.rules import SelectionRulesEngine
 
@@ -217,9 +219,17 @@ class AnalysisJobManager:
                     photo.score = technical_score["final_score"]
                     photo.quality_tier = technical_score["quality_tier"]
                 with db_engine.session() as session:
-                    PhotoRepository(session).save_photo(photo)
+                    repository = PhotoRepository(session)
+                    repository.save_photo(photo)
+                    if image_asset and image_asset.exists():
+                        repository.save_analysis_summary(
+                            photo.photo_id, build_score_explanation(profile, technical_score, results)
+                        )
 
-            SelectionRulesEngine().apply_decisions(photos)
+            similarity_groups, _ = SimilarityGrouper().group(
+                photos, lambda item: asset_resolver.resolve(item, prefer_jpeg=True)
+            )
+            SelectionRulesEngine().apply_decisions(photos, bursts=similarity_groups)
             with db_engine.session() as session:
                 repository = PhotoRepository(session)
                 for photo in photos:
@@ -306,6 +316,33 @@ def start_analysis(request: Request, profile: str = Form("fast")):
     return {
         "status": "ok" if success else "error",
         "message": "Análisis iniciado" if success else "Análisis ya en ejecución",
+    }
+
+
+@router.post("/analysis/group-similar")
+def group_similar_photos(request: Request) -> dict[str, object]:
+    """Group visually similar nearby photos without changing their keep/reject decision."""
+    from photo_culler.catalog.repositories.photo_repository import PhotoRepository
+    from photo_culler.cli.helpers.asset_resolver import AnalysisAssetResolver
+    from photo_culler.grouping import SimilarityGrouper
+
+    try:
+        with request.app.state.db_engine.session() as session:
+            repository = PhotoRepository(session)
+            photos = repository.list_all()
+            asset_resolver = AnalysisAssetResolver()
+            groups, skipped = SimilarityGrouper().group(
+                photos, lambda item: asset_resolver.resolve(item, prefer_jpeg=True)
+            )
+            for photo in photos:
+                repository.save_photo(photo)
+    except Exception as exc:
+        logger.exception("Similarity grouping failed")
+        raise HTTPException(status_code=500, detail="No se pudieron agrupar las fotos. Revisa el log local.") from exc
+    return {
+        "groups": len(groups),
+        "grouped_photos": sum(len(group.photos) for group in groups),
+        "skipped": skipped,
     }
 
 

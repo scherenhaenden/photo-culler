@@ -28,7 +28,8 @@ document.addEventListener('keydown', function(e) {
     if (headerBar) {
       const prevId = headerBar.dataset.prevPhotoId;
       if (prevId) {
-        window.location.href = `/photos/${prevId}`;
+        const group = headerBar.dataset.groupId;
+        window.location.href = `/photos/${prevId}${group ? `?group=${encodeURIComponent(group)}` : ''}`;
       }
     }
   } else if (e.key === 'ArrowRight') {
@@ -36,7 +37,8 @@ document.addEventListener('keydown', function(e) {
     if (headerBar) {
       const nextId = headerBar.dataset.nextPhotoId;
       if (nextId) {
-        window.location.href = `/photos/${nextId}`;
+        const group = headerBar.dataset.groupId;
+        window.location.href = `/photos/${nextId}${group ? `?group=${encodeURIComponent(group)}` : ''}`;
       }
     }
   }

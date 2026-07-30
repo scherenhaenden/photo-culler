@@ -210,6 +210,58 @@
   margin-top: 4px;
 }
 
+.score-explanation {
+  margin-top: 0.2rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: rgba(5, 5, 5, 0.45);
+  overflow: hidden;
+}
+
+.score-explanation-title {
+  padding: 0.65rem 0.75rem 0.1rem;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.score-explanation-intro,
+.score-explanation-empty {
+  margin: 0;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.score-explanation-intro { padding: 0.25rem 0.75rem 0.65rem; }
+.score-explanation-empty { padding: 0.45rem 0; }
+
+.score-component {
+  border-top: 1px solid var(--border-color);
+  padding: 0.6rem 0.75rem;
+}
+
+.score-component > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.score-component strong { color: #fff; font-size: 10px; }
+.score-component span,
+.score-component p {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.4;
+}
+.score-component span { text-align: right; }
+.score-component p { margin: 0.25rem 0 0; }
+
 .photo-spec-table {
   width: 100%;
   border-collapse: collapse;

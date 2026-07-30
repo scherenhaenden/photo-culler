@@ -99,6 +99,7 @@ class PhotoDB(Base):
     decision = Column(String(32), default="UNPROCESSED", index=True)
     score = Column(Float, default=0.0)
     quality_tier = Column(String(32), default="fair")
+    analysis_summary_json = Column(Text, default="{}", nullable=False)
     created_at = Column(DateTime(timezone=True), default=utc_now)
 
     files = relationship("FileDB", back_populates="photo", cascade="all, delete-orphan")

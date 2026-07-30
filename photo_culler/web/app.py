@@ -11,7 +11,7 @@ from photo_culler.analysis.profiles import AnalysisProfileStore
 from photo_culler.catalog.database import Database
 from photo_culler.editing import EditService
 from photo_culler.importing import GalleryImportService
-from photo_culler.web.routes import analysis, api, dashboard, editing, library, photos, sessions
+from photo_culler.web.routes import analysis, api, dashboard, editing, groups, library, photos, sessions
 
 
 def create_app(
@@ -125,6 +125,7 @@ def create_app(
     app.include_router(library.router)
     app.include_router(photos.router)
     app.include_router(analysis.router)
+    app.include_router(groups.router)
     app.include_router(editing.router)
     app.include_router(sessions.router)
     app.include_router(api.router)

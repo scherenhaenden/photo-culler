@@ -385,7 +385,7 @@ def test_versioned_migration_upgrades_legacy_photos_table(tmp_path):
     reopened = Database(path)
     with reopened.engine.connect() as connection:
         versions = connection.execute(text("SELECT version FROM schema_migrations")).scalars().all()
-    assert versions == [1, 2, 3, 4, 5, 6]
+    assert versions == [1, 2, 3, 4, 5, 6, 7]
     assert "gallery_id" in {column["name"] for column in inspect(reopened.engine).get_columns("photos")}
     import_job_columns = {column["name"] for column in inspect(reopened.engine).get_columns("import_jobs")}
     assert {"pause_requested", "resume_state"} <= import_job_columns

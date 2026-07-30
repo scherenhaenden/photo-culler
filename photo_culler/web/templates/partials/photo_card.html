@@ -1,4 +1,4 @@
-<a href="/photos/{{ photo.photo_id }}" class="photo-card" id="photo-card-{{ photo.photo_id }}">
+<a href="/photos/{{ photo.photo_id }}{% if group_id %}?group={{ group_id }}{% endif %}" class="photo-card" id="photo-card-{{ photo.photo_id }}">
   <div class="thumbnail-wrapper">
     <img src="/thumbnails/{{ photo.photo_id }}/800" alt="{{ photo.stem_name }}" loading="lazy">
   </div>

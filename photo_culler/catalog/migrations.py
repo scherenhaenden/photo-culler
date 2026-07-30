@@ -88,6 +88,11 @@ def _v6_edit_documents(connection: Connection) -> None:
     )
 
 
+def _v7_analysis_explanations(connection: Connection) -> None:
+    """Store the explanation that produced each photo's technical score."""
+    _add_column(connection, "photos", "analysis_summary_json", "TEXT NOT NULL DEFAULT '{}'")
+
+
 MIGRATIONS: tuple[tuple[int, Migration], ...] = (
     (1, _v1_gallery_import),
     (2, _v2_import_pause_resume),
@@ -95,6 +100,7 @@ MIGRATIONS: tuple[tuple[int, Migration], ...] = (
     (4, _v4_import_exclusions),
     (5, _v5_moved_file_tracking),
     (6, _v6_edit_documents),
+    (7, _v7_analysis_explanations),
 )
 
 

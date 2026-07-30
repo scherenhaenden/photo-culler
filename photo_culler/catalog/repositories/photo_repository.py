@@ -1,5 +1,6 @@
 """Photo Repository for persisting and querying Photo domain objects."""
 
+import json
 from pathlib import Path
 from typing import List, Optional
 
@@ -92,6 +93,23 @@ class PhotoRepository:
         if not db_photo:
             return None
         return self._to_domain(db_photo)
+
+    def get_analysis_summary(self, photo_id: str) -> dict:
+        """Return the persisted score explanation, if this photo has been analyzed."""
+        db_photo = self.session.query(PhotoDB).filter_by(photo_id=photo_id).first()
+        if not db_photo:
+            return {}
+        try:
+            return json.loads(db_photo.analysis_summary_json or "{}")
+        except json.JSONDecodeError:
+            return {}
+
+    def save_analysis_summary(self, photo_id: str, summary: dict) -> None:
+        """Persist the measurements and weighted calculation shown in the inspector."""
+        db_photo = self.session.query(PhotoDB).filter_by(photo_id=photo_id).first()
+        if not db_photo:
+            raise LookupError(f"Photo not found: {photo_id}")
+        db_photo.analysis_summary_json = json.dumps(summary, ensure_ascii=False, sort_keys=True)
 
     def list_all(self) -> List[Photo]:
         """Return all photos in catalog as domain objects."""

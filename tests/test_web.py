@@ -1,6 +1,7 @@
 """Unit tests for FastAPI Web UI application and endpoints."""
 
 import time
+from datetime import datetime, timedelta
 from threading import Event
 
 import pytest
@@ -9,7 +10,7 @@ from PIL import Image
 
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
 from photo_culler.core.enums import FileRole
-from photo_culler.core.models import FileRecord, Photo
+from photo_culler.core.models import FileRecord, MetadataRecord, Photo
 from photo_culler.scanner.directory_scanner import DirectoryScanner
 from photo_culler.web.app import create_app
 from photo_culler.web.routes.analysis import AnalysisJobManager
@@ -389,6 +390,61 @@ def test_builtin_analysis_profile_can_be_edited_and_restored(web_client):
     assert restored.json()["profile"]["description"] != "Mi ajuste temporal"
 
 
+def test_similarity_groups_page_shows_recommended_photo(web_client):
+    photos = [
+        Photo("group-low", "Group_low", burst_id="similar-example", score=0.4),
+        Photo("group-high", "Group_high", burst_id="similar-example", score=0.9),
+    ]
+    with web_client.app.state.db_engine.session() as session:
+        repository = PhotoRepository(session)
+        for photo in photos:
+            repository.save_photo(photo)
+
+    page = web_client.get("/groups")
+    assert page.status_code == 200
+    assert "Grupos de fotos parecidas" in page.text
+    assert "Group_high" in page.text
+    assert "RECOMENDADA" in page.text
+
+    inspector = web_client.get("/photos/group-high?group=similar-example")
+    assert inspector.status_code == 200
+    assert 'data-group-id="similar-example"' in inspector.text
+    assert "Siguiente del grupo" in inspector.text
+    assert "?group=similar-example" in inspector.text
+
+
+def test_group_similar_endpoint_persists_detected_groups(web_client, tmp_path):
+    image = tmp_path / "similar.jpg"
+    Image.new("RGB", (80, 60), (90, 120, 160)).save(image)
+    stat = image.stat()
+    captured = datetime(2026, 7, 31, 12, 0, 0)
+    photos = [
+        Photo(
+            "similar-one",
+            "similar-one",
+            files=[FileRecord(image, FileRole.JPEG, stat.st_size, stat.st_mtime)],
+            metadata=MetadataRecord(capture_time=captured),
+        ),
+        Photo(
+            "similar-two",
+            "similar-two",
+            files=[FileRecord(image, FileRole.JPEG, stat.st_size, stat.st_mtime)],
+            metadata=MetadataRecord(capture_time=captured + timedelta(seconds=1)),
+        ),
+    ]
+    with web_client.app.state.db_engine.session() as session:
+        repository = PhotoRepository(session)
+        for photo in photos:
+            repository.save_photo(photo)
+
+    result = web_client.post("/analysis/group-similar")
+    assert result.status_code == 200
+    assert result.json()["groups"] == 1
+    page = web_client.get("/groups")
+    assert "similar-one" in page.text
+    assert "similar-two" in page.text
+
+
 def test_profiles_run_distinct_analyzer_sets_and_report_cache_usage(web_client, tmp_path):
     image_path = tmp_path / "profile-check.jpg"
     Image.new("RGB", (96, 64), color=(90, 120, 160)).save(image_path)
@@ -425,6 +481,14 @@ def test_profiles_run_distinct_analyzer_sets_and_report_cache_usage(web_client, 
     assert (technical["executed_metrics"], technical["cached_metrics"]) == (8, 0)
     assert (technical_again["executed_metrics"], technical_again["cached_metrics"]) == (0, 8)
     assert (concert["executed_metrics"], concert["cached_metrics"]) == (8, 0)
+
+    detail = web_client.get("/photos/profile-check")
+    assert detail.status_code == 200
+    assert "Por qué esta puntuación" in detail.text
+    assert "Perfil Concert Stage" in detail.text
+    assert "peso" in detail.text
+    assert "Ver original" in detail.text
+    assert "const syncControls = (editDocument)" in detail.text
 
 
 def test_analysis_manager_is_application_scoped_and_uses_bounded_listeners(tmp_path):

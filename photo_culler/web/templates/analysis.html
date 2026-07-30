@@ -64,6 +64,17 @@
   </section>
 </div>
 
+<section class="analysis-panel" style="margin-top:1rem;">
+  <div class="analysis-panel-head">
+    <div>
+      <div class="panel-title" style="font-size:14px;">Agrupar fotos parecidas</div>
+      <div style="color:var(--text-secondary);font-size:11px;margin-top:.3rem;">Detecta tomas similares hechas cerca en el tiempo para compararlas como un grupo.</div>
+    </div>
+    <button type="button" class="btn btn-secondary" id="group-similar-button" onclick="groupSimilarPhotos()">Agrupar ahora</button>
+  </div>
+  <div id="group-similar-status" class="status-note" style="padding:0 1.1rem 1rem;"></div>
+</section>
+
 <div id="progress-container" style="margin-top:1rem;background:var(--bg-card);padding:1.25rem;border-radius:8px;border:1px solid var(--border-color);display:none;">
   <h3 id="progress-title" style="margin-top:0;">Progreso del análisis</h3>
   <div style="background:var(--bg-main);border-radius:4px;height:14px;width:100%;overflow:hidden;margin-top:1rem;border:1px solid var(--border-color);">
@@ -291,6 +302,24 @@
       return;
     }
     checkStatus();
+  }
+
+  async function groupSimilarPhotos() {
+    const button = document.getElementById("group-similar-button");
+    const status = document.getElementById("group-similar-status");
+    button.disabled = true;
+    button.textContent = "Agrupando…";
+    status.className = "status-note";
+    try {
+      const result = await api("/analysis/group-similar", {method:"POST"});
+      status.innerHTML = `${result.groups} grupos creados · ${result.grouped_photos} fotos agrupadas${result.skipped ? ` · ${result.skipped} sin archivo disponible` : ""}. ${result.groups ? '<a href="/groups">Ver grupos →</a>' : ""}`;
+    } catch (error) {
+      status.className = "status-note error";
+      status.textContent = error.message;
+    } finally {
+      button.disabled = false;
+      button.textContent = "Agrupar ahora";
+    }
   }
 
   function controlAnalysis(action) {
