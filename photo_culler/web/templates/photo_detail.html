@@ -4,52 +4,107 @@
 {% block photo_id %}{{ photo.photo_id }}{% endblock %}
 
 {% block content %}
-<div class="header-bar">
-  <a href="/library" class="btn btn-secondary">← Volver a Biblioteca</a>
-  <h2>{{ photo.stem_name }}</h2>
-</div>
-
-<div class="detail-view">
-  <div class="main-image-container">
-    <img src="/thumbnails/{{ photo.photo_id }}/1600" alt="{{ photo.stem_name }}">
+<div id="photo-detail-view" style="display: flex; flex-direction: column; height: 100%; width: 100%;">
+  <div class="header-bar">
+    <a href="/library" class="btn btn-secondary">← Volver a Biblioteca</a>
+    <h2>{{ photo.stem_name }}</h2>
   </div>
 
-  <div class="inspector-panel">
-    <h3>Evaluación Técnica</h3>
-    <div style="font-size: 1.5rem; font-weight: 700; color: var(--accent-blue);">
-      Score: {{ (photo.score * 100)|round|int }} / 100
+  <div class="detail-view">
+    <!-- Center Premium Cinema View of Image -->
+    <div class="main-image-container">
+      <img src="/thumbnails/{{ photo.photo_id }}/1600" alt="{{ photo.stem_name }}">
     </div>
 
-    <div>
-      <strong>Decisión Actual:</strong>
-      <span class="photo-badge badge-{{ photo.decision.value|lower }}" style="margin-left: 0.5rem;">
-        {{ photo.decision.value }}
-      </span>
-    </div>
+    <!-- Inspector Sidebar Panel -->
+    <div class="inspector-panel">
+      <!-- Technical Evaluation -->
+      <div class="inspector-section">
+        <h3>Evaluación Técnica</h3>
+        <div class="inspector-score-card">
+          <div class="score-text-large">{{ (photo.score * 100)|round|int }}</div>
+          <div class="score-meta">
+            <span class="score-label-dim">Confidence Score</span>
+            {% if photo.quality_tier %}
+              {% set q_val = photo.quality_tier.value if photo.quality_tier.value is defined else photo.quality_tier %}
+              <span class="score-tier-badge">{{ q_val }}</span>
+            {% else %}
+              <span class="score-tier-badge">N/A</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
 
-    <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1rem;">
-      <form hx-post="/photos/{{ photo.photo_id }}/decision" hx-target="#photo-detail-view">
-        <input type="hidden" name="decision" value="best">
-        <button type="submit" data-decision="best" class="btn" style="background-color: var(--accent-green); width: 100%;">1 - BEST</button>
-      </form>
-      <form hx-post="/photos/{{ photo.photo_id }}/decision" hx-target="#photo-detail-view">
-        <input type="hidden" name="decision" value="keep">
-        <button type="submit" data-decision="keep" class="btn" style="background-color: var(--accent-blue); width: 100%;">2 - KEEP</button>
-      </form>
-      <form hx-post="/photos/{{ photo.photo_id }}/decision" hx-target="#photo-detail-view">
-        <input type="hidden" name="decision" value="review">
-        <button type="submit" data-decision="review" class="btn" style="background-color: var(--accent-yellow); color: #000; width: 100%;">4 - REVIEW</button>
-      </form>
-      <form hx-post="/photos/{{ photo.photo_id }}/decision" hx-target="#photo-detail-view">
-        <input type="hidden" name="decision" value="reject">
-        <button type="submit" data-decision="reject" class="btn" style="background-color: var(--accent-red); width: 100%;">X - REJECT</button>
-      </form>
-    </div>
+      <!-- Specifications Table -->
+      <div class="inspector-section">
+        <h3>Camera Specifications</h3>
+        <table class="photo-spec-table">
+          <tr>
+            <td>Camera</td>
+            <td>{{ photo.metadata.camera_model if photo.metadata and photo.metadata.camera_model else 'N/A' }}</td>
+          </tr>
+          <tr>
+            <td>Lens</td>
+            <td>{{ photo.metadata.lens if photo.metadata and photo.metadata.lens else 'N/A' }}</td>
+          </tr>
+          <tr>
+            <td>ISO</td>
+            <td>{{ photo.metadata.iso if photo.metadata and photo.metadata.iso else 'N/A' }}</td>
+          </tr>
+          <tr>
+            <td>Aperture</td>
+            <td>f/{{ photo.metadata.aperture if photo.metadata and photo.metadata.aperture else 'N/A' }}</td>
+          </tr>
+          <tr>
+            <td>Exposure</td>
+            <td>{{ photo.metadata.shutter_speed if photo.metadata and photo.metadata.shutter_speed else 'N/A' }}</td>
+          </tr>
+          <tr>
+            <td>Focal Length</td>
+            <td>{{ photo.metadata.focal_length if photo.metadata and photo.metadata.focal_length else 'N/A' }} mm</td>
+          </tr>
+          <tr>
+            <td>Captured</td>
+            <td>{{ photo.metadata.capture_time.strftime('%Y-%m-%d %H:%M:%S') if photo.metadata and photo.metadata.capture_time else 'N/A' }}</td>
+          </tr>
+        </table>
+      </div>
 
-    <div class="keyboard-shortcut-legend">
-      <strong>Atajos de teclado:</strong><br>
-      [1] BEST &nbsp; [2] KEEP &nbsp; [4] REVIEW<br>
-      [X] REJECT &nbsp; [R] RECOVER
+      <!-- Decision Management -->
+      <div class="inspector-section" style="border-bottom: none;">
+        <h3>Set Status Decision</h3>
+        <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 0.5rem;">
+          Current State:
+          {% set d_val = photo.decision.value if photo.decision.value is defined else photo.decision %}
+          <span class="photo-badge badge-{{ d_val|lower }}" style="vertical-align: middle; margin-left: 4px;">{{ d_val }}</span>
+        </div>
+
+        <div class="decision-actions-list">
+          <form hx-post="/photos/{{ photo.photo_id }}/decision" hx-target="body" hx-swap="innerHTML">
+            <input type="hidden" name="decision" value="best">
+            <button type="submit" data-decision="best" class="decision-action-btn" style="background-color: var(--accent-teal);">[1] Mark as Best</button>
+          </form>
+          <form hx-post="/photos/{{ photo.photo_id }}/decision" hx-target="body" hx-swap="innerHTML">
+            <input type="hidden" name="decision" value="keep">
+            <button type="submit" data-decision="keep" class="decision-action-btn" style="background-color: var(--accent-blue);">[2] Mark as Keep</button>
+          </form>
+          <form hx-post="/photos/{{ photo.photo_id }}/decision" hx-target="body" hx-swap="innerHTML">
+            <input type="hidden" name="decision" value="review">
+            <button type="submit" data-decision="review" class="decision-action-btn" style="background-color: var(--accent-yellow); color: #000000;">[4] Mark for Review</button>
+          </form>
+          <form hx-post="/photos/{{ photo.photo_id }}/decision" hx-target="body" hx-swap="innerHTML">
+            <input type="hidden" name="decision" value="reject">
+            <button type="submit" data-decision="reject" class="decision-action-btn" style="background-color: var(--accent-orange);">[X] Reject Photo</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Shortcuts Legend -->
+      <div class="keyboard-shortcut-legend">
+        <strong>⚡ Keyboard Shortcuts:</strong><br>
+        [1] BEST &nbsp; [2] KEEP &nbsp; [4] REVIEW<br>
+        [X] REJECT &nbsp; [R] RECOVER
+      </div>
     </div>
   </div>
 </div>

@@ -7,16 +7,47 @@
   <h1>Ejecución de Análisis Técnico</h1>
 </div>
 
-<div style="background: var(--bg-card); padding: 1.5rem; border-radius: 8px; border: 1px solid var(--border-color); max-width: 600px;">
-  <h3>Perfil de Análisis</h3>
-  <div style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.75rem;">
-    <label><input type="radio" name="profile" value="fast" checked> <strong>Fast</strong> - Infección, dimensiones y rotación rápida</label>
-    <label><input type="radio" name="profile" value="technical"> <strong>Technical</strong> - Nitidez, clipping, histograma y exposición</label>
-    <label><input type="radio" name="profile" value="concert"> <strong>Concert</strong> - Ajustado para luces intensas de escenario y sujeto central</label>
+<div class="dashboard-panel" style="max-width: 650px;">
+  <div class="dashboard-panel-header">
+    <div class="panel-title" style="font-size: 14px;">Perfil de Análisis Técnico</div>
+    <span>⚡</span>
   </div>
 
-  <div style="margin-top: 1.5rem;">
-    <button class="btn" style="width: 100%;">Ejecutar Análisis Técnico</button>
-  </div>
+  <p style="color: var(--text-secondary); line-height: 1.6; font-size: 12px; margin-bottom: 1.5rem;">
+    Selecciona el perfil de evaluación técnica para calibrar los scorers de nitidez, clipping, nivel de ruido y recuperación de rango dinámico.
+  </p>
+
+  <form style="display: flex; flex-direction: column; gap: 1rem;">
+    <!-- Profile 1 -->
+    <label class="pipeline-job-card" style="display: block; cursor: pointer; border-radius: var(--radius-lg); padding: 1rem;">
+      <div class="job-card-header" style="display: flex; align-items: center; justify-content: flex-start; gap: 10px;">
+        <input type="radio" name="profile" value="fast" checked style="accent-color: var(--accent-orange);">
+        <span class="job-name">Fast Scan Profile</span>
+      </div>
+      <p class="job-desc" style="margin-left: 24px; margin-top: 4px;">Evalúa rápidamente dimensiones básicas, rotación y nitidez en base a thumbnails de baja resolución.</p>
+    </label>
+
+    <!-- Profile 2 -->
+    <label class="pipeline-job-card" style="display: block; cursor: pointer; border-radius: var(--radius-lg); padding: 1rem;">
+      <div class="job-card-header" style="display: flex; align-items: center; justify-content: flex-start; gap: 10px;">
+        <input type="radio" name="profile" value="technical" style="accent-color: var(--accent-orange);">
+        <span class="job-name">Technical Precision Profile</span>
+      </div>
+      <p class="job-desc" style="margin-left: 24px; margin-top: 4px;">Análisis completo de histograma, clipping de luces/sombras, nitidez regional y detección de ruido con Laplacian.</p>
+    </label>
+
+    <!-- Profile 3 -->
+    <label class="pipeline-job-card" style="display: block; cursor: pointer; border-radius: var(--radius-lg); padding: 1rem;">
+      <div class="job-card-header" style="display: flex; align-items: center; justify-content: flex-start; gap: 10px;">
+        <input type="radio" name="profile" value="concert" style="accent-color: var(--accent-orange);">
+        <span class="job-name">Concert Stage Profile</span>
+      </div>
+      <p class="job-desc" style="margin-left: 24px; margin-top: 4px;">Especializado en luces intensas, sujetos en movimiento con desenfoque de acción y análisis de la zona de enfoque central.</p>
+    </label>
+
+    <div style="margin-top: 1rem;">
+      <button type="button" class="btn" style="width: 100%; justify-content: center; padding: 0.8rem;">Ejecutar Análisis Técnico</button>
+    </div>
+  </form>
 </div>
 {% endblock %}

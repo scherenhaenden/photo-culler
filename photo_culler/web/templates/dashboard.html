@@ -5,26 +5,196 @@
 {% block content %}
 <div class="header-bar">
   <h1>Dashboard del Catálogo</h1>
-  <a href="/library" class="btn">Abrir Biblioteca</a>
+  <a href="/library" class="btn">Abrir Biblioteca <span>→</span></a>
 </div>
 
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
-  <div style="background: var(--bg-card); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color);">
-    <div style="font-size: 0.85rem; color: var(--text-secondary);">Fotografías en Catálogo</div>
-    <div style="font-size: 2rem; font-weight: 700; color: var(--accent-blue); margin-top: 0.25rem;">{{ summary.total_photos }}</div>
-  </div>
-  
-  <div style="background: var(--bg-card); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color);">
-    <div style="font-size: 0.85rem; color: var(--text-secondary);">Seleccionadas (BEST/KEEP)</div>
-    <div style="font-size: 2rem; font-weight: 700; color: var(--badge-best-text); margin-top: 0.25rem;">
-      {{ summary.selected_count }}
+<!-- Bento Grid 4-Columns Top Row -->
+<div class="bento-grid-4">
+  <!-- Total Media -->
+  <div class="bento-card">
+    <div class="bento-card-title">Total Media</div>
+    <div class="bento-card-value">{{ summary.total_photos }}</div>
+    <div class="bento-card-footer">
+      <span>RAW: {{ summary.total_photos }}</span>
+      <span>JPEG: {{ summary.total_photos }}</span>
     </div>
   </div>
 
-  <div style="background: var(--bg-card); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color);">
-    <div style="font-size: 0.85rem; color: var(--text-secondary);">Revisión Pendiente</div>
-    <div style="font-size: 2rem; font-weight: 700; color: var(--badge-review-text); margin-top: 0.25rem;">
-      {{ summary.pending_count }}
+  <!-- Sessions -->
+  <div class="bento-card">
+    <div class="bento-card-title">Sessions</div>
+    <div class="bento-card-value">12</div>
+    <div class="bento-progress-container">
+      <div class="bento-progress-bar">
+        <div class="bento-progress-fill" style="background-color: var(--accent-orange); width: 75%;"></div>
+      </div>
+    </div>
+    <div class="bento-accent-pill" style="color: var(--accent-orange);">75% Catalogued</div>
+  </div>
+
+  <!-- AI Best Selects -->
+  <div class="bento-card">
+    <div class="bento-card-title">AI Best Selects</div>
+    <div class="bento-card-value" style="color: var(--accent-teal);">{{ summary.selected_count }}</div>
+    <div class="bento-accent-pill" style="color: var(--accent-teal);">⚡ +12% This Month</div>
+  </div>
+
+  <!-- Rejected / Trash -->
+  <div class="bento-card">
+    <div class="bento-card-title">Rejected / Trash</div>
+    <div class="bento-card-value" style="color: var(--accent-orange);">{{ summary.total_photos - summary.selected_count - summary.pending_count }}</div>
+    <div class="bento-accent-pill" style="color: var(--text-secondary); font-family: var(--font-mono); font-size: 10px;">Pending Purge: 4.2 GB</div>
+  </div>
+</div>
+
+<!-- Main Dashboard Layout Grid -->
+<div class="dashboard-layout-grid">
+  <!-- Left Column (Growth & Storage Health) -->
+  <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+    <!-- Growth Chart -->
+    <div class="dashboard-panel">
+      <div class="dashboard-panel-header">
+        <div class="panel-title">Library Growth Distribution</div>
+        <div style="display: flex; gap: 1rem; font-family: var(--font-mono); font-size: 9px; text-transform: uppercase;">
+          <span style="display: flex; align-items: center; gap: 4px;">
+            <span style="width: 8px; height: 8px; background-color: var(--accent-orange); border-radius: 50%;"></span> RAW Assets
+          </span>
+          <span style="display: flex; align-items: center; gap: 4px;">
+            <span style="width: 8px; height: 8px; background-color: var(--accent-teal); border-radius: 50%;"></span> Virtual Copies
+          </span>
+        </div>
+      </div>
+
+      <!-- Simulated Bar Chart -->
+      <div class="bar-chart-container">
+        {% for val in [25, 45, 30, 65, 80, 70, 50, 95, 60, 85, 90, 100] %}
+        <div class="chart-bar-wrapper">
+          <div style="height: {{ val * 0.7 }}%;" class="chart-bar-top"></div>
+          <div style="height: {{ val * 0.3 }}%;" class="chart-bar-bottom"></div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Storage and Neural Progress Grid -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem;">
+      <!-- Volume Health -->
+      <div class="dashboard-panel">
+        <div class="dashboard-panel-header">
+          <div class="panel-title">Volume Health</div>
+          <span>📁</span>
+        </div>
+        <div class="progress-list">
+          <!-- Volume 1 -->
+          <div class="volume-row">
+            <div class="volume-row-header">
+              <span class="volume-status-online">SSD_PRIMARY_01</span>
+              <span class="volume-percentage">64%</span>
+            </div>
+            <div class="bento-progress-bar">
+              <div class="bento-progress-fill" style="background-color: var(--accent-teal); width: 64%;"></div>
+            </div>
+          </div>
+          <!-- Volume 2 -->
+          <div class="volume-row">
+            <div class="volume-row-header">
+              <span class="volume-status-online">BACKUP_NAS_02</span>
+              <span class="volume-percentage">89%</span>
+            </div>
+            <div class="bento-progress-bar">
+              <div class="bento-progress-fill" style="background-color: var(--accent-orange); width: 89%;"></div>
+            </div>
+          </div>
+          <!-- Volume 3 (Disconnected) -->
+          <div class="volume-row">
+            <div class="volume-row-header">
+              <span class="volume-status-offline">EXT_ARCHIVE_A</span>
+              <span class="volume-percentage">DISCONNECTED</span>
+            </div>
+            <div class="bento-progress-bar">
+              <div class="bento-progress-fill" style="background-color: var(--text-muted); width: 0%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Neural AI Processing Gauge -->
+      <div class="dashboard-panel">
+        <div class="dashboard-panel-header">
+          <div class="panel-title">Neural AI Processing</div>
+          <span>🧠</span>
+        </div>
+
+        <div class="circle-gauge-wrapper">
+          <svg class="svg-circle-gauge" viewBox="0 0 36 36">
+            <!-- Background circle -->
+            <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#050505" stroke-width="3" />
+            <!-- Foreground circle (70%) -->
+            <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="var(--accent-teal)" stroke-width="3" stroke-dasharray="70, 100" />
+            <!-- Percentage text -->
+            <text x="18" y="21.5" fill="#ffffff" font-family="var(--font-mono)" font-size="8" font-weight="900" text-anchor="middle">70%</text>
+          </svg>
+
+          <div class="circle-gauge-label">
+            <div style="font-weight: 800; color: #ffffff;">SCANNING: Session_2412</div>
+            <div style="color: var(--text-secondary);">ESTIMATED: 12m 40s</div>
+            <div style="display: flex; gap: 3px; margin-top: 4px;">
+              <span style="width: 4px; height: 10px; background-color: var(--accent-teal); border-radius: 2px;"></span>
+              <span style="width: 4px; height: 10px; background-color: var(--accent-teal); border-radius: 2px;"></span>
+              <span style="width: 4px; height: 10px; background-color: var(--accent-teal); border-radius: 2px;"></span>
+              <span style="width: 4px; height: 10px; background-color: var(--border-color); border-radius: 2px;"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column (Background Pipeline) -->
+  <div class="dashboard-panel" style="display: flex; flex-direction: column; justify-content: space-between;">
+    <div>
+      <div class="dashboard-panel-header">
+        <div class="panel-title">Background Pipeline</div>
+        <span class="panel-badge">03 Active</span>
+      </div>
+
+      <div class="pipeline-jobs-list">
+        <!-- Job 1 -->
+        <div class="pipeline-job-card">
+          <div class="job-card-header">
+            <span class="job-name">SPARSE_HASH_GEN</span>
+            <span class="job-time">Active</span>
+          </div>
+          <div class="job-desc">Generating multi-tier dHash fingerprints for duplicate detection and grouping.</div>
+          <div class="bento-progress-bar">
+            <div class="bento-progress-fill" style="background-color: var(--accent-teal); width: 85%;"></div>
+          </div>
+        </div>
+
+        <!-- Job 2 -->
+        <div class="pipeline-job-card">
+          <div class="job-card-header">
+            <span class="job-name">SUBJECT_ZONE_EVAL</span>
+            <span class="job-time">Pending</span>
+          </div>
+          <div class="job-desc">Extracting center region of interest (ROI) to run local Laplacian sharpness assessment.</div>
+          <div class="bento-progress-bar">
+            <div class="bento-progress-fill" style="background-color: var(--accent-teal); width: 40%;"></div>
+          </div>
+        </div>
+
+        <!-- Job 3 -->
+        <div class="pipeline-job-card">
+          <div class="job-card-header">
+            <span class="job-name">METADATA_EXTRACTOR</span>
+            <span class="job-time">Finished</span>
+          </div>
+          <div class="job-desc">Reading EXIF, camera profiles, focal lengths, apertures, and capture dates.</div>
+          <div class="bento-progress-bar">
+            <div class="bento-progress-fill" style="background-color: var(--accent-teal); width: 100%;"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>

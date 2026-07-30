@@ -29,6 +29,41 @@ def create_app(catalog_path: Optional[Union[str, Path]] = None) -> FastAPI:
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
     app.state.templates = Jinja2Templates(directory=templates_dir)
 
+    def get_sidebar_stats():
+        from photo_culler.web.services.library_service import LibraryService
+        service = LibraryService(db_engine)
+        try:
+            summary = service.get_summary()
+
+            # Map decisions to stats panel keys
+            decisions = summary.get("decisions", {})
+            kept = decisions.get("BEST", 0) + decisions.get("KEEP", 0)
+            alt = decisions.get("ALTERNATE", 0)
+            rejected = decisions.get("REJECT_TECHNICAL", 0) + decisions.get("REJECT_REDUNDANT", 0)
+            unrated = decisions.get("UNPROCESSED", 0)
+
+            return {
+                "total_photos": summary.get("total_photos", 0),
+                "total_files": summary.get("total_files", 0),
+                "kept": kept,
+                "alt": alt,
+                "rejected": rejected,
+                "unrated": unrated,
+                "original_summary": summary
+            }
+        except Exception:
+            return {
+                "total_photos": 0,
+                "total_files": 0,
+                "kept": 0,
+                "alt": 0,
+                "rejected": 0,
+                "unrated": 0,
+                "original_summary": {}
+            }
+
+    app.state.templates.env.globals["get_sidebar_stats"] = get_sidebar_stats
+
     # Register Routes
     app.include_router(dashboard.router)
     app.include_router(library.router)
