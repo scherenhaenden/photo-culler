@@ -22,6 +22,28 @@ Web / pywebview / future Tauri / future egui
 - `photo_culler/scoring` and `photo_culler/selection` own product decisions.
 - `photo_culler/web/services` adapts domain capabilities for presentation.
 - `photo_culler/web` and `photo_culler/desktop` are delivery adapters.
+- `photo_culler/importing` owns gallery/import orchestration. Its coordinator is
+  constructed per FastAPI application and persists every job transition; no
+  frontend or process-global singleton owns import state.
+
+## Gallery import milestone
+
+The first gallery contract is deliberately narrow and operational:
+
+- `Gallery` is a logical collection and `ImportSource` is a physical folder;
+- imports index in place and never copy, rename, or modify originals;
+- gallery/source uniqueness and stable source-relative photo identity make a
+  rescan idempotent;
+- import jobs and counters survive process restarts, while cancellation is
+  cooperative at file/photo boundaries;
+- `/api/v1` DTOs carry an explicit contract version and do not expose ORM rows;
+- schema changes are recorded by `schema_migrations` rather than relying only
+  on SQLAlchemy `create_all()`.
+
+Pause/resume recovery, moved-file reconciliation, full/perceptual hashes in the
+background, managed copies, and scan revisions remain planned. The current
+worker provides Tier 0 discovery and initial pairing/catalog insertion; it is
+not the complete priority scheduler described in the product direction.
 
 The current pywebview application uses the same local FastAPI UI as the browser build. Its random loopback port, per-launch session token, restricted Host header, and native API bridge are desktop concerns and do not leak into analysis engines.
 

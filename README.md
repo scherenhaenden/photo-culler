@@ -105,6 +105,21 @@ Measured on Linux/Python 3.14 with statement and branch coverage enabled:
 
 ## 💻 Interfaz Web & Escritorio (Web UI & Desktop GUI)
 
+### Gallery import milestone
+
+The web library now has an honest empty state and a local-folder import flow.
+The versioned `/api/v1/galleries` and `/api/v1/import-jobs` contracts create
+logical galleries, index supported files without copying originals, persist
+progress/cancellation state, and avoid duplicates on a rescan. SQLite schema
+changes are tracked in `schema_migrations`.
+
+This is **partially implemented**, not a complete RAW workflow: pause/resume,
+moved/offline reconciliation, edit recipes and real exposure/white-balance
+rendering, export, PostgreSQL operations, Tauri, and egui remain planned or
+prototype-only. The percentages above predate this milestone and must not be
+treated as newly measured results; the exact validation results for a change
+belong in its PR/CI output.
+
 ### 1. Iniciar Servidor Web Local (`FastAPI` + `HTMX`)
 
 ```bash

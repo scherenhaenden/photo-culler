@@ -1,11 +1,53 @@
 """SQLAlchemy ORM database schema for photo-culler catalog."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
+
+
+def utc_now() -> datetime:
+    """Return an aware UTC timestamp for persisted application state."""
+    return datetime.now(timezone.utc)
+
+
+class GalleryDB(Base):
+    __tablename__ = "galleries"
+
+    id = Column(String(36), primary_key=True)
+    name = Column(String(255), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+
+class ImportSourceDB(Base):
+    __tablename__ = "import_sources"
+    __table_args__ = (UniqueConstraint("gallery_id", "normalized_path", name="uq_gallery_source_path"),)
+
+    id = Column(String(36), primary_key=True)
+    gallery_id = Column(String(36), ForeignKey("galleries.id"), nullable=False, index=True)
+    path = Column(String(2048), nullable=False)
+    normalized_path = Column(String(2048), nullable=False)
+    recursive = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class ImportJobDB(Base):
+    __tablename__ = "import_jobs"
+
+    id = Column(String(36), primary_key=True)
+    gallery_id = Column(String(36), ForeignKey("galleries.id"), nullable=False, index=True)
+    source_id = Column(String(36), ForeignKey("import_sources.id"), nullable=False, index=True)
+    state = Column(String(32), nullable=False, index=True)
+    discovered = Column(Integer, default=0, nullable=False)
+    imported = Column(Integer, default=0, nullable=False)
+    issues = Column(Integer, default=0, nullable=False)
+    cancel_requested = Column(Boolean, default=False, nullable=False)
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
 
 class VolumeDB(Base):
@@ -26,6 +68,7 @@ class PhotoDB(Base):
     __tablename__ = "photos"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    gallery_id = Column(String(36), ForeignKey("galleries.id"), nullable=True, index=True)
     photo_id = Column(String(64), unique=True, nullable=False, index=True)
     stem_name = Column(String(255), nullable=False, index=True)
     perceptual_hash = Column(String(64), nullable=True, index=True)
@@ -34,7 +77,7 @@ class PhotoDB(Base):
     decision = Column(String(32), default="UNPROCESSED", index=True)
     score = Column(Float, default=0.0)
     quality_tier = Column(String(32), default="fair")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
 
     files = relationship("FileDB", back_populates="photo", cascade="all, delete-orphan")
     metadata_record = relationship("MetadataDB", uselist=False, back_populates="photo", cascade="all, delete-orphan")
@@ -42,6 +85,7 @@ class PhotoDB(Base):
 
 class FileDB(Base):
     __tablename__ = "files"
+    __table_args__ = (UniqueConstraint("photo_id", "relative_path", name="uq_photo_file_path"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     photo_id = Column(Integer, ForeignKey("photos.id"), nullable=False)

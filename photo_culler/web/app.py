@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from photo_culler.catalog.database import Database
+from photo_culler.importing import GalleryImportService
 from photo_culler.web.routes import analysis, api, dashboard, library, photos, sessions
 
 
@@ -47,7 +48,9 @@ def create_app(
                         secure=False,
                     )
                 # Inject security headers
-                response.headers["Content-Security-Policy"] = "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:"
+                response.headers["Content-Security-Policy"] = (
+                    "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:"
+                )
                 response.headers["X-Frame-Options"] = "DENY"
                 response.headers["Referrer-Policy"] = "no-referrer"
                 return response
@@ -59,6 +62,7 @@ def create_app(
     db_engine = Database(cat_path, db_url=database_url)
     db_engine.create_tables()
     app.state.db_engine = db_engine
+    app.state.gallery_imports = GalleryImportService(db_engine)
 
     # Templates & Static Files setup
     web_dir = Path(__file__).parent.resolve()
@@ -70,6 +74,7 @@ def create_app(
 
     def get_sidebar_stats():
         from photo_culler.web.services.library_service import LibraryService
+
         service = LibraryService(db_engine)
         try:
             summary = service.get_summary()
@@ -88,7 +93,7 @@ def create_app(
                 "alt": alt,
                 "rejected": rejected,
                 "unrated": unrated,
-                "original_summary": summary
+                "original_summary": summary,
             }
         except Exception:
             return {
@@ -98,7 +103,7 @@ def create_app(
                 "alt": 0,
                 "rejected": 0,
                 "unrated": 0,
-                "original_summary": {}
+                "original_summary": {},
             }
 
     app.state.templates.env.globals["get_sidebar_stats"] = get_sidebar_stats
