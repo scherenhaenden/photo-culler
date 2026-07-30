@@ -1,5 +1,5 @@
 """Gallery import application services."""
 
-from .service import CancelResult, GalleryImportService
+from .service import CancelResult, GalleryImportService, PauseResult, ResumeResult
 
-__all__ = ["CancelResult", "GalleryImportService"]
+__all__ = ["CancelResult", "GalleryImportService", "PauseResult", "ResumeResult"]

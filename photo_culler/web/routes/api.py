@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator
 
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
-from photo_culler.importing import CancelResult, GalleryImportService
+from photo_culler.importing import CancelResult, GalleryImportService, PauseResult, ResumeResult
 
 router = APIRouter(prefix="/api")
 
@@ -33,6 +33,13 @@ class GalleryCreateRequest(BaseModel):
 
 class GalleryImportRequest(BaseModel):
     """Non-copying import request."""
+
+    path: str = Field(min_length=1, max_length=2048)
+    recursive: bool = True
+
+
+class GalleryImportEstimateRequest(BaseModel):
+    """Read-only import preflight request."""
 
     path: str = Field(min_length=1, max_length=2048)
     recursive: bool = True
@@ -93,6 +100,17 @@ def import_gallery(gallery_id: str, request: Request, payload: GalleryImportRequ
     return {"contract_version": 1, "job_id": job_id, "state": "queued"}
 
 
+@router.post("/v1/import-estimates")
+def estimate_gallery_import(request: Request, payload: GalleryImportEstimateRequest) -> dict[str, object]:
+    """Return a lightweight source estimate before import confirmation."""
+    try:
+        return _gallery_import_service(request).estimate_import(Path(payload.path), recursive=payload.recursive)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Import source does not exist") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @router.get("/v1/import-jobs/{job_id}")
 def get_import_job(job_id: str, request: Request) -> dict[str, object]:
     """Return persisted progress for an import job."""
@@ -100,6 +118,15 @@ def get_import_job(job_id: str, request: Request) -> dict[str, object]:
     if job is None:
         raise HTTPException(status_code=404, detail="Import job not found")
     return job
+
+
+@router.get("/v1/import-jobs")
+def list_import_jobs(request: Request, limit: int = 20) -> dict[str, object]:
+    """List recent persisted jobs for frontend recovery."""
+    return {
+        "contract_version": 1,
+        "items": _gallery_import_service(request).list_jobs(limit=limit),
+    }
 
 
 @router.post("/v1/import-jobs/{job_id}/cancel", status_code=status.HTTP_202_ACCEPTED)
@@ -111,3 +138,27 @@ def cancel_import_job(job_id: str, request: Request) -> dict[str, object]:
     if result is CancelResult.NOT_CANCELLABLE:
         raise HTTPException(status_code=409, detail="Import job cannot be cancelled")
     return {"contract_version": 1, "job_id": job_id, "cancel_requested": True}
+
+
+@router.post("/v1/import-jobs/{job_id}/pause", status_code=status.HTTP_202_ACCEPTED)
+def pause_import_job(job_id: str, request: Request) -> dict[str, object]:
+    """Request a durable cooperative pause."""
+    result = _gallery_import_service(request).pause(job_id)
+    if result is PauseResult.NOT_FOUND:
+        raise HTTPException(status_code=404, detail="Import job not found")
+    if result is PauseResult.NOT_PAUSABLE:
+        raise HTTPException(status_code=409, detail="Import job cannot be paused")
+    return {"contract_version": 1, "job_id": job_id, "pause_requested": True}
+
+
+@router.post("/v1/import-jobs/{job_id}/resume", status_code=status.HTTP_202_ACCEPTED)
+def resume_import_job(job_id: str, request: Request) -> dict[str, object]:
+    """Resume a paused import from its persisted source."""
+    result = _gallery_import_service(request).resume(job_id)
+    if result is ResumeResult.NOT_FOUND:
+        raise HTTPException(status_code=404, detail="Import job not found")
+    if result is ResumeResult.NOT_RESUMABLE:
+        raise HTTPException(status_code=409, detail="Import job cannot be resumed")
+    if result is ResumeResult.SOURCE_UNAVAILABLE:
+        raise HTTPException(status_code=409, detail="Import source is unavailable")
+    return {"contract_version": 1, "job_id": job_id, "state": "queued"}

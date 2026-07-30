@@ -6,6 +6,7 @@ from enum import Enum
 class FileRole(str, Enum):
     RAW = "raw"
     JPEG = "jpeg"
+    IMAGE = "image"
     SIDECAR = "sidecar"
     EXPORT = "export"
     UNKNOWN = "unknown"

@@ -87,6 +87,10 @@ class Database:
         with self.engine.begin() as connection:
             migrate(connection)
 
+    def close(self) -> None:
+        """Release pooled connections held by this catalog instance."""
+        self.engine.dispose()
+
     @contextmanager
     def session(self) -> Generator[Session, None, None]:
         """Provide a transactional scope around a series of operations."""

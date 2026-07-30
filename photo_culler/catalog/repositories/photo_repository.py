@@ -120,6 +120,8 @@ class PhotoRepository:
                 query = query.filter(PhotoDB.quality_tier == filters["quality_tier"])
             if "session_id" in filters and filters["session_id"]:
                 query = query.filter(PhotoDB.session_id == filters["session_id"])
+            if "gallery_id" in filters and filters["gallery_id"]:
+                query = query.filter(PhotoDB.gallery_id == filters["gallery_id"])
 
         # Apply sort
         if sort:
@@ -156,6 +158,8 @@ class PhotoRepository:
                 query = query.filter(PhotoDB.quality_tier == filters["quality_tier"])
             if "session_id" in filters and filters["session_id"]:
                 query = query.filter(PhotoDB.session_id == filters["session_id"])
+            if "gallery_id" in filters and filters["gallery_id"]:
+                query = query.filter(PhotoDB.gallery_id == filters["gallery_id"])
         return query.count()
 
     def _to_domain(self, db_photo: PhotoDB) -> Photo:

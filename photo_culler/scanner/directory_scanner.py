@@ -29,6 +29,10 @@ class DirectoryScanner:
                     continue
 
                 path = Path(root) / file_name
+                # Imported sources are trust boundaries. Do not follow file
+                # symlinks that may escape the selected directory.
+                if path.is_symlink():
+                    continue
                 role = self.filter.classify_role(path)
                 if role is None:
                     continue

@@ -32,18 +32,26 @@ The first gallery contract is deliberately narrow and operational:
 
 - `Gallery` is a logical collection and `ImportSource` is a physical folder;
 - imports index in place and never copy, rename, or modify originals;
+- a read-only preflight scans supported extensions, bytes, and logical pairing
+  groups before an import job is created;
 - gallery/source uniqueness and stable source-relative photo identity make a
   rescan idempotent;
-- import jobs and counters survive process restarts, while cancellation is
-  cooperative at file/photo boundaries;
+- import jobs and counters survive process restarts, while pause and
+  cancellation are cooperative at file/photo boundaries;
+- interrupted jobs reopen as paused and explicitly resumable; a recovered
+  worker performs a fresh idempotent scan rather than pretending to retain an
+  in-memory directory iterator;
 - `/api/v1` DTOs carry an explicit contract version and do not expose ORM rows;
+- the library selects an active logical gallery and scopes catalog queries to
+  it instead of mixing photos from unrelated collections;
+- file symlinks within an imported tree are skipped by default;
 - schema changes are recorded by `schema_migrations` rather than relying only
   on SQLAlchemy `create_all()`.
 
-Pause/resume recovery, moved-file reconciliation, full/perceptual hashes in the
-background, managed copies, and scan revisions remain planned. The current
-worker provides Tier 0 discovery and initial pairing/catalog insertion; it is
-not the complete priority scheduler described in the product direction.
+Moved-file reconciliation, full/perceptual hashes in the background, managed
+copies, and scan revisions remain planned. The current worker provides Tier 0
+discovery and initial pairing/catalog insertion; it is not the complete
+priority scheduler described in the product direction.
 
 The current pywebview application uses the same local FastAPI UI as the browser build. Its random loopback port, per-launch session token, restricted Host header, and native API bridge are desktop concerns and do not leak into analysis engines.
 

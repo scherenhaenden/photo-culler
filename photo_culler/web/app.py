@@ -63,7 +63,12 @@ def create_app(
     db_engine.create_tables()
     app.state.db_engine = db_engine
     app.state.gallery_imports = GalleryImportService(db_engine)
-    app.router.add_event_handler("shutdown", app.state.gallery_imports.shutdown)
+
+    def shutdown_services() -> None:
+        app.state.gallery_imports.shutdown()
+        db_engine.close()
+
+    app.router.add_event_handler("shutdown", shutdown_services)
 
     # Templates & Static Files setup
     web_dir = Path(__file__).parent.resolve()

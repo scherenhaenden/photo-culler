@@ -20,7 +20,19 @@ def _v1_gallery_import(connection: Connection) -> None:
     connection.execute(text("CREATE INDEX IF NOT EXISTS ix_photos_gallery_id ON photos (gallery_id)"))
 
 
-MIGRATIONS: tuple[tuple[int, Migration], ...] = ((1, _v1_gallery_import),)
+def _v2_import_pause_resume(connection: Connection) -> None:
+    """Add durable cooperative pause state to existing import catalogs."""
+    columns = {column["name"] for column in inspect(connection).get_columns("import_jobs")}
+    if "pause_requested" not in columns:
+        connection.execute(text("ALTER TABLE import_jobs ADD COLUMN pause_requested BOOLEAN NOT NULL DEFAULT 0"))
+    if "resume_state" not in columns:
+        connection.execute(text("ALTER TABLE import_jobs ADD COLUMN resume_state VARCHAR(32)"))
+
+
+MIGRATIONS: tuple[tuple[int, Migration], ...] = (
+    (1, _v1_gallery_import),
+    (2, _v2_import_pause_resume),
+)
 
 
 def migrate(connection: Connection) -> int:

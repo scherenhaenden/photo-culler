@@ -55,30 +55,31 @@ PHOTO_CULLER_DATABASE_URL=sqlite:////absolute/path/catalog.db photo-culler web
 
 ## 📊 Estado de Desarrollo y Cobertura de Código (Coverage Table)
 
-### 🎯 Cobertura Global de Código: **79.1%** (39 Pruebas Superadas)
+### 🎯 Cobertura Global de Código: **81.7%** (57 Pruebas Superadas)
 
 Measured on Linux/Python 3.14 with statement and branch coverage enabled:
 
 | Módulo / Sub-paquete | Sentencias | Líneas Omitidas | Cobertura % |
 |---|:---:|:---:|:---:|
 | **`photo_culler/analysis/`** (Analizadores, pipeline, registry y cache) | 477 | 45 | **87.8%** |
-| **`photo_culler/catalog/`** (Persistencia SQLite & ORM) | 234 | 12 | **91.4%** |
+| **`photo_culler/catalog/`** (Persistencia SQLite & ORM) | 302 | 12 | **93.0%** |
+| **`photo_culler/importing/`** (Galerías, preflight y jobs persistentes) | 269 | 23 | **88.9%** |
 | **`photo_culler/cli/`** (Comandos Typer & Formateadores Rich) | 549 | 81 | **80.8%** |
-| **`photo_culler/web/`** (FastAPI, servicios, paginación y jobs SSE) | 377 | 86 | **74.0%** |
+| **`photo_culler/web/`** (FastAPI, servicios, paginación y jobs SSE) | 472 | 90 | **78.4%** |
 | **`photo_culler/desktop/`** (Launcher seguro y bridge pywebview) | 97 | 75 | **18.8%** |
-| **`photo_culler/core/`** (Modelos de Dominio y Enums) | 84 | 4 | **92.0%** |
+| **`photo_culler/core/`** (Modelos de Dominio y Enums) | 85 | 0 | **100.0%** |
 | **`photo_culler/grouping/`** (Agrupación timeline) | 34 | 1 | **93.2%** |
 | **`photo_culler/bursts/`** (Detección de ráfagas) | 32 | 2 | **88.6%** |
 | **`photo_culler/identity/`** (Hashes SHA-256 & dHash) | 58 | 9 | **83.3%** |
-| **`photo_culler/pairing/`** (Emparejador RAW/JPEG) | 40 | 2 | **92.9%** |
+| **`photo_culler/pairing/`** (Emparejador RAW/JPEG) | 45 | 0 | **100.0%** |
 | **`photo_culler/previews/`** (Generador de thumbnails) | 28 | 5 | **79.4%** |
 | **`photo_culler/reports/`** (Generador de reportes) | 19 | 0 | **100.0%** |
-| **`photo_culler/scanner/`** (Crawler & filtros de extensión) | 49 | 6 | **86.2%** |
+| **`photo_culler/scanner/`** (Crawler & filtros de extensión) | 53 | 3 | **93.2%** |
 | **`photo_culler/scoring/`** (Scorers técnicos & RAW recovery) | 76 | 2 | **90.8%** |
 | **`photo_culler/selection/`** (Reglas de decisión) | 29 | 13 | **51.1%** |
 | **`photo_culler/validation/`** (Corpus & benchmark runner) | 39 | 4 | **81.6%** |
 | **`photo_culler/volumes/`** (Detector de volúmenes) | 38 | 13 | **66.7%** |
-| **TOTAL PROYECTO** | **2,325** | **399** | **79.1%** |
+| **TOTAL PROYECTO** | **2,767** | **417** | **81.7%** |
 
 ---
 
@@ -97,7 +98,7 @@ Measured on Linux/Python 3.14 with statement and branch coverage enabled:
 | **Desktop Rust (Tauri + WebGL)** | 0% | **7%** | Workspace, contratos y viewport WebGL2 inicial; runtime Tauri pendiente |
 | **Desktop Rust nativo (egui + wgpu)** | 0% | **5%** | Workspace y estado nativo inicial; runtime egui/wgpu pendiente |
 | **Validación Fotográfica Real** | 38% | **70%** | Infraestructura de corpus (`BenchmarkEvaluator`) con F1-score, FRR y FAR |
-| **Integración Continua (CI & Testing)** | 70% | **94%** | 39 pruebas Python (incluye integración + Chrome E2E), 2 pruebas Rust y CI Python 3.14 |
+| **Integración Continua (CI & Testing)** | 70% | **94%** | 57 pruebas Python (incluye integración + Chrome E2E), 2 pruebas Rust y CI Python 3.14 |
 | **Readiness para Uso Experimental Real** | 62% | **85%** | Listo para escanear, analizar y clasificar visualmente mediante CLI, Web o Desktop |
 | **Readiness Producción con Miles de Fotos** | 35% | **72%** | Modo asistido por UI con atajos de teclado y salvaguardas no destructivas |
 
@@ -110,15 +111,22 @@ Measured on Linux/Python 3.14 with statement and branch coverage enabled:
 The web library now has an honest empty state and a local-folder import flow.
 The versioned `/api/v1/galleries` and `/api/v1/import-jobs` contracts create
 logical galleries, index supported files without copying originals, persist
-progress/cancellation state, and avoid duplicates on a rescan. SQLite schema
-changes are tracked in `schema_migrations`.
+progress/cancellation state, pause and resume cooperatively, recover interrupted
+jobs as resumable after restart, and avoid duplicates on a rescan. Recent jobs
+remain visible in the library so their controls survive a page or application
+reload. A read-only preflight reports logical-photo/file counts, extensions and
+bytes before confirmation; the library keeps an explicit active gallery and can
+add multiple source folders to it. File symlinks inside a source are skipped by
+default so discovery cannot escape the selected tree. SQLite schema changes are
+tracked in `schema_migrations`.
 
-This is **partially implemented**, not a complete RAW workflow: pause/resume,
-moved/offline reconciliation, edit recipes and real exposure/white-balance
-rendering, export, PostgreSQL operations, Tauri, and egui remain planned or
-prototype-only. The percentages above predate this milestone and must not be
-treated as newly measured results; the exact validation results for a change
-belong in its PR/CI output.
+This is **partially implemented**, not a complete RAW workflow: resume after a
+process restart performs a fresh idempotent scan of the persisted source,
+moved/offline reconciliation, scan revisions, edit recipes and real
+exposure/white-balance rendering, export, PostgreSQL operations, Tauri, and
+egui remain planned or prototype-only. The percentages above predate this
+milestone and must not be treated as newly measured results; the exact
+validation results for a change belong in its PR/CI output.
 
 ### 1. Iniciar Servidor Web Local (`FastAPI` + `HTMX`)
 

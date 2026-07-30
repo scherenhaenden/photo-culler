@@ -6,6 +6,8 @@ from threading import Event
 import pytest
 from fastapi.testclient import TestClient
 
+from photo_culler.catalog.repositories.photo_repository import PhotoRepository
+from photo_culler.core.models import Photo
 from photo_culler.scanner.directory_scanner import DirectoryScanner
 from photo_culler.web.app import create_app
 
@@ -14,7 +16,8 @@ from photo_culler.web.app import create_app
 def web_client(tmp_path):
     cat_file = tmp_path / "catalog.db"
     app = create_app(catalog_path=cat_file)
-    return TestClient(app)
+    with TestClient(app) as client:
+        yield client
 
 
 def test_api_health(web_client):
@@ -60,8 +63,57 @@ def test_gallery_import_api_and_empty_state(web_client, tmp_path):
     job = web_client.get(f"/api/v1/import-jobs/{queued.json()['job_id']}")
     assert job.status_code == 200
     assert job.json()["contract_version"] == 1
+    jobs = web_client.get("/api/v1/import-jobs?limit=10")
+    assert jobs.status_code == 200
+    assert jobs.json()["items"][0]["id"] == queued.json()["job_id"]
     galleries = web_client.get("/api/v1/galleries").json()
     assert galleries["items"][0]["name"] == "Wedding"
+    library = web_client.get("/library").text
+    assert "Importaciones recientes" in library
+    assert 'name="gallery_id"' in library
+
+
+def test_import_estimate_api(web_client, tmp_path):
+    source = tmp_path / "photos"
+    source.mkdir()
+    (source / "frame.nef").write_bytes(b"raw")
+    (source / "frame.jpg").write_bytes(b"jpeg")
+
+    estimate = web_client.post(
+        "/api/v1/import-estimates",
+        json={"path": str(source), "recursive": True},
+    )
+
+    assert estimate.status_code == 200
+    assert estimate.json()["logical_photos"] == 1
+    assert estimate.json()["total_files"] == 2
+    assert (
+        web_client.post(
+            "/api/v1/import-estimates",
+            json={"path": str(tmp_path / "missing"), "recursive": True},
+        ).status_code
+        == 404
+    )
+
+
+def test_library_filters_by_active_gallery(web_client):
+    app = web_client.app
+    first_gallery = app.state.gallery_imports.create_gallery("First shoot")
+    second_gallery = app.state.gallery_imports.create_gallery("Second shoot")
+    with app.state.db_engine.session() as session:
+        first = PhotoRepository(session).save_photo(Photo("first-photo", "First_frame"))
+        first.gallery_id = first_gallery
+        second = PhotoRepository(session).save_photo(Photo("second-photo", "Second_frame"))
+        second.gallery_id = second_gallery
+
+    first_page = web_client.get(f"/library?gallery_id={first_gallery}")
+    second_page = web_client.get(f"/library?gallery_id={second_gallery}")
+
+    assert "Galería activa: <strong>First shoot</strong>" in first_page.text
+    assert "First_frame" in first_page.text
+    assert "Second_frame" not in first_page.text
+    assert "Second_frame" in second_page.text
+    assert "First_frame" not in second_page.text
 
 
 @pytest.mark.parametrize("name", ["", "   \t\n"])
@@ -129,6 +181,38 @@ def test_cancel_import_api_distinguishes_job_states(web_client, tmp_path, monkey
     assert job["state"] == "cancelled"
     assert web_client.post(f"/api/v1/import-jobs/{job_id}/cancel").status_code == 409
     assert web_client.post("/api/v1/import-jobs/unknown/cancel").status_code == 404
+
+
+def test_pause_and_resume_import_api(web_client, tmp_path, monkeypatch):
+    source = tmp_path / "photos"
+    source.mkdir()
+    scan_started = Event()
+    release_scan = Event()
+
+    def blocking_scan(self, directory, recursive=True):
+        scan_started.set()
+        release_scan.wait(timeout=2)
+        yield from ()
+
+    monkeypatch.setattr(DirectoryScanner, "scan", blocking_scan)
+    gallery_id = web_client.post("/api/v1/galleries", json={"name": "Events"}).json()["id"]
+    job_id = web_client.post(
+        f"/api/v1/galleries/{gallery_id}/imports",
+        json={"path": str(source), "recursive": True},
+    ).json()["job_id"]
+    assert scan_started.wait(timeout=2)
+
+    paused = web_client.post(f"/api/v1/import-jobs/{job_id}/pause")
+    assert paused.status_code == 202
+    assert web_client.get(f"/api/v1/import-jobs/{job_id}").json()["state"] == "paused"
+    assert web_client.post(f"/api/v1/import-jobs/{job_id}/pause").status_code == 409
+
+    release_scan.set()
+    resumed = web_client.post(f"/api/v1/import-jobs/{job_id}/resume")
+    assert resumed.status_code == 202
+    assert web_client.post(f"/api/v1/import-jobs/{job_id}/resume").status_code == 409
+    assert web_client.post("/api/v1/import-jobs/unknown/pause").status_code == 404
+    assert web_client.post("/api/v1/import-jobs/unknown/resume").status_code == 404
 
 
 def test_desktop_token_middleware_blocked(tmp_path):

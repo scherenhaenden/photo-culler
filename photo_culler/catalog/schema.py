@@ -45,6 +45,8 @@ class ImportJobDB(Base):
     imported = Column(Integer, default=0, nullable=False)
     issues = Column(Integer, default=0, nullable=False)
     cancel_requested = Column(Boolean, default=False, nullable=False)
+    pause_requested = Column(Boolean, default=False, nullable=False)
+    resume_state = Column(String(32), nullable=True)
     error = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)

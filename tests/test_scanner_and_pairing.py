@@ -13,7 +13,10 @@ from photo_culler.scanner.file_filter import FileFilter
 def test_file_filter():
     filter_inst = FileFilter()
     assert filter_inst.classify_role(Path("test.NEF")) == FileRole.RAW
+    assert filter_inst.classify_role(Path("test.NRW")) == FileRole.RAW
     assert filter_inst.classify_role(Path("test.JPG")) == FileRole.JPEG
+    assert filter_inst.classify_role(Path("test.PNG")) == FileRole.IMAGE
+    assert filter_inst.classify_role(Path("test.HEIC")) == FileRole.IMAGE
     assert filter_inst.classify_role(Path("test.xmp")) == FileRole.SIDECAR
     assert filter_inst.classify_role(Path("test.txt")) is None
 
@@ -43,3 +46,15 @@ def test_scanner_and_pairing(tmp_path):
     assert photo.stem_name == "DSC_100"
     assert len(photo.files) == 3
     assert photo.primary_file.role == FileRole.RAW
+
+
+def test_scanner_does_not_follow_file_symlinks_outside_source(tmp_path):
+    source = tmp_path / "source"
+    outside = tmp_path / "outside"
+    source.mkdir()
+    outside.mkdir()
+    external_photo = outside / "external.jpg"
+    external_photo.write_bytes(b"external")
+    (source / "linked.jpg").symlink_to(external_photo)
+
+    assert list(DirectoryScanner().scan(source)) == []

@@ -37,6 +37,7 @@ def test_library_filters_pagination_navigation_and_decision_round_trip(tmp_path)
     assert "A_best" in first_page.text
     assert "B_review" in first_page.text
     assert "C_reject" not in first_page.text
+    assert "Importar galería" in first_page.text
     assert "Página <strong>1</strong> de <strong>2</strong>" in first_page.text
 
     rejected = client.get("/library?decision=reject")

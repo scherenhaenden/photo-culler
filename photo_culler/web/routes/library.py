@@ -19,9 +19,16 @@ def get_library(
     decision: Optional[str] = None,
     quality_tier: Optional[str] = None,
     session_id: Optional[str] = None,
+    gallery_id: Optional[str] = None,
 ):
     db_engine = request.app.state.db_engine
     templates = request.app.state.templates
+    galleries = request.app.state.gallery_imports.list_galleries()
+    gallery_by_id = {str(gallery["id"]): gallery for gallery in galleries}
+    active_gallery_id = gallery_id if gallery_id in gallery_by_id else None
+    if active_gallery_id is None and galleries:
+        active_gallery_id = str(galleries[0]["id"])
+    active_gallery = gallery_by_id.get(active_gallery_id) if active_gallery_id else None
 
     # Make sure we don't have negative pages/limits
     if page < 1:
@@ -38,13 +45,15 @@ def get_library(
         filters["quality_tier"] = quality_tier
     if session_id:
         filters["session_id"] = session_id
+    if active_gallery_id:
+        filters["gallery_id"] = active_gallery_id
 
     with db_engine.session() as session:
         repo = PhotoRepository(session)
         photos = repo.list_page(offset=offset, limit=limit, sort=sort, filters=filters)
         total_photos = repo.count_filtered(filters)
 
-    galleries = request.app.state.gallery_imports.list_galleries()
+    import_jobs = request.app.state.gallery_imports.list_jobs()
 
     total_pages = (total_photos + limit - 1) // limit if total_photos > 0 else 1
 
@@ -63,5 +72,8 @@ def get_library(
             "quality_tier": quality_tier,
             "session_id": session_id,
             "galleries": galleries,
+            "active_gallery": active_gallery,
+            "active_gallery_id": active_gallery_id,
+            "import_jobs": import_jobs,
         },
     )

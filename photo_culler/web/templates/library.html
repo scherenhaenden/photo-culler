@@ -4,25 +4,49 @@
 
 {% block content %}
 <div class="header-bar">
-  <h1>Biblioteca de Fotografías</h1>
+  <div>
+    <h1>Biblioteca de Fotografías</h1>
+    {% if active_gallery %}
+    <span style="color:var(--text-secondary);">Galería activa: <strong>{{ active_gallery.name }}</strong></span>
+    {% endif %}
+  </div>
   <div style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; background: rgba(255, 255, 255, 0.05); padding: 4px 12px; border-radius: 9999px;">
     Mostrando <span style="color: #ffffff;">{{ photos|length }}</span> de {{ total_photos }} fotos
   </div>
 </div>
 
-{% if total_photos == 0 %}
 <section class="dashboard-panel" style="text-align:center; padding:4rem 2rem; margin-bottom:1.5rem;">
   <div style="font-size:3rem;" aria-hidden="true">▦</div>
-  <h2>{% if galleries %}Esta galería todavía está vacía{% else %}Crea tu primera galería fotográfica{% endif %}</h2>
+  <h2>
+    {% if not galleries %}Crea tu primera galería fotográfica
+    {% elif total_photos == 0 %}Esta galería todavía está vacía
+    {% else %}Añadir otra carpeta a una galería
+    {% endif %}
+  </h2>
   <p style="color:var(--text-secondary); max-width:42rem; margin:0 auto 1.5rem;">
     Una galería es una colección lógica: los originales permanecen en sus carpetas y Photo Culler nunca los modifica.
   </p>
   <form id="gallery-import-form" style="display:grid; gap:.75rem; max-width:34rem; margin:auto; text-align:left;">
+    {% if galleries %}
+    <label>Galería
+      <select name="gallery_id" required>
+        {% for gallery in galleries %}
+        <option value="{{ gallery.id }}" {% if gallery.id == active_gallery_id %}selected{% endif %}>{{ gallery.name }} ({{ gallery.photo_count }} fotos)</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% else %}
     <label>Nombre de galería <input name="name" required maxlength="255" value="Mi galería"></label>
+    {% endif %}
     <label>Carpeta local <input name="path" required placeholder="/ruta/a/mis/fotos"></label>
     <label><input name="recursive" type="checkbox" checked> Incluir subdirectorios</label>
-    <button class="btn" type="submit">Importar galería</button>
+    <button class="btn" id="submit-gallery-import" type="submit">Importar galería</button>
     <output id="gallery-import-status" aria-live="polite"></output>
+    <div id="gallery-import-controls" hidden style="display:flex; gap:.5rem;">
+      <button class="btn btn-secondary" id="pause-import" type="button">Pausar</button>
+      <button class="btn btn-secondary" id="resume-import" type="button" hidden>Reanudar</button>
+      <button class="btn btn-secondary" id="cancel-import" type="button">Cancelar</button>
+    </div>
   </form>
 </section>
 <script>
@@ -30,15 +54,99 @@ document.getElementById('gallery-import-form').addEventListener('submit', async 
   event.preventDefault();
   const form = new FormData(event.currentTarget);
   const output = document.getElementById('gallery-import-status');
+  const submitButton = document.getElementById('submit-gallery-import');
+  if (event.currentTarget.dataset.confirmed !== 'true') {
+    output.textContent = 'Analizando carpeta…';
+    const estimateResponse = await fetch('/api/v1/import-estimates', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:form.get('path'), recursive:form.has('recursive')})});
+    if (!estimateResponse.ok) { output.textContent = 'La carpeta no es válida o no está disponible.'; return; }
+    const estimate = await estimateResponse.json();
+    const types = Object.entries(estimate.extensions).map(([extension, count]) => `${extension}: ${count}`).join(', ');
+    const size = new Intl.NumberFormat(undefined, {style:'unit', unit:'megabyte', maximumFractionDigits:1}).format(estimate.total_bytes / 1048576);
+    output.textContent = `${estimate.logical_photos} fotos, ${estimate.total_files} archivos, ${size}; ${types || 'sin formatos compatibles'}. Revisa la estimación y confirma.`;
+    event.currentTarget.dataset.confirmed = 'true';
+    submitButton.textContent = 'Confirmar importación';
+    return;
+  }
   output.textContent = 'Preparando importación…';
-  const gallery = await fetch('/api/v1/galleries', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:form.get('name')})});
-  if (!gallery.ok) { output.textContent = 'No se pudo crear la galería.'; return; }
-  const created = await gallery.json();
-  const queued = await fetch(`/api/v1/galleries/${created.id}/imports`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:form.get('path'), recursive:form.has('recursive')})});
+  let galleryId = form.get('gallery_id');
+  if (!galleryId) {
+    const gallery = await fetch('/api/v1/galleries', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:form.get('name')})});
+    if (!gallery.ok) { output.textContent = 'No se pudo crear la galería.'; return; }
+    galleryId = (await gallery.json()).id;
+  }
+  const queued = await fetch(`/api/v1/galleries/${galleryId}/imports`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:form.get('path'), recursive:form.has('recursive')})});
   if (!queued.ok) { output.textContent = 'La carpeta no es válida o no está disponible.'; return; }
   const job = await queued.json();
-  output.textContent = `Importación ${job.state}. Las fotos aparecerán progresivamente.`;
-  setTimeout(() => location.reload(), 750);
+  const controls = document.getElementById('gallery-import-controls');
+  const pauseButton = document.getElementById('pause-import');
+  const resumeButton = document.getElementById('resume-import');
+  const cancelButton = document.getElementById('cancel-import');
+  controls.hidden = false;
+
+  const control = async (action) => {
+    const response = await fetch(`/api/v1/import-jobs/${job.job_id}/${action}`, {method:'POST'});
+    if (!response.ok) output.textContent = `No se pudo ${action === 'pause' ? 'pausar' : action === 'resume' ? 'reanudar' : 'cancelar'} la importación.`;
+  };
+  pauseButton.addEventListener('click', () => control('pause'));
+  resumeButton.addEventListener('click', () => control('resume'));
+  cancelButton.addEventListener('click', () => control('cancel'));
+
+  const poll = async () => {
+    const response = await fetch(`/api/v1/import-jobs/${job.job_id}`);
+    if (!response.ok) return;
+    const progress = await response.json();
+    output.textContent = `Estado: ${progress.state}. Descubiertas: ${progress.discovered}. Importadas: ${progress.imported}.`;
+    const paused = progress.state === 'paused';
+    pauseButton.hidden = paused;
+    resumeButton.hidden = !paused;
+    if (['completed', 'failed', 'cancelled'].includes(progress.state)) {
+      controls.hidden = true;
+      if (progress.state === 'completed') setTimeout(() => location.reload(), 500);
+      return;
+    }
+    setTimeout(poll, 250);
+  };
+  poll();
+});
+document.querySelector('#gallery-import-form input[name="path"]').addEventListener('input', (event) => {
+  const form = event.currentTarget.form;
+  form.dataset.confirmed = 'false';
+  document.getElementById('submit-gallery-import').textContent = 'Importar galería';
+});
+</script>
+
+{% if import_jobs %}
+<section class="dashboard-panel" style="margin-bottom:1.5rem;">
+  <h2>Importaciones recientes</h2>
+  <div style="display:grid; gap:.75rem;">
+    {% for job in import_jobs %}
+    <article data-import-job="{{ job.id }}" style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+      <span>
+        <strong>{{ job.state }}</strong>
+        · {{ job.discovered }} descubiertas
+        · {{ job.imported }} importadas
+      </span>
+      {% if job.state not in ['completed', 'failed', 'cancelled'] %}
+      <span style="display:flex; gap:.5rem;">
+        {% if job.state == 'paused' %}
+        <button class="btn btn-secondary import-job-action" data-action="resume" type="button">Reanudar</button>
+        {% else %}
+        <button class="btn btn-secondary import-job-action" data-action="pause" type="button">Pausar</button>
+        {% endif %}
+        <button class="btn btn-secondary import-job-action" data-action="cancel" type="button">Cancelar</button>
+      </span>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </div>
+</section>
+<script>
+document.querySelectorAll('.import-job-action').forEach((button) => {
+  button.addEventListener('click', async () => {
+    const jobId = button.closest('[data-import-job]').dataset.importJob;
+    const response = await fetch(`/api/v1/import-jobs/${jobId}/${button.dataset.action}`, {method:'POST'});
+    if (response.ok) location.reload();
+  });
 });
 </script>
 {% endif %}
@@ -46,6 +154,16 @@ document.getElementById('gallery-import-form').addEventListener('submit', async 
 <!-- Filters and Sorting Bar -->
 <div style="background: var(--bg-card); padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 1.5rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
   <form method="get" action="/library" style="display: flex; gap: 1.5rem; align-items: center; width: 100%; flex-wrap: wrap;">
+    {% if galleries %}
+    <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+      <label style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600;">Galería activa</label>
+      <select name="gallery_id" onchange="this.form.submit()">
+        {% for gallery in galleries %}
+        <option value="{{ gallery.id }}" {% if gallery.id == active_gallery_id %}selected{% endif %}>{{ gallery.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
     <div style="display: flex; flex-direction: column; gap: 0.25rem;">
       <label style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600;">Estado de Decisión</label>
       <select name="decision" style="background: var(--bg-main); color: var(--text-primary); border: 1px solid var(--border-color); padding: 0.4rem; border-radius: 4px; font-family: inherit;" onchange="this.form.submit()">
@@ -95,7 +213,7 @@ document.getElementById('gallery-import-form').addEventListener('submit', async 
 {% if total_pages > 1 %}
 <div style="display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 2.5rem; padding-top: 1.5rem; border-top: 1px solid var(--border-color);">
   {% if page > 1 %}
-    <a href="/library?page={{ page - 1 }}&sort={{ sort or '' }}&decision={{ decision or '' }}&quality_tier={{ quality_tier or '' }}" class="btn btn-secondary" style="text-decoration: none; display: inline-block;">Anterior</a>
+    <a href="/library?page={{ page - 1 }}&gallery_id={{ active_gallery_id or '' }}&sort={{ sort or '' }}&decision={{ decision or '' }}&quality_tier={{ quality_tier or '' }}" class="btn btn-secondary" style="text-decoration: none; display: inline-block;">Anterior</a>
   {% else %}
     <span class="btn btn-secondary" style="opacity: 0.5; cursor: not-allowed;">Anterior</span>
   {% endif %}
@@ -105,7 +223,7 @@ document.getElementById('gallery-import-form').addEventListener('submit', async 
   </span>
 
   {% if page < total_pages %}
-    <a href="/library?page={{ page + 1 }}&sort={{ sort or '' }}&decision={{ decision or '' }}&quality_tier={{ quality_tier or '' }}" class="btn btn-secondary" style="text-decoration: none; display: inline-block;">Siguiente</a>
+    <a href="/library?page={{ page + 1 }}&gallery_id={{ active_gallery_id or '' }}&sort={{ sort or '' }}&decision={{ decision or '' }}&quality_tier={{ quality_tier or '' }}" class="btn btn-secondary" style="text-decoration: none; display: inline-block;">Siguiente</a>
   {% else %}
     <span class="btn btn-secondary" style="opacity: 0.5; cursor: not-allowed;">Siguiente</span>
   {% endif %}
