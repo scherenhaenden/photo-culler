@@ -4,6 +4,7 @@ import os
 
 import pytest
 
+from photo_culler.desktop import linux_launcher
 from photo_culler.desktop.linux_launcher import chrome_command, find_chrome
 
 
@@ -34,3 +35,42 @@ def test_chrome_command_is_an_isolated_app_window(tmp_path):
     assert f"--user-data-dir={tmp_path}" in command
     assert "--disable-sync" in command
     assert command[-1] == "--disable-gpu"
+
+
+def test_main_reports_a_server_thread_that_does_not_stop(monkeypatch):
+    class StuckThread:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            pass
+
+        def join(self, timeout):
+            assert timeout == 5
+
+        def is_alive(self):
+            return True
+
+    class FakeServer:
+        should_exit = False
+
+        def __init__(self, config):
+            pass
+
+        def run(self):
+            pass
+
+    monkeypatch.setattr(linux_launcher, "find_chrome", lambda: "/usr/bin/chromium")
+    monkeypatch.setattr(linux_launcher, "find_free_port", lambda: 9876)
+    monkeypatch.setattr(linux_launcher, "create_app", lambda **kwargs: object())
+    monkeypatch.setattr(linux_launcher, "wait_until_ready", lambda *args: None)
+    monkeypatch.setattr(linux_launcher.threading, "Thread", StuckThread)
+    monkeypatch.setattr(linux_launcher.uvicorn, "Server", FakeServer)
+    monkeypatch.setattr(
+        linux_launcher.subprocess,
+        "run",
+        lambda *args, **kwargs: type("Completed", (), {"returncode": 0})(),
+    )
+
+    with pytest.raises(RuntimeError, match="did not stop cleanly"):
+        linux_launcher.main()

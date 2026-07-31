@@ -40,6 +40,15 @@ def test_dashboard_page(web_client):
     assert 'id="language-picker"' in response.text
 
 
+def test_language_query_localizes_html_and_persists_cookie(web_client):
+    response = web_client.get("/?lang=de")
+
+    assert response.status_code == 200
+    assert '<html lang="de">' in response.text
+    assert "Bibliothek" in response.text
+    assert "photo_culler_locale=de" in response.headers["set-cookie"]
+
+
 def test_i18n_middleware_does_not_buffer_streaming_html(web_client):
     async def stream():
         yield b'<html lang="es"><body>Biblioteca</body></html>'

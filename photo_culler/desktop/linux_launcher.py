@@ -72,7 +72,8 @@ def main() -> None:
         server.should_exit = True
         server_thread.join(timeout=5)
         if server_thread.is_alive():
-            logging.warning("Photo Culler local server thread did not stop cleanly after shutdown signal")
+            logging.error("Photo Culler local server thread did not stop cleanly after shutdown signal")
+            raise RuntimeError("Photo Culler local server did not stop cleanly")
 
 
 if __name__ == "__main__":
