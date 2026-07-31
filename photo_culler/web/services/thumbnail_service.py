@@ -37,4 +37,11 @@ class ThumbnailService:
                 photo_id=f"{photo_id}-{representation}", image_path=img_path
             )
             thumbnail = thumbnails.get(preset)
+            if thumbnail is None and representation == "raw":
+                jpeg_file = photo.display_file("jpeg")
+                if jpeg_file and jpeg_file.path != img_path and jpeg_file.path.exists():
+                    thumbnails = self.generator.generate_thumbnails(
+                        photo_id=f"{photo_id}-jpeg", image_path=jpeg_file.path
+                    )
+                    thumbnail = thumbnails.get(preset)
             return thumbnail if isinstance(thumbnail, Path) else None
