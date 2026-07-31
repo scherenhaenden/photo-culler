@@ -86,6 +86,7 @@
     <span id="stat-analyzers">0 analizadores</span>
     <span id="stat-executed">0 cálculos nuevos</span>
     <span id="stat-cached">0 desde caché</span>
+    <label>Hilos <input id="worker-count" type="number" min="1" max="16" value="1" onchange="setWorkers(this.value)" style="width:3.5rem;"></label>
   </div>
   <div style="display:flex;gap:.5rem;margin-top:1rem;">
     <button class="btn btn-secondary" id="btn-pause" type="button" onclick="controlAnalysis('pause')">Pausar</button>
@@ -264,6 +265,9 @@
     document.getElementById("stat-analyzers").textContent = `${(data.analyzers || []).length} analizadores`;
     document.getElementById("stat-executed").textContent = `${data.executed_metrics || 0} cálculos nuevos`;
     document.getElementById("stat-cached").textContent = `${data.cached_metrics || 0} desde caché`;
+    const workerInput = document.getElementById("worker-count");
+    workerInput.value = data.workers || 1;
+    workerInput.max = data.max_workers || 16;
     msg.style.color = "var(--text-secondary)";
 
     if (["running","paused","completed","failed","cancelled"].includes(data.status)) {
@@ -304,6 +308,14 @@
       return;
     }
     checkStatus();
+  }
+
+  async function setWorkers(value) {
+    const formData = new FormData();
+    formData.append("workers", value);
+    const result = await api("/analysis/workers", {method:"POST", body:formData});
+    document.getElementById("worker-count").value = result.workers;
+    document.getElementById("worker-count").max = result.max_workers;
   }
 
   async function groupSimilarPhotos() {

@@ -34,14 +34,14 @@ class ThumbnailService:
                 return None
 
             thumbnails = self.generator.generate_thumbnails(
-                photo_id=f"{photo_id}-{representation}", image_path=img_path
+                photo_id=f"{photo_id}-{representation}-{display_file.modified_time:.6f}", image_path=img_path
             )
             thumbnail = thumbnails.get(preset)
-            if thumbnail is None and representation == "raw":
+            if (thumbnail is None or not self.generator.has_visible_content(thumbnail)) and display_file.role.value == "raw":
                 jpeg_file = photo.display_file("jpeg")
                 if jpeg_file and jpeg_file.path != img_path and jpeg_file.path.exists():
                     thumbnails = self.generator.generate_thumbnails(
-                        photo_id=f"{photo_id}-jpeg", image_path=jpeg_file.path
+                        photo_id=f"{photo_id}-jpeg-{jpeg_file.modified_time:.6f}", image_path=jpeg_file.path
                     )
                     thumbnail = thumbnails.get(preset)
             return thumbnail if isinstance(thumbnail, Path) else None

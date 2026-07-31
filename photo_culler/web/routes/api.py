@@ -226,10 +226,12 @@ def get_system_usage(request: Request) -> dict[str, object]:
         proc = psutil.Process(os.getpid())
         cpu_app_raw = proc.cpu_percent(interval=None)
         cpu_count = psutil.cpu_count() or 1
-        cpu_app = cpu_app_raw / cpu_count
+        cpu_app = cpu_app_raw
+        cpu_app_capacity = cpu_app_raw / cpu_count
     except Exception:
         cpu_sys = 5.0
         cpu_app = 1.0
+        cpu_app_capacity = 1.0
 
     gpu_sys = 0.0
     gpu_name = "N/A"
@@ -255,6 +257,8 @@ def get_system_usage(request: Request) -> dict[str, object]:
         "contract_version": 1,
         "cpu_system": round(cpu_sys, 1),
         "cpu_app": round(cpu_app, 1),
+        "cpu_app_capacity": round(cpu_app_capacity, 1),
+        "cpu_core_count": cpu_count,
         "gpu_system": round(gpu_sys, 1),
         "gpu_name": gpu_name,
     }

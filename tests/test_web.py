@@ -2,6 +2,7 @@
 
 import time
 from datetime import datetime, timedelta
+from io import BytesIO
 from threading import Event
 from types import SimpleNamespace
 
@@ -97,6 +98,29 @@ def test_raw_jpeg_tandem_uses_jpeg_for_the_default_preview(web_client, tmp_path)
     assert preview.status_code == 200
     assert preview.headers["content-type"] == "image/jpeg"
     assert raw.read_bytes() == b"raw source is never modified"
+
+
+def test_black_raw_preview_falls_back_to_its_jpeg_tandem(web_client, tmp_path):
+    raw = tmp_path / "dark.nef"
+    Image.new("RGB", (32, 32), color=(0, 0, 0)).save(raw, format="JPEG")
+    jpeg = tmp_path / "dark.jpg"
+    Image.new("RGB", (32, 32), color=(80, 130, 180)).save(jpeg)
+    with web_client.app.state.db_engine.session() as session:
+        PhotoRepository(session).save_photo(
+            Photo(
+                "dark-tandem",
+                "dark",
+                files=[
+                    FileRecord(raw, FileRole.RAW, raw.stat().st_size, raw.stat().st_mtime),
+                    FileRecord(jpeg, FileRole.JPEG, jpeg.stat().st_size, jpeg.stat().st_mtime),
+                ],
+            )
+        )
+
+    preview = web_client.get("/thumbnails/dark-tandem/800?representation=raw")
+
+    assert preview.status_code == 200
+    assert Image.open(BytesIO(preview.content)).convert("RGB").getpixel((0, 0))[2] > 100
 
 
 def test_gallery_import_api_and_empty_state(web_client, tmp_path):
@@ -460,6 +484,14 @@ def test_analysis_rejects_unknown_profile(web_client):
     assert response.status_code == 422
 
 
+def test_analysis_workers_can_be_changed_without_restarting(web_client):
+    response = web_client.post("/analysis/workers", data={"workers": "1"})
+
+    assert response.status_code == 200
+    assert response.json()["workers"] == 1
+    assert response.json()["max_workers"] >= 1
+
+
 def test_analysis_profiles_can_be_inspected_created_updated_and_deleted(web_client):
     profiles = web_client.get("/analysis/profiles")
     assert profiles.status_code == 200
@@ -659,6 +691,8 @@ def test_system_usage_api(web_client):
     assert data["contract_version"] == 1
     assert "cpu_system" in data
     assert "cpu_app" in data
+    assert "cpu_app_capacity" in data
+    assert "cpu_core_count" in data
     assert "gpu_system" in data
     assert "gpu_name" in data
     assert isinstance(data["cpu_system"], (int, float))

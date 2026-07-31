@@ -151,7 +151,6 @@
   <script src="/static/js/htmx.min.js"></script>
   <script src="/static/js/keyboard.js"></script>
   <script src="/static/js/i18n.js"></script>
-  <script src="/static/js/i18n.js"></script>
   <script>
     // View Dropdown Toggle
     function toggleViewDropdown(event) {
@@ -189,7 +188,7 @@
     // Initialize Status Bar visibility from LocalStorage
     document.addEventListener('DOMContentLoaded', function() {
       const showStatusBar = localStorage.getItem('showStatusBar');
-      if (showStatusBar === 'true') {
+      if (showStatusBar !== 'false') {
         toggleStatusBar(true);
       } else {
         toggleStatusBar(false);
@@ -218,8 +217,9 @@
 
             // Update CPU App
             const cpuApp = data.cpu_app;
-            document.getElementById('cpu-app-val').textContent = cpuApp.toFixed(1) + '%';
-            document.getElementById('cpu-app-bar').style.width = Math.min(100, Math.max(0, cpuApp)) + '%';
+            const cpuCapacity = data.cpu_app_capacity;
+            document.getElementById('cpu-app-val').textContent = cpuApp.toFixed(1) + '% (' + (cpuApp / 100).toFixed(1) + ' cores)';
+            document.getElementById('cpu-app-bar').style.width = Math.min(100, Math.max(0, cpuCapacity)) + '%';
 
             // Update GPU
             const gpuSys = data.gpu_system;
