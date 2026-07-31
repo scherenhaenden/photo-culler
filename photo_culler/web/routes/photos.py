@@ -6,6 +6,7 @@ from sqlalchemy import and_, or_
 
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
 from photo_culler.catalog.schema import PhotoDB
+from photo_culler.core.enums import FileRole
 from photo_culler.web.services.decision_service import DecisionService
 from photo_culler.web.services.thumbnail_service import ThumbnailService
 
@@ -88,6 +89,19 @@ def get_thumbnail(photo_id: str, size: str, request: Request, representation: st
     return FileResponse(
         thumb_path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=31536000, immutable"}
     )
+
+
+@router.get("/previews/{photo_id}")
+def get_full_preview(photo_id: str, request: Request):
+    """Serve the original JPEG/image for focused comparison without thumbnailing it."""
+    with request.app.state.db_engine.session() as session:
+        photo = PhotoRepository(session).get_by_id(photo_id)
+        display_file = photo.display_file("jpeg") if photo else None
+    if not display_file or not display_file.path.exists():
+        raise HTTPException(status_code=404, detail="Preview not found")
+    if display_file.role not in {FileRole.JPEG, FileRole.IMAGE}:
+        raise HTTPException(status_code=404, detail="A browser-viewable original is not available")
+    return FileResponse(display_file.path, headers={"Cache-Control": "private, max-age=3600"})
 
 
 @router.post("/photos/{photo_id}/decision", response_class=HTMLResponse)

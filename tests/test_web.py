@@ -608,7 +608,8 @@ def test_group_similar_endpoint_persists_detected_groups(web_client, tmp_path):
     assert comparison.status_code == 200
     assert "similar-one" in comparison.text
     assert "similar-two" in comparison.text
-    assert "/1600?representation=jpeg" in comparison.text
+    assert "/previews/similar-one" in comparison.text
+    assert web_client.get("/previews/similar-one").status_code == 200
 
 
 def test_profiles_run_distinct_analyzer_sets_and_report_cache_usage(web_client, tmp_path):

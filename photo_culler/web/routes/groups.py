@@ -73,6 +73,5 @@ def compare_similarity_group(request: Request, group_id: str, page: int = Query(
             "recommended_photo_id": photos[0].photo_id,
             "page": page,
             "total_pages": total_pages,
-            "thumbnail_size": "1600",
         },
     )

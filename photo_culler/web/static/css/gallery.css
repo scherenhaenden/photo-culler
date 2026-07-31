@@ -15,6 +15,11 @@
 
 .group-compare-grid .thumbnail-wrapper { height:min(48vw, 430px); }
 
+.group-compare-photo { position:relative; display:block; color:inherit; text-decoration:none; background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-lg); overflow:hidden; }
+.group-compare-photo img { display:block; width:100%; height:auto; max-height:70vh; object-fit:contain; background:#050505; }
+.group-compare-meta { display:flex; justify-content:space-between; gap:.75rem; padding:.75rem .9rem; font-size:12px; }
+.group-compare-meta span { color:var(--text-secondary); font-size:10px; }
+
 .photo-card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
