@@ -11,7 +11,7 @@ from PIL import Image
 from starlette.responses import StreamingResponse
 
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
-from photo_culler.catalog.schema import SessionDB
+from photo_culler.catalog.schema import FileDB, SessionDB
 from photo_culler.core.enums import FileRole
 from photo_culler.core.models import FileRecord, MetadataRecord, Photo
 from photo_culler.scanner.directory_scanner import DirectoryScanner
@@ -577,8 +577,8 @@ def test_profiles_run_distinct_analyzer_sets_and_report_cache_usage(web_client, 
     with web_client.app.state.db_engine.session() as session:
         PhotoRepository(session).save_photo(photo)
 
-    def run(profile_id):
-        assert web_client.post("/analysis/start", data={"profile": profile_id}).json()["status"] == "ok"
+    def run(profile_id, scope="all"):
+        assert web_client.post("/analysis/start", data={"profile": profile_id, "scope": scope}).json()["status"] == "ok"
         deadline = time.monotonic() + 8
         while web_client.app.state.analysis_jobs.is_running and time.monotonic() < deadline:
             time.sleep(0.02)
@@ -587,11 +587,20 @@ def test_profiles_run_distinct_analyzer_sets_and_report_cache_usage(web_client, 
         return result
 
     fast = run("fast")
+    fast_remaining = run("fast", "remaining")
+    with web_client.app.state.db_engine.session() as session:
+        session.query(FileDB).filter(FileDB.relative_path == str(image_path)).update(
+            {FileDB.modified_time: time.time() + 1}
+        )
+    changed_fast = run("fast", "remaining")
     technical = run("technical")
     technical_again = run("technical")
     concert = run("concert")
 
     assert (fast["executed_metrics"], fast["cached_metrics"]) == (4, 0)
+    assert fast_remaining["total"] == 0
+    assert "No quedan fotos pendientes" in str(fast_remaining["message"])
+    assert (changed_fast["total"], changed_fast["executed_metrics"], changed_fast["cached_metrics"]) == (1, 0, 4)
     assert (technical["executed_metrics"], technical["cached_metrics"]) == (8, 0)
     assert (technical_again["executed_metrics"], technical_again["cached_metrics"]) == (0, 8)
     assert (concert["executed_metrics"], concert["cached_metrics"]) == (8, 0)

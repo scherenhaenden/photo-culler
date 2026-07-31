@@ -27,6 +27,7 @@ class AnalysisJobManager:
         self.total = 0
         self.profile = "fast"
         self.profile_name = "Fast Scan"
+        self.scope = "all"
         self.analyzers: list[str] = []
         self.executed_metrics = 0
         self.cached_metrics = 0
@@ -39,7 +40,9 @@ class AnalysisJobManager:
         self._pause_requested = False
         self._cancel_requested = False
 
-    def start_analysis(self, db_engine, profile: dict | str = "fast", import_service=None) -> bool:
+    def start_analysis(
+        self, db_engine, profile: dict | str = "fast", import_service=None, remaining_only: bool = False
+    ) -> bool:
         """Start analysis unless this application already owns an active job."""
         with self._control:
             if self.is_running:
@@ -54,6 +57,7 @@ class AnalysisJobManager:
             )
             self.profile = profile_config["id"]
             self.profile_name = profile_config["name"]
+            self.scope = "remaining" if remaining_only else "all"
             self.analyzers = list(profile_config["analyzers"])
             self.executed_metrics = 0
             self.cached_metrics = 0
@@ -62,7 +66,7 @@ class AnalysisJobManager:
             self._cancel_requested = False
             self._thread = threading.Thread(
                 target=self._run_analysis,
-                args=(db_engine, profile_config, import_service),
+                args=(db_engine, profile_config, import_service, remaining_only),
                 daemon=True,
             )
             self._thread.start()
@@ -122,6 +126,7 @@ class AnalysisJobManager:
                 "total": self.total,
                 "profile": self.profile,
                 "profile_name": self.profile_name,
+                "scope": self.scope,
                 "analyzers": list(self.analyzers),
                 "executed_metrics": self.executed_metrics,
                 "cached_metrics": self.cached_metrics,
@@ -141,7 +146,7 @@ class AnalysisJobManager:
             if listener in self._listeners:
                 self._listeners.remove(listener)
 
-    def _run_analysis(self, db_engine, profile: dict, import_service=None) -> None:
+    def _run_analysis(self, db_engine, profile: dict, import_service=None, remaining_only: bool = False) -> None:
         try:
             from photo_culler.analysis.engine.cache import MetricCache
             from photo_culler.analysis.engine.pipeline import AnalysisPipeline
@@ -166,14 +171,25 @@ class AnalysisJobManager:
                 self._notify_listeners()
                 time.sleep(0.05)
 
+            cache_namespace = AnalysisProfileStore.fingerprint(profile)
             with db_engine.session() as session:
-                photos = PhotoRepository(session).list_all()
+                repository = PhotoRepository(session)
+                photos = (
+                    repository.list_needing_analysis(profile["id"], cache_namespace)
+                    if remaining_only
+                    else repository.list_all()
+                )
 
             with self._lock:
                 self.total = len(photos)
 
             if not photos:
-                self._finish("completed", "No hay fotos en el catálogo para analizar.")
+                message = (
+                    "No quedan fotos pendientes para este perfil."
+                    if remaining_only
+                    else "No hay fotos en el catálogo para analizar."
+                )
+                self._finish("completed", message)
                 return
 
             cache = MetricCache(db_path=str(db_engine.db_path) + ".metrics.db")
@@ -193,8 +209,6 @@ class AnalysisJobManager:
                 weight_clipping=weights["clipping"],
                 weight_noise=weights["noise"],
             )
-            cache_namespace = AnalysisProfileStore.fingerprint(profile)
-
             for index, photo in enumerate(photos):
                 if not self._wait_for_control():
                     self._finish("cancelled", "Análisis cancelado.")
@@ -223,7 +237,7 @@ class AnalysisJobManager:
                     repository.save_photo(photo)
                     if image_asset and image_asset.exists():
                         repository.save_analysis_summary(
-                            photo.photo_id, build_score_explanation(profile, technical_score, results)
+                            photo.photo_id, build_score_explanation(profile, technical_score, results, cache_namespace)
                         )
 
             similarity_groups, _ = SimilarityGrouper().group(
@@ -304,18 +318,23 @@ def get_analysis_page(request: Request):
 
 
 @router.post("/analysis/start")
-def start_analysis(request: Request, profile: str = Form("fast")):
+def start_analysis(request: Request, profile: str = Form("fast"), scope: str = Form("remaining")):
     profile_config = request.app.state.analysis_profiles.get(profile)
     if profile_config is None:
         raise HTTPException(status_code=422, detail="Unknown analysis profile")
+    if scope not in {"remaining", "all"}:
+        raise HTTPException(status_code=422, detail="Unknown analysis scope")
     success = _manager(request).start_analysis(
         request.app.state.db_engine,
         profile=profile_config,
         import_service=request.app.state.gallery_imports,
+        remaining_only=scope == "remaining",
     )
     return {
         "status": "ok" if success else "error",
-        "message": "Análisis iniciado" if success else "Análisis ya en ejecución",
+        "message": "Análisis de pendientes iniciado" if success and scope == "remaining" else "Análisis iniciado"
+        if success
+        else "Análisis ya en ejecución",
     }
 
 

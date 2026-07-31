@@ -172,7 +172,8 @@
         </select>
       </div>
       <div class="editor-actions">
-        <button id="btn-start" type="button" class="btn" onclick="startAnalysis()" ${isNew ? "disabled" : ""}>▶ Ejecutar este perfil</button>
+        <button id="btn-start" type="button" class="btn" onclick="startAnalysis()" ${isNew ? "disabled" : ""}>▶ Analizar pendientes</button>
+        <button id="btn-start-all" type="button" class="btn btn-secondary" onclick="startAnalysis('all')" ${isNew ? "disabled" : ""}>Analizar todo</button>
         <button type="button" class="btn btn-secondary" onclick="saveProfile(${isNew})">${isNew ? "Crear perfil" : "Guardar ajustes"}</button>
         ${profile.builtin && !isNew ? `<button type="button" class="btn btn-secondary" onclick="restoreProfile()">Restaurar base</button>` : ""}
         ${!profile.builtin && !isNew ? `<button type="button" class="btn btn-secondary" onclick="deleteProfile()">Eliminar</button>` : ""}
@@ -276,7 +277,7 @@
     const active = ["running","paused"].includes(data.status);
     if (btn) {
       btn.disabled = active;
-      btn.textContent = active ? "Analizando…" : "▶ Ejecutar este perfil";
+      btn.textContent = active ? "Analizando…" : "▶ Analizar pendientes";
     }
     pauseBtn.hidden = data.status !== "running";
     resumeBtn.hidden = data.status !== "paused";
@@ -291,10 +292,11 @@
     eventSource.onmessage = event => updateProgress(JSON.parse(event.data));
   }
 
-  async function startAnalysis() {
+  async function startAnalysis(scope = "remaining") {
     if (!selectedId) return;
     const formData = new FormData();
     formData.append("profile", selectedId);
+    formData.append("scope", scope);
     const result = await api("/analysis/start", {method:"POST", body:formData});
     if (result.status !== "ok") {
       document.getElementById("editor-status").className = "status-note error";
