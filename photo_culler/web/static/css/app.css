@@ -16,6 +16,25 @@ body {
   overflow: hidden;
 }
 
+/* Session administration */
+.session-subtitle,.session-meta span,.session-empty span { color:var(--text-secondary);font-size:12px; }
+.session-notice { margin-bottom:1rem;padding:.75rem 1rem;border:1px solid var(--accent-teal);border-radius:var(--radius-md);color:var(--accent-teal);background:rgba(43,196,173,.08);font-size:12px; }
+.session-control-panel { margin-bottom:1.25rem; }
+.profile-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.8rem;margin:1rem 0; }
+.profile-option { display:flex;gap:.65rem;padding:1rem;border:1px solid var(--border-color);border-radius:var(--radius-lg);cursor:pointer;background:var(--bg-card); }
+.profile-option.selected { border-color:var(--accent-orange);box-shadow:0 0 0 1px var(--accent-orange); }
+.profile-option span { display:flex;flex-direction:column;gap:.4rem; }
+.profile-option small { color:var(--text-secondary);line-height:1.4; }
+.session-settings { display:flex;align-items:end;gap:1rem;flex-wrap:wrap; }
+.session-settings label { display:flex;flex-direction:column;gap:.4rem;color:var(--text-secondary);font-size:10px;text-transform:uppercase; }
+.session-settings input,.session-rename input { background:var(--bg-main);border:1px solid var(--border-color);border-radius:var(--radius-md);color:var(--text-primary);padding:.58rem .7rem; }
+.session-list { display:grid;gap:.6rem;margin-top:1rem; }
+.session-row { display:grid;grid-template-columns:minmax(220px,1fr) minmax(280px,1fr) auto;align-items:center;gap:1rem;padding:.8rem;border:1px solid var(--border-color);border-radius:var(--radius-md);background:var(--bg-card); }
+.session-meta { display:flex;flex-direction:column;gap:.25rem; }
+.session-rename { display:flex;gap:.5rem; }.session-rename input { min-width:0;flex:1; }
+.session-empty { min-height:130px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem; }
+@media (max-width:900px) { .profile-grid { grid-template-columns:1fr; }.session-row { grid-template-columns:1fr; } }
+
 /* Custom Scrollbar Styles */
 ::-webkit-scrollbar {
   width: 8px;

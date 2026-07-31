@@ -9,6 +9,7 @@ import tempfile
 import threading
 import time
 import urllib.request
+from datetime import datetime, timedelta
 
 import pytest
 import uvicorn
@@ -17,7 +18,7 @@ from websockets.sync.client import connect
 
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
 from photo_culler.core.enums import DecisionState, QualityTier
-from photo_culler.core.models import Photo
+from photo_culler.core.models import MetadataRecord, Photo
 from photo_culler.web.app import create_app
 
 
@@ -164,6 +165,9 @@ def test_operator_pages_render_in_real_chrome(tmp_path):
         detail = render_in_chrome(f"http://127.0.0.1:{port}/photos/browser-photo")
         assert "[2] Mark as Keep" in detail
         assert 'data-current-photo-id="browser-photo"' in detail
+
+        sessions = render_in_chrome(f"http://127.0.0.1:{port}/sessions")
+        assert "Híbrido recomendado" in sessions
     finally:
         server.should_exit = True
         thread.join(timeout=5)
@@ -257,6 +261,41 @@ def test_single_click_import_and_every_analysis_profile_in_real_chrome(tmp_path)
             "noise",
             "sharpness",
         }
+    finally:
+        browser.close()
+        server.should_exit = True
+        server_thread.join(timeout=5)
+
+
+@pytest.mark.e2e
+def test_hybrid_session_administration_in_real_chrome(tmp_path):
+    app = create_app(catalog_path=tmp_path / "session-browser.db")
+    captured = datetime(2026, 7, 30, 12, 0)
+    with app.state.db_engine.session() as session:
+        repository = PhotoRepository(session)
+        repository.save_photo(Photo("take-1", "Take_1", metadata=MetadataRecord(capture_time=captured)))
+        repository.save_photo(
+            Photo("take-2", "Take_2", metadata=MetadataRecord(capture_time=captured + timedelta(seconds=1)))
+        )
+    port = free_port()
+    base_url = f"http://127.0.0.1:{port}"
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+    server_thread = threading.Thread(target=server.run, daemon=True)
+    server_thread.start()
+    deadline = time.monotonic() + 5
+    while not server.started and time.monotonic() < deadline:
+        time.sleep(0.02)
+    browser = ChromeDevTools(f"{base_url}/sessions")
+    try:
+        browser.wait_for("document.querySelector('#session-group-form') !== null")
+        browser.evaluate("document.querySelector('#session-group-form').requestSubmit()")
+        browser.wait_for("document.body.innerText.includes('1 sesiones y 1 ráfagas')")
+        assert browser.evaluate("document.querySelectorAll('.session-row').length") == 1
+        browser.evaluate(
+            "document.querySelector('.session-rename input').value='Sesión Chrome';"
+            "document.querySelector('.session-rename').requestSubmit()"
+        )
+        browser.wait_for("document.body.innerText.includes('Sesión Chrome')")
     finally:
         browser.close()
         server.should_exit = True

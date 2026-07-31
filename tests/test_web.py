@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
+from photo_culler.catalog.schema import SessionDB
 from photo_culler.core.enums import FileRole
 from photo_culler.core.models import FileRecord, MetadataRecord, Photo
 from photo_culler.scanner.directory_scanner import DirectoryScanner
@@ -269,6 +270,36 @@ def test_desktop_token_middleware_blocked(tmp_path):
     )
     assert response_cookie.status_code == 200
 
+
+def test_sessions_web_workflow_combines_timeline_and_burst_engines(web_client):
+    base_time = datetime(2026, 7, 25, 18, 0, 0)
+    with web_client.app.state.db_engine.session() as session:
+        repository = PhotoRepository(session)
+        repository.save_photo(Photo("session-a", "A", metadata=MetadataRecord(capture_time=base_time)))
+        repository.save_photo(
+            Photo("session-b", "B", metadata=MetadataRecord(capture_time=base_time + timedelta(seconds=1)))
+        )
+
+    grouped = web_client.post(
+        "/sessions/group",
+        data={"profile": "hybrid", "timeline_gap_minutes": "15", "burst_gap_seconds": "1.5"},
+        follow_redirects=True,
+    )
+    assert grouped.status_code == 200
+    assert "Procesadas: 1 sesiones y 1 ráfagas" in grouped.text
+    assert "Híbrido recomendado" in grouped.text
+
+    with web_client.app.state.db_engine.session() as session:
+        session_id = session.query(SessionDB).one().session_id
+    renamed = web_client.post(
+        f"/sessions/{session_id}/rename", data={"name": "Retratos familiares"}, follow_redirects=True
+    )
+    assert renamed.status_code == 200
+    assert "Retratos familiares" in renamed.text
+
+    deleted = web_client.post(f"/sessions/{session_id}/delete", follow_redirects=True)
+    assert deleted.status_code == 200
+    assert "Aún no hay sesiones" in deleted.text
 
 def test_analysis_start_and_sse_progress(web_client):
     # Start analysis
