@@ -66,6 +66,29 @@ def test_library_pagination_and_filters(web_client):
     assert "Biblioteca de Fotografías" in response.text
 
 
+def test_raw_jpeg_tandem_uses_jpeg_for_the_default_preview(web_client, tmp_path):
+    raw = tmp_path / "frame.nef"
+    raw.write_bytes(b"raw source is never modified")
+    jpeg = tmp_path / "frame.jpg"
+    Image.new("RGB", (48, 32), color=(90, 120, 160)).save(jpeg)
+    with web_client.app.state.db_engine.session() as session:
+        PhotoRepository(session).save_photo(
+            Photo(
+                "tandem",
+                "frame",
+                files=[
+                    FileRecord(raw, FileRole.RAW, raw.stat().st_size, raw.stat().st_mtime),
+                    FileRecord(jpeg, FileRole.JPEG, jpeg.stat().st_size, jpeg.stat().st_mtime),
+                ],
+            )
+        )
+
+    preview = web_client.get("/thumbnails/tandem/800")
+    assert preview.status_code == 200
+    assert preview.headers["content-type"] == "image/jpeg"
+    assert raw.read_bytes() == b"raw source is never modified"
+
+
 def test_gallery_import_api_and_empty_state(web_client, tmp_path):
     source = tmp_path / "photos"
     source.mkdir()

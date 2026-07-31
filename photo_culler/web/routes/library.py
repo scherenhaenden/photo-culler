@@ -14,12 +14,13 @@ router = APIRouter()
 def get_library(
     request: Request,
     page: int = 1,
-    limit: int = 150,
+    limit: int = 60,
     sort: Optional[str] = None,
     decision: Optional[str] = None,
     quality_tier: Optional[str] = None,
     session_id: Optional[str] = None,
     gallery_id: Optional[str] = None,
+    representation: str = "jpeg",
 ):
     db_engine = request.app.state.db_engine
     templates = request.app.state.templates
@@ -36,8 +37,9 @@ def get_library(
     # Make sure we don't have negative pages/limits
     if page < 1:
         page = 1
-    if limit < 1:
-        limit = 150
+    limit = min(max(limit, 1), 120)
+    if representation not in {"jpeg", "raw"}:
+        representation = "jpeg"
 
     offset = (page - 1) * limit
 
@@ -84,5 +86,6 @@ def get_library(
             "gallery_sources": gallery_sources,
             "import_jobs": import_jobs,
             "scan_revisions": scan_revisions,
+            "representation": representation,
         },
     )

@@ -15,7 +15,7 @@ class ThumbnailService:
         self.db = db_engine
         self.generator = PreviewGenerator() if cache_dir is None else PreviewGenerator(cache_dir=cache_dir)
 
-    def get_thumbnail_path(self, photo_id: str, size: str = "800") -> Optional[Path]:
+    def get_thumbnail_path(self, photo_id: str, size: str = "800", representation: str = "jpeg") -> Optional[Path]:
         """Resolve or generate thumbnail image file for photo_id."""
         size_map = {"256": "small", "800": "medium", "1600": "large", "3200": "full"}
         preset = size_map.get(size, "medium")
@@ -23,13 +23,18 @@ class ThumbnailService:
         with self.db.session() as session:
             repo = PhotoRepository(session)
             photo = repo.get_by_id(photo_id)
-            if not photo or not photo.primary_file:
+            if not photo:
                 return None
 
-            img_path = photo.primary_file.path
+            display_file = photo.display_file(representation)
+            if not display_file:
+                return None
+            img_path = display_file.path
             if not img_path.exists():
                 return None
 
-            thumbnails = self.generator.generate_thumbnails(photo_id=photo_id, image_path=img_path)
+            thumbnails = self.generator.generate_thumbnails(
+                photo_id=f"{photo_id}-{representation}", image_path=img_path
+            )
             thumbnail = thumbnails.get(preset)
             return thumbnail if isinstance(thumbnail, Path) else None

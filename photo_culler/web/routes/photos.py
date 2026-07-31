@@ -71,11 +71,13 @@ def inspect_photo(photo_id: str, request: Request, group: str | None = Query(def
 
 
 @router.get("/thumbnails/{photo_id}/{size}")
-def get_thumbnail(photo_id: str, size: str, request: Request):
+def get_thumbnail(photo_id: str, size: str, request: Request, representation: str = Query(default="jpeg")):
     db_engine = request.app.state.db_engine
     thumb_service = ThumbnailService(db_engine)
 
-    thumb_path = thumb_service.get_thumbnail_path(photo_id, size=size)
+    if representation not in {"jpeg", "raw"}:
+        raise HTTPException(status_code=422, detail="Unknown preview representation")
+    thumb_path = thumb_service.get_thumbnail_path(photo_id, size=size, representation=representation)
     if not thumb_path or not thumb_path.exists():
         raise HTTPException(status_code=404, detail="Thumbnail not found")
 
