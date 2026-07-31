@@ -2,7 +2,7 @@
 
 from collections import defaultdict
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
@@ -11,10 +11,14 @@ router = APIRouter()
 
 
 @router.get("/groups", response_class=HTMLResponse)
-def get_similarity_groups_page(request: Request):
+def get_similarity_groups_page(request: Request, page: int = Query(1, ge=1)):
     """Show each detected group with its current best-scoring recommendation."""
     with request.app.state.db_engine.session() as session:
-        photos = PhotoRepository(session).list_by_burst_prefix("similar-")
+        repository = PhotoRepository(session)
+        page_size = 12
+        total_groups = repository.count_bursts("similar-")
+        group_ids = repository.list_burst_ids("similar-", offset=(page - 1) * page_size, limit=page_size)
+        photos = repository.list_by_burst_ids(group_ids)
 
     grouped = defaultdict(list)
     for photo in photos:
@@ -23,7 +27,10 @@ def get_similarity_groups_page(request: Request):
     groups = []
     for group_id, members in grouped.items():
         members.sort(key=lambda photo: (-photo.score, photo.stem_name.lower()))
-        groups.append({"id": group_id, "recommended": members[0], "photos": members})
+        preview_members = members[:12]
+        groups.append(
+            {"id": group_id, "recommended": members[0], "photos": preview_members, "photo_count": len(members)}
+        )
     groups.sort(key=lambda group: group["recommended"].stem_name.lower())
 
     return request.app.state.templates.TemplateResponse(
@@ -32,6 +39,9 @@ def get_similarity_groups_page(request: Request):
         context={
             "active_tab": "groups",
             "groups": groups,
-            "grouped_photo_count": sum(len(group["photos"]) for group in groups),
+            "grouped_photo_count": sum(group["photo_count"] for group in groups),
+            "page": page,
+            "total_pages": max(1, (total_groups + page_size - 1) // page_size),
+            "total_groups": total_groups,
         },
     )

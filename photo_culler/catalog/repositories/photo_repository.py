@@ -149,6 +149,30 @@ class PhotoRepository:
         db_photos = self.session.query(PhotoDB).filter(PhotoDB.burst_id.like(f"{prefix}%")).all()
         return [self._to_domain(photo) for photo in db_photos]
 
+    def list_burst_ids(self, prefix: str, offset: int, limit: int) -> List[str]:
+        """Return one bounded page of burst IDs without loading their photos."""
+        return [
+            row[0]
+            for row in self.session.query(PhotoDB.burst_id)
+            .filter(PhotoDB.burst_id.like(f"{prefix}%"))
+            .distinct()
+            .order_by(PhotoDB.burst_id)
+            .offset(offset)
+            .limit(limit)
+            .all()
+        ]
+
+    def count_bursts(self, prefix: str) -> int:
+        """Count logical similarity groups in SQL."""
+        return self.session.query(PhotoDB.burst_id).filter(PhotoDB.burst_id.like(f"{prefix}%")).distinct().count()
+
+    def list_by_burst_ids(self, burst_ids: List[str]) -> List[Photo]:
+        """Load photos only for the requested similarity groups."""
+        if not burst_ids:
+            return []
+        db_photos = self.session.query(PhotoDB).filter(PhotoDB.burst_id.in_(burst_ids)).all()
+        return [self._to_domain(photo) for photo in db_photos]
+
     @staticmethod
     def _needs_analysis(
         summary_json: str, newest_file_mtime: float | None, profile_id: str, profile_fingerprint: str
