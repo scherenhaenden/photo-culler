@@ -243,6 +243,9 @@ class AnalysisJobManager:
                     technical_score = scorer.calculate_score(results)
                     photo.score = technical_score["final_score"]
                     photo.quality_tier = technical_score["quality_tier"]
+                    # Persist an immediately useful provisional decision. The final
+                    # pass below refines it with similarity/burst relationships.
+                    SelectionRulesEngine().apply_decisions([photo])
                 with db_engine.session() as session:
                     repository = PhotoRepository(session)
                     repository.save_photo(photo)

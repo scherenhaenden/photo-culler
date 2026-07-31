@@ -12,7 +12,7 @@ from starlette.responses import StreamingResponse
 
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
 from photo_culler.catalog.schema import FileDB, SessionDB
-from photo_culler.core.enums import FileRole
+from photo_culler.core.enums import DecisionState, FileRole
 from photo_culler.core.models import FileRecord, MetadataRecord, Photo
 from photo_culler.scanner.directory_scanner import DirectoryScanner
 from photo_culler.web.app import create_app
@@ -587,6 +587,8 @@ def test_profiles_run_distinct_analyzer_sets_and_report_cache_usage(web_client, 
         return result
 
     fast = run("fast")
+    with web_client.app.state.db_engine.session() as session:
+        assert PhotoRepository(session).get_by_id("profile-check").decision is not DecisionState.UNPROCESSED
     fast_remaining = run("fast", "remaining")
     with web_client.app.state.db_engine.session() as session:
         session.query(FileDB).filter(FileDB.relative_path == str(image_path)).update(
