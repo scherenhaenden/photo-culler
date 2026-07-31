@@ -70,6 +70,16 @@ def test_library_page(web_client):
     assert "/api/v1/import-estimates" not in response.text
 
 
+def test_groups_and_sessions_do_not_load_the_full_catalog(web_client, monkeypatch):
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("The full catalog must not be loaded for this page")
+
+    monkeypatch.setattr(PhotoRepository, "list_all", fail_if_called)
+
+    assert web_client.get("/groups").status_code == 200
+    assert web_client.get("/sessions").status_code == 200
+
+
 def test_library_pagination_and_filters(web_client):
     # Test library route with query params
     response = web_client.get("/library?page=1&limit=5&sort=score_desc&decision=best")

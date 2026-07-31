@@ -4,8 +4,8 @@ from urllib.parse import urlencode
 
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import func
 
-from photo_culler.catalog.repositories.photo_repository import PhotoRepository
 from photo_culler.catalog.schema import PhotoDB
 from photo_culler.sessions import SessionManagementService
 
@@ -22,9 +22,9 @@ def get_sessions_page(request: Request):
     templates = request.app.state.templates
 
     with db_engine.session() as session:
-        photos = PhotoRepository(session).list_all()
         session_service = SessionManagementService(session)
         sessions = session_service.list_sessions()
+        photo_count = session.query(func.count(PhotoDB.id)).scalar() or 0
         burst_count = session.query(PhotoDB.burst_id).filter(PhotoDB.burst_id.is_not(None)).distinct().count()
         session.expunge_all()
 
@@ -33,7 +33,7 @@ def get_sessions_page(request: Request):
         name="sessions.html",
         context={
             "active_tab": "sessions",
-            "photo_count": len(photos),
+            "photo_count": photo_count,
             "sessions": sessions,
             "burst_count": burst_count,
             "message": request.query_params.get("message"),

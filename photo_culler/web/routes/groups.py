@@ -14,7 +14,7 @@ router = APIRouter()
 def get_similarity_groups_page(request: Request):
     """Show each detected group with its current best-scoring recommendation."""
     with request.app.state.db_engine.session() as session:
-        photos = PhotoRepository(session).list_all()
+        photos = PhotoRepository(session).list_by_burst_prefix("similar-")
 
     grouped = defaultdict(list)
     for photo in photos:

@@ -144,6 +144,11 @@ class PhotoRepository:
         db_photos = self.session.query(PhotoDB).filter(PhotoDB.photo_id.in_(pending_ids)).all()
         return [self._to_domain(photo) for photo in db_photos]
 
+    def list_by_burst_prefix(self, prefix: str) -> List[Photo]:
+        """Return only photos belonging to burst groups with the given prefix."""
+        db_photos = self.session.query(PhotoDB).filter(PhotoDB.burst_id.like(f"{prefix}%")).all()
+        return [self._to_domain(photo) for photo in db_photos]
+
     @staticmethod
     def _needs_analysis(
         summary_json: str, newest_file_mtime: float | None, profile_id: str, profile_fingerprint: str
