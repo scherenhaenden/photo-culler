@@ -41,7 +41,12 @@ class AnalysisJobManager:
         self._cancel_requested = False
 
     def start_analysis(
-        self, db_engine, profile: dict | str = "fast", import_service=None, remaining_only: bool = False
+        self,
+        db_engine,
+        profile: dict | str = "fast",
+        import_service=None,
+        remaining_only: bool = False,
+        legacy_cache_namespaces: list[str] | None = None,
     ) -> bool:
         """Start analysis unless this application already owns an active job."""
         with self._control:
@@ -66,7 +71,7 @@ class AnalysisJobManager:
             self._cancel_requested = False
             self._thread = threading.Thread(
                 target=self._run_analysis,
-                args=(db_engine, profile_config, import_service, remaining_only),
+                args=(db_engine, profile_config, import_service, remaining_only, legacy_cache_namespaces or []),
                 daemon=True,
             )
             self._thread.start()
@@ -146,7 +151,9 @@ class AnalysisJobManager:
             if listener in self._listeners:
                 self._listeners.remove(listener)
 
-    def _run_analysis(self, db_engine, profile: dict, import_service=None, remaining_only: bool = False) -> None:
+    def _run_analysis(
+        self, db_engine, profile: dict, import_service=None, remaining_only: bool = False, legacy_cache_namespaces=None
+    ) -> None:
         try:
             from photo_culler.analysis.engine.cache import MetricCache
             from photo_culler.analysis.engine.pipeline import AnalysisPipeline
@@ -221,10 +228,14 @@ class AnalysisJobManager:
 
                 image_asset = asset_resolver.resolve(photo, prefer_jpeg=True)
                 if image_asset and image_asset.exists():
+                    asset_stat = image_asset.stat()
                     results = pipeline.run_image(
                         image_path=image_asset,
-                        image_hash=f"{photo.photo_id}:{cache_namespace}",
+                        image_hash=f"{photo.photo_id}:{asset_stat.st_size}:{asset_stat.st_mtime_ns}",
                         analyzers=analyzer_instances,
+                        cache_fallback_hashes=[
+                            f"{photo.photo_id}:{namespace}" for namespace in legacy_cache_namespaces
+                        ],
                     )
                     with self._lock:
                         self.executed_metrics += pipeline.last_run_stats["executed"]
@@ -329,6 +340,10 @@ def start_analysis(request: Request, profile: str = Form("fast"), scope: str = F
         profile=profile_config,
         import_service=request.app.state.gallery_imports,
         remaining_only=scope == "remaining",
+        legacy_cache_namespaces=[
+            request.app.state.analysis_profiles.fingerprint(item)
+            for item in request.app.state.analysis_profiles.list()
+        ],
     )
     return {
         "status": "ok" if success else "error",

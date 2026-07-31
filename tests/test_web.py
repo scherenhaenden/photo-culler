@@ -601,9 +601,9 @@ def test_profiles_run_distinct_analyzer_sets_and_report_cache_usage(web_client, 
     assert fast_remaining["total"] == 0
     assert "No quedan fotos pendientes" in str(fast_remaining["message"])
     assert (changed_fast["total"], changed_fast["executed_metrics"], changed_fast["cached_metrics"]) == (1, 0, 4)
-    assert (technical["executed_metrics"], technical["cached_metrics"]) == (8, 0)
+    assert (technical["executed_metrics"], technical["cached_metrics"]) == (4, 4)
     assert (technical_again["executed_metrics"], technical_again["cached_metrics"]) == (0, 8)
-    assert (concert["executed_metrics"], concert["cached_metrics"]) == (8, 0)
+    assert (concert["executed_metrics"], concert["cached_metrics"]) == (0, 8)
 
     detail = web_client.get("/photos/profile-check")
     assert detail.status_code == 200
