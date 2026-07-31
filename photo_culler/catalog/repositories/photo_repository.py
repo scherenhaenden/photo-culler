@@ -66,6 +66,13 @@ class PhotoRepository:
                     full_hash=f.full_hash,
                 )
                 self.session.add(db_file)
+                self.session.flush()
+            else:
+                existing_file.role = f.role.value if isinstance(f.role, FileRole) else str(f.role)
+                existing_file.size_bytes = f.size_bytes
+                existing_file.modified_time = f.modified_time
+                existing_file.quick_hash = f.quick_hash
+                existing_file.full_hash = f.full_hash
 
         # Save metadata
         if photo.metadata:
@@ -180,12 +187,12 @@ class PhotoRepository:
         try:
             summary = json.loads(summary_json or "{}")
             analyzed_at = datetime.fromisoformat(str(summary.get("analyzed_at", "")).replace("Z", "+00:00"))
-        except (TypeError, ValueError, json.JSONDecodeError):
+        except TypeError, ValueError, json.JSONDecodeError:
             return True
         if summary.get("profile_id") != profile_id:
             return True
         stored_fingerprint = summary.get("profile_fingerprint")
-        if stored_fingerprint and stored_fingerprint != profile_fingerprint:
+        if stored_fingerprint != profile_fingerprint:
             return True
         return newest_file_mtime is not None and newest_file_mtime > analyzed_at.timestamp()
 

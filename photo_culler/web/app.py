@@ -14,7 +14,7 @@ from photo_culler.analysis.profiles import AnalysisProfileStore
 from photo_culler.catalog.database import Database
 from photo_culler.editing import EditService
 from photo_culler.importing import GalleryImportService
-from photo_culler.web.i18n import SUPPORTED_LOCALES, language_selector, localize_html, resolve_locale
+from photo_culler.web.i18n import SUPPORTED_LOCALES, language_selector, localize_html, resolve_locale, translate
 from photo_culler.web.routes import analysis, api, dashboard, editing, groups, library, photos, sessions
 
 
@@ -176,6 +176,7 @@ def create_app(
     app.state.templates.env.globals["get_sidebar_stats"] = get_sidebar_stats
     app.state.templates.env.globals["language_selector"] = language_selector
     app.state.templates.env.globals["resolve_locale"] = resolve_locale
+    app.state.templates.env.globals["translate"] = translate
 
     # Register Routes
     app.include_router(dashboard.router)

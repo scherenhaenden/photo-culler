@@ -61,9 +61,8 @@ def main() -> None:
     server_thread.start()
 
     url = f"http://127.0.0.1:{port}"
-    wait_until_ready(url, token)
-
     try:
+        wait_until_ready(url, token)
         with tempfile.TemporaryDirectory(prefix="photo-culler-chrome-") as profile:
             result = subprocess.run(chrome_command(chrome, f"{url}/?token={token}", profile), check=False)
             if result.returncode != 0:

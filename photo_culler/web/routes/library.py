@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
+from photo_culler.web.services.thumbnail_service import ThumbnailService
 
 router = APIRouter()
 
@@ -57,6 +58,12 @@ def get_library(
         repo = PhotoRepository(session)
         photos = repo.list_page(offset=offset, limit=limit, sort=sort, filters=filters)
         total_photos = repo.count_filtered(filters)
+    thumbnail_service = ThumbnailService(db_engine)
+    effective_representations = {
+        photo.photo_id: thumbnail.representation
+        for photo in photos
+        if (thumbnail := thumbnail_service.get_thumbnail(photo.photo_id, representation=representation))
+    }
 
     import_jobs = request.app.state.gallery_imports.list_jobs()
     scan_revisions = request.app.state.gallery_imports.list_scan_revisions(
@@ -87,5 +94,6 @@ def get_library(
             "import_jobs": import_jobs,
             "scan_revisions": scan_revisions,
             "representation": representation,
+            "effective_representations": effective_representations,
         },
     )

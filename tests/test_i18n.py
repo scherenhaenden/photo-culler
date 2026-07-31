@@ -42,6 +42,14 @@ def test_html_localization_updates_language_without_mutating_template_structure(
     assert '<script>"Biblioteca"</script>' in localized
 
 
+def test_html_localization_translates_markup_after_a_script_without_mutating_the_script():
+    html = '<html lang="es"><body><script>const value = "Biblioteca";</script><span>Biblioteca</span></body></html>'
+    localized = localize_html(html, "de")
+
+    assert '<script>const value = "Biblioteca";</script>' in localized
+    assert "<span>Bibliothek</span>" in localized
+
+
 def test_html_localization_updates_a_lang_attribute_with_other_attributes():
     localized = localize_html('<html class="app" LANG="en"><body></body></html>', "de")
     assert 'LANG="de"' in localized

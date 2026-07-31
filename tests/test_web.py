@@ -133,7 +133,11 @@ def test_black_raw_preview_falls_back_to_its_jpeg_tandem(web_client, tmp_path):
     preview = web_client.get("/thumbnails/dark-tandem/800?representation=raw")
 
     assert preview.status_code == 200
+    assert preview.headers["x-photo-culler-representation"] == "jpeg"
     assert Image.open(BytesIO(preview.content)).convert("RGB").getpixel((0, 0))[2] > 100
+    library = web_client.get("/library?representation=raw")
+    assert "dark.jpg" in library.text
+    assert "JPEG" in library.text
 
 
 def test_gallery_import_api_and_empty_state(web_client, tmp_path):

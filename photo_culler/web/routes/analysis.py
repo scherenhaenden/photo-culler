@@ -217,6 +217,12 @@ class AnalysisJobManager:
                     if remaining_only
                     else repository.list_all()
                 )
+                grouping_photos = photos
+                if remaining_only:
+                    burst_ids = {photo.burst_id for photo in photos if photo.burst_id}
+                    if burst_ids:
+                        siblings = repository.list_by_burst_ids(sorted(burst_ids))
+                        grouping_photos = list({photo.photo_id: photo for photo in [*photos, *siblings]}.values())
 
             with self._lock:
                 self.total = len(photos)
@@ -247,28 +253,34 @@ class AnalysisJobManager:
                     return photo, None
                 acquired = True
                 try:
-                    image_asset = asset_resolver.resolve(photo, prefer_jpeg=True)
-                    if not image_asset or not image_asset.exists():
+                    try:
+                        image_asset = asset_resolver.resolve(photo, prefer_jpeg=True)
+                        if not image_asset or not image_asset.exists():
+                            return photo, None
+                        asset_stat = image_asset.stat()
+                        pipeline = AnalysisPipeline(cache=cache, use_cache=True)
+                        results = pipeline.run_image(
+                            image_path=image_asset,
+                            image_hash=f"{photo.photo_id}:{asset_stat.st_size}:{asset_stat.st_mtime_ns}",
+                            analyzers=[analyzer_class() for analyzer_class in analyzer_classes],
+                            cache_fallback_hashes=[
+                                f"{photo.photo_id}:{namespace}" for namespace in legacy_cache_namespaces
+                            ],
+                        )
+                        scorer = TechnicalScorer(
+                            profile=profile["clipping_mode"],
+                            weight_sharpness=weights["sharpness"],
+                            weight_exposure=weights["exposure"],
+                            weight_clipping=weights["clipping"],
+                            weight_noise=weights["noise"],
+                        )
+                        technical_score = scorer.calculate_score(results)
+                        photo.score = technical_score["final_score"]
+                        photo.quality_tier = technical_score["quality_tier"]
+                        return photo, (image_asset, results, technical_score, pipeline.last_run_stats)
+                    except Exception:
+                        logger.exception("Failed to analyze photo %s", photo.photo_id)
                         return photo, None
-                    asset_stat = image_asset.stat()
-                    pipeline = AnalysisPipeline(cache=cache, use_cache=True)
-                    results = pipeline.run_image(
-                        image_path=image_asset,
-                        image_hash=f"{photo.photo_id}:{asset_stat.st_size}:{asset_stat.st_mtime_ns}",
-                        analyzers=[analyzer_class() for analyzer_class in analyzer_classes],
-                        cache_fallback_hashes=[f"{photo.photo_id}:{namespace}" for namespace in legacy_cache_namespaces],
-                    )
-                    scorer = TechnicalScorer(
-                        profile=profile["clipping_mode"],
-                        weight_sharpness=weights["sharpness"],
-                        weight_exposure=weights["exposure"],
-                        weight_clipping=weights["clipping"],
-                        weight_noise=weights["noise"],
-                    )
-                    technical_score = scorer.calculate_score(results)
-                    photo.score = technical_score["final_score"]
-                    photo.quality_tier = technical_score["quality_tier"]
-                    return photo, (image_asset, results, technical_score, pipeline.last_run_stats)
                 finally:
                     if acquired:
                         self._release_worker_slot()
@@ -306,7 +318,8 @@ class AnalysisJobManager:
                                 repository = PhotoRepository(session)
                                 repository.save_photo(photo)
                                 repository.save_analysis_summary(
-                                    photo.photo_id, build_score_explanation(profile, technical_score, results, cache_namespace)
+                                    photo.photo_id,
+                                    build_score_explanation(profile, technical_score, results, cache_namespace),
                                 )
                         with self._lock:
                             self.processed += 1
@@ -319,12 +332,12 @@ class AnalysisJobManager:
                         submit_next()
 
             similarity_groups, _ = SimilarityGrouper().group(
-                photos, lambda item: asset_resolver.resolve(item, prefer_jpeg=True)
+                grouping_photos, lambda item: asset_resolver.resolve(item, prefer_jpeg=True)
             )
-            SelectionRulesEngine().apply_decisions(photos, bursts=similarity_groups)
+            SelectionRulesEngine().apply_decisions(grouping_photos, bursts=similarity_groups)
             with db_engine.session() as session:
                 repository = PhotoRepository(session)
-                for photo in photos:
+                for photo in grouping_photos:
                     repository.save_photo(photo)
 
             self._finish(
@@ -423,13 +436,14 @@ def start_analysis(request: Request, profile: str = Form("fast"), scope: str = F
         import_service=request.app.state.gallery_imports,
         remaining_only=scope == "remaining",
         legacy_cache_namespaces=[
-            request.app.state.analysis_profiles.fingerprint(item)
-            for item in request.app.state.analysis_profiles.list()
+            request.app.state.analysis_profiles.fingerprint(item) for item in request.app.state.analysis_profiles.list()
         ],
     )
     return {
         "status": "ok" if success else "error",
-        "message": "Análisis de pendientes iniciado" if success and scope == "remaining" else "Análisis iniciado"
+        "message": "Análisis de pendientes iniciado"
+        if success and scope == "remaining"
+        else "Análisis iniciado"
         if success
         else "Análisis ya en ejecución",
     }

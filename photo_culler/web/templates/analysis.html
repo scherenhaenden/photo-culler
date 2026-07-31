@@ -266,7 +266,7 @@
     document.getElementById("stat-executed").textContent = `${data.executed_metrics || 0} cálculos nuevos`;
     document.getElementById("stat-cached").textContent = `${data.cached_metrics || 0} desde caché`;
     const workerInput = document.getElementById("worker-count");
-    workerInput.value = data.workers || 1;
+    if (document.activeElement !== workerInput) workerInput.value = data.workers || 1;
     workerInput.max = data.max_workers || 16;
     msg.style.color = "var(--text-secondary)";
 
@@ -314,8 +314,9 @@
     const formData = new FormData();
     formData.append("workers", value);
     const result = await api("/analysis/workers", {method:"POST", body:formData});
-    document.getElementById("worker-count").value = result.workers;
-    document.getElementById("worker-count").max = result.max_workers;
+    const workerInput = document.getElementById("worker-count");
+    if (document.activeElement !== workerInput) workerInput.value = result.workers;
+    workerInput.max = result.max_workers;
   }
 
   async function groupSimilarPhotos() {

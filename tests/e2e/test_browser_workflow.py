@@ -296,7 +296,7 @@ def test_hybrid_session_administration_in_real_chrome(tmp_path):
             "document.querySelector('.session-rename').requestSubmit()"
         )
         browser.wait_for("document.body.innerText.includes('Sesión Chrome')")
-        browser.evaluate("document.querySelector('.session-delete').requestSubmit()")
+        browser.evaluate("window.confirm = () => true;document.querySelector('.session-delete').requestSubmit()")
         browser.wait_for("document.body.innerText.includes('Aún no hay sesiones')")
         assert browser.evaluate("document.querySelectorAll('.session-row').length") == 0
     finally:

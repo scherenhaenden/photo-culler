@@ -60,6 +60,7 @@ _CORE_TERMS: Mapping[str, Mapping[str, str]] = {
         "Kept": "Kept",
         "Rejected": "Rejected",
         "Unrated": "Unrated",
+        "Archivo usado para esta vista": "File used for this view",
     },
     "de": {
         "Biblioteca": "Bibliothek",
@@ -76,6 +77,7 @@ _CORE_TERMS: Mapping[str, Mapping[str, str]] = {
         "Kept": "Behalten",
         "Rejected": "Abgelehnt",
         "Unrated": "Unbewertet",
+        "Archivo usado para esta vista": "Für diese Ansicht verwendete Datei",
     },
     "it": {
         "Biblioteca": "Libreria",
@@ -92,6 +94,7 @@ _CORE_TERMS: Mapping[str, Mapping[str, str]] = {
         "Kept": "Conservate",
         "Rejected": "Rifiutate",
         "Unrated": "Non valutate",
+        "Archivo usado para esta vista": "File usato per questa vista",
     },
     "pt": {
         "Biblioteca": "Biblioteca",
@@ -108,6 +111,7 @@ _CORE_TERMS: Mapping[str, Mapping[str, str]] = {
         "Kept": "Mantidas",
         "Rejected": "Rejeitadas",
         "Unrated": "Sem avaliação",
+        "Archivo usado para esta vista": "Arquivo usado para esta visualização",
     },
 }
 
@@ -163,6 +167,7 @@ def language_selector(locale: str) -> str:
 
 _TEXT_NODE = re.compile(r">([^<>]+)<")
 _HTML_LANG = re.compile(r'(<html\b[^>]*\blang\s*=\s*["\'])[^"\']*(["\'])', re.IGNORECASE)
+_SCRIPT_OR_STYLE = re.compile(r"<(script|style)\b[^>]*>.*?</\1\s*>", re.IGNORECASE | re.DOTALL)
 
 
 def localize_html(document: str, locale: str) -> str:
@@ -177,7 +182,15 @@ def localize_html(document: str, locale: str) -> str:
         translated = translate(stripped, locale)
         return ">" + raw.replace(stripped, translated, 1) + "<"
 
-    # Script/style contents contain comparison operators, so only translate the
-    # rendered markup before the first script. Dynamic DOM is handled by i18n.js.
-    head, separator, tail = document.partition("<script")
-    return _TEXT_NODE.sub(replace, head) + (separator + tail if separator else "")
+    # Script/style contents can contain markup-like text and must be preserved,
+    # but scripts may appear before later rendered markup in the body.
+    protected: list[str] = []
+
+    def protect(match: re.Match[str]) -> str:
+        protected.append(match.group(0))
+        return f"__PHOTO_CULLER_PROTECTED_{len(protected) - 1}__"
+
+    localized = _TEXT_NODE.sub(replace, _SCRIPT_OR_STYLE.sub(protect, document))
+    for index, block in enumerate(protected):
+        localized = localized.replace(f"__PHOTO_CULLER_PROTECTED_{index}__", block)
+    return localized

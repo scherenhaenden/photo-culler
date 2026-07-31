@@ -74,3 +74,47 @@ def test_main_reports_a_server_thread_that_does_not_stop(monkeypatch):
 
     with pytest.raises(RuntimeError, match="did not stop cleanly"):
         linux_launcher.main()
+
+
+def test_main_stops_server_when_readiness_fails(monkeypatch):
+    class FakeThread:
+        instance = None
+
+        def __init__(self, *args, **kwargs):
+            type(self).instance = self
+            self.joined = False
+
+        def start(self):
+            pass
+
+        def join(self, timeout):
+            assert timeout == 5
+            self.joined = True
+
+        def is_alive(self):
+            return False
+
+    class FakeServer:
+        instance = None
+
+        def __init__(self, config):
+            type(self).instance = self
+            self.should_exit = False
+
+        def run(self):
+            pass
+
+    monkeypatch.setattr(linux_launcher, "find_chrome", lambda: "/usr/bin/chromium")
+    monkeypatch.setattr(linux_launcher, "find_free_port", lambda: 9876)
+    monkeypatch.setattr(linux_launcher, "create_app", lambda **kwargs: object())
+    monkeypatch.setattr(
+        linux_launcher, "wait_until_ready", lambda *args: (_ for _ in ()).throw(RuntimeError("not ready"))
+    )
+    monkeypatch.setattr(linux_launcher.threading, "Thread", FakeThread)
+    monkeypatch.setattr(linux_launcher.uvicorn, "Server", FakeServer)
+
+    with pytest.raises(RuntimeError, match="not ready"):
+        linux_launcher.main()
+
+    assert FakeServer.instance.should_exit is True
+    assert FakeThread.instance.joined is True

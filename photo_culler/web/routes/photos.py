@@ -82,12 +82,17 @@ def get_thumbnail(photo_id: str, size: str, request: Request, representation: st
 
     if representation not in {"jpeg", "raw"}:
         raise HTTPException(status_code=422, detail="Unknown preview representation")
-    thumb_path = thumb_service.get_thumbnail_path(photo_id, size=size, representation=representation)
-    if not thumb_path or not thumb_path.exists():
+    thumbnail = thumb_service.get_thumbnail(photo_id, size=size, representation=representation)
+    if not thumbnail or not thumbnail.path.exists():
         raise HTTPException(status_code=404, detail="Thumbnail not found")
 
     return FileResponse(
-        thumb_path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=31536000, immutable"}
+        thumbnail.path,
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "private, max-age=31536000, immutable",
+            "X-Photo-Culler-Representation": thumbnail.representation,
+        },
     )
 
 

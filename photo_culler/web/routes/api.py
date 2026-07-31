@@ -221,9 +221,14 @@ def get_system_usage(request: Request) -> dict[str, object]:
     cpu_app = 0.0
     try:
         import psutil
+
         cpu_sys = psutil.cpu_percent(interval=None)
 
-        proc = psutil.Process(os.getpid())
+        proc = getattr(request.app.state, "system_usage_process", None)
+        if proc is None:
+            proc = psutil.Process(os.getpid())
+            proc.cpu_percent(interval=None)  # Establish psutil's non-blocking baseline once.
+            request.app.state.system_usage_process = proc
         cpu_app_raw = proc.cpu_percent(interval=None)
         cpu_count = psutil.cpu_count() or 1
         cpu_app = cpu_app_raw
@@ -243,7 +248,7 @@ def get_system_usage(request: Request) -> dict[str, object]:
                 stderr=subprocess.PIPE,
                 text=True,
                 timeout=1.0,
-                check=True
+                check=True,
             )
             first_gpu = next((line for line in res.stdout.splitlines() if line.strip()), "")
             parts = first_gpu.split(",")

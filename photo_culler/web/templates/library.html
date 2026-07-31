@@ -214,8 +214,8 @@ document.querySelectorAll('.import-job-action').forEach((button) => {
     </div>
 
     <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-      <label style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600;">Archivo mostrado por tándem RAW + JPEG</label>
-      <select name="representation" onchange="this.form.submit()">
+      <label for="representation-select" style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600;">Archivo mostrado por tándem RAW + JPEG</label>
+      <select id="representation-select" name="representation" onchange="this.form.submit()">
         <option value="jpeg" {% if representation == 'jpeg' %}selected{% endif %}>JPEG (recomendado; se indica si falta)</option>
         <option value="raw" {% if representation == 'raw' %}selected{% endif %}>RAW (JPEG si el RAW no tiene preview)</option>
       </select>

@@ -134,5 +134,7 @@ class SessionManagementService:
         record = self.session.query(SessionDB).filter_by(session_id=session_id).first()
         if record is None:
             raise LookupError("Session not found")
-        self.session.query(PhotoDB).filter_by(session_id=session_id).update({PhotoDB.session_id: None})
+        self.session.query(PhotoDB).filter_by(session_id=session_id).update(
+            {PhotoDB.session_id: None, PhotoDB.burst_id: None}
+        )
         self.session.delete(record)

@@ -76,3 +76,27 @@ def test_catalog_config_supports_sqlite_urls_and_rejects_unknown_backends(tmp_pa
 
     with pytest.raises(ValueError, match="Unsupported catalog backend"):
         CatalogConfig.resolve(db_url="mysql://localhost/photo_culler")
+
+
+def test_save_photo_refreshes_existing_file_metadata(memory_db):
+    path = Path("/photos/DSC_0001.JPG")
+    with memory_db.session() as session:
+        repository = PhotoRepository(session)
+        repository.save_photo(
+            Photo(
+                photo_id="photo_001",
+                stem_name="DSC_0001",
+                files=[FileRecord(path, FileRole.JPEG, 100, 1_700_000_000.0)],
+            )
+        )
+        repository.save_photo(
+            Photo(
+                photo_id="photo_001",
+                stem_name="DSC_0001",
+                files=[FileRecord(path, FileRole.JPEG, 200, 1_700_000_001.0)],
+            )
+        )
+
+    with memory_db.session() as session:
+        file = PhotoRepository(session).get_by_id("photo_001").files[0]
+        assert (file.size_bytes, file.modified_time) == (200, 1_700_000_001.0)
