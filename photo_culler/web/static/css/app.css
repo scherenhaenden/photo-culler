@@ -614,3 +614,5 @@ body {
   line-height: 1.4;
   margin-bottom: 8px;
 }
+.language-picker { display:flex; align-items:center; gap:.45rem; margin:1rem; color:var(--text-secondary); }
+.language-picker select { min-width:0; width:100%; padding:.4rem; color:var(--text-primary); background:var(--bg-main); border:1px solid var(--border-color); border-radius:4px; }

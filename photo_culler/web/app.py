@@ -6,12 +6,36 @@ from typing import Optional, Union
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from photo_culler.analysis.profiles import AnalysisProfileStore
 from photo_culler.catalog.database import Database
 from photo_culler.editing import EditService
 from photo_culler.importing import GalleryImportService
+from photo_culler.web.i18n import SUPPORTED_LOCALES, localize_html, resolve_locale
 from photo_culler.web.routes import analysis, api, dashboard, editing, groups, library, photos, sessions
+
+
+class InternationalizationMiddleware(BaseHTTPMiddleware):
+    """Localize rendered HTML and persist an explicit language selection."""
+
+    async def dispatch(self, request, call_next):
+        locale = resolve_locale(request)
+        response = await call_next(request)
+        content_type = response.headers.get("content-type", "")
+        if "text/html" in content_type:
+            body = b"".join([chunk async for chunk in response.body_iterator])
+            localized = localize_html(body.decode(response.charset or "utf-8"), locale)
+            localized_body = localized.encode(response.charset or "utf-8")
+
+            async def body_iterator():
+                yield localized_body
+
+            response.body_iterator = body_iterator()
+            response.headers["content-length"] = str(len(localized_body))
+        if request.query_params.get("lang") in SUPPORTED_LOCALES:
+            response.set_cookie("photo_culler_locale", locale, max_age=31536000, samesite="lax")
+        return response
 
 
 def create_app(
@@ -21,6 +45,7 @@ def create_app(
 ) -> FastAPI:
     """Create and configure FastAPI application instance."""
     app = FastAPI(title="Photo Culler", version="0.1.0")
+    app.add_middleware(InternationalizationMiddleware)
 
     if desktop_token:
         app.state.desktop_token = desktop_token
