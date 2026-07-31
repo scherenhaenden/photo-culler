@@ -1,5 +1,6 @@
 """Clickable Linux launcher using an isolated Chrome app window."""
 
+import logging
 import os
 import secrets
 import shutil
@@ -29,9 +30,9 @@ def find_chrome() -> str | None:
     return shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("chromium-browser")
 
 
-def chrome_command(chrome: str, url: str, profile: str) -> list[str]:
+def chrome_command(chrome: str, url: str, profile: str, extra_args: list[str] | None = None) -> list[str]:
     """Build the isolated app-window command without inheriting a browser profile."""
-    return [
+    command = [
         chrome,
         f"--app={url}",
         f"--user-data-dir={profile}",
@@ -39,6 +40,7 @@ def chrome_command(chrome: str, url: str, profile: str) -> list[str]:
         "--no-default-browser-check",
         "--disable-sync",
     ]
+    return command + (extra_args or [])
 
 
 def main() -> None:
@@ -70,7 +72,7 @@ def main() -> None:
         server.should_exit = True
         server_thread.join(timeout=5)
         if server_thread.is_alive():
-            raise RuntimeError("Photo Culler local server did not stop cleanly")
+            logging.warning("Photo Culler local server thread did not stop cleanly after shutdown signal")
 
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@ def get_sessions_page(request: Request):
         session_service = SessionManagementService(session)
         sessions = session_service.list_sessions()
         burst_count = session.query(PhotoDB.burst_id).filter(PhotoDB.burst_id.is_not(None)).distinct().count()
+        session.expunge_all()
 
     return templates.TemplateResponse(
         request=request,

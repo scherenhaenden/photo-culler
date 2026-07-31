@@ -23,7 +23,9 @@ class InternationalizationMiddleware(BaseHTTPMiddleware):
         locale = resolve_locale(request)
         response = await call_next(request)
         content_type = response.headers.get("content-type", "")
-        if "text/html" in content_type:
+        # A content length identifies a fully materialized response.  Leave
+        # streaming HTML untouched so this middleware never consumes its iterator.
+        if "text/html" in content_type and "content-length" in response.headers:
             body = b"".join([chunk async for chunk in response.body_iterator])
             localized = localize_html(body.decode(response.charset or "utf-8"), locale)
             localized_body = localized.encode(response.charset or "utf-8")

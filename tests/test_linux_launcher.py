@@ -25,9 +25,12 @@ def test_find_chrome_rejects_an_invalid_override(monkeypatch, tmp_path):
 
 
 def test_chrome_command_is_an_isolated_app_window(tmp_path):
-    command = chrome_command("/usr/bin/chromium", "http://127.0.0.1:1234/?token=secret", str(tmp_path))
+    command = chrome_command(
+        "/usr/bin/chromium", "http://127.0.0.1:1234/?token=secret", str(tmp_path), ["--disable-gpu"]
+    )
 
     assert command[0] == "/usr/bin/chromium"
     assert "--app=http://127.0.0.1:1234/?token=secret" in command
     assert f"--user-data-dir={tmp_path}" in command
     assert "--disable-sync" in command
+    assert command[-1] == "--disable-gpu"

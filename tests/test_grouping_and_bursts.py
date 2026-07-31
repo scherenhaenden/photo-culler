@@ -2,6 +2,8 @@
 
 from datetime import datetime, timedelta
 
+import pytest
+
 from photo_culler.bursts.temporal_bursts import BurstDetector
 from photo_culler.catalog.database import Database
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
@@ -71,7 +73,20 @@ def test_hybrid_session_management_persists_sessions_and_scoped_bursts(tmp_path)
         assert len(stored_sessions) == 2
         assert len({photo.session_id for photo in stored_photos if photo.session_id}) == 2
         assert len({photo.burst_id for photo in stored_photos if photo.burst_id}) == 2
+        burst_ids_by_session = {
+            session_id: {photo.burst_id for photo in stored_photos if photo.session_id == session_id and photo.burst_id}
+            for session_id in {photo.session_id for photo in stored_photos if photo.session_id}
+        }
+        assert not set.intersection(*burst_ids_by_session.values())
         service = SessionManagementService(session)
+        with pytest.raises(ValueError):
+            service.rename(stored_sessions[0].session_id, "   ")
+        with pytest.raises(ValueError):
+            service.rename(stored_sessions[0].session_id, "x" * 256)
+        with pytest.raises(LookupError):
+            service.rename("missing", "No session")
+        with pytest.raises(LookupError):
+            service.delete("missing")
         service.rename(stored_sessions[0].session_id, "Ceremonia")
         removed_id = stored_sessions[1].session_id
         service.delete(removed_id)

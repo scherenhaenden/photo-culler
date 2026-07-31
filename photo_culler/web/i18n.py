@@ -162,11 +162,12 @@ def language_selector(locale: str) -> str:
 
 
 _TEXT_NODE = re.compile(r">([^<>]+)<")
+_HTML_LANG = re.compile(r'(<html\b[^>]*\blang\s*=\s*["\'])[^"\']*(["\'])', re.IGNORECASE)
 
 
 def localize_html(document: str, locale: str) -> str:
     """Translate exact text nodes while leaving data, markup and scripts intact."""
-    document = document.replace('<html lang="es">', f'<html lang="{locale}">', 1)
+    document = _HTML_LANG.sub(rf"\g<1>{locale}\g<2>", document, count=1)
     document = document.replace(
         "<!-- Active Operator Footer -->", language_selector(locale) + "<!-- Active Operator Footer -->", 1
     )

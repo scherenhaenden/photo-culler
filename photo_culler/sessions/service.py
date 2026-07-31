@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Literal
 
+from sqlalchemy import case, update
 from sqlalchemy.orm import Session
 
 from photo_culler.bursts.temporal_bursts import BurstDetector
@@ -38,50 +39,20 @@ class SessionManagementService:
         timeline_gap_minutes: float = 15.0,
         burst_gap_seconds: float = 1.5,
     ) -> GroupingResult:
-        if profile not in {"timeline", "burst", "hybrid"}:
-            raise ValueError("Unknown grouping profile")
-        if not 0.1 <= timeline_gap_minutes <= 1440:
-            raise ValueError("Timeline gap must be between 0.1 and 1440 minutes")
-        if not 0.05 <= burst_gap_seconds <= 60:
-            raise ValueError("Burst gap must be between 0.05 and 60 seconds")
+        self._validate_parameters(profile, timeline_gap_minutes, burst_gap_seconds)
 
         repository = PhotoRepository(self.session)
         photos = repository.list_all()
-        dated = [photo for photo in photos if photo.metadata and photo.metadata.capture_time]
-        sessions = []
+        dated = self._dated_photos(photos)
+        sessions = self._detect_sessions(profile, dated, timeline_gap_minutes)
 
         if profile in {"timeline", "hybrid"}:
-            self.session.query(SessionDB).delete(synchronize_session=False)
-            for photo in photos:
-                photo.session_id = None
-            sessions = SessionDetector(timeline_gap_minutes).detect_sessions(dated)
-            for record in sessions:
-                self.session.add(
-                    SessionDB(
-                        session_id=record.session_id,
-                        name=record.name,
-                        start_time=record.start_time,
-                        end_time=record.end_time,
-                        photo_count=record.photo_count,
-                    )
-                )
+            self._replace_sessions(sessions)
+            self._persist_assignments(photos, "session_id")
 
-        for photo in photos:
-            photo.burst_id = None
-
-        bursts = []
-        if profile in {"burst", "hybrid"}:
-            detector = BurstDetector(burst_gap_seconds)
-            if profile == "hybrid":
-                # A burst can never bridge the inactivity boundary of a shoot session.
-                for record in sessions:
-                    members = [photo for photo in dated if photo.session_id == record.session_id]
-                    bursts.extend(detector.detect_bursts(members))
-            else:
-                bursts = detector.detect_bursts(dated)
-
-        for photo in photos:
-            repository.save_photo(photo)
+        bursts = self._detect_bursts(profile, dated, sessions, burst_gap_seconds)
+        self._clear_assignments("burst_id")
+        self._persist_assignments(photos, "burst_id")
 
         return GroupingResult(
             profile=profile,
@@ -90,6 +61,64 @@ class SessionManagementService:
             grouped_photos=sum(1 for photo in photos if photo.session_id or photo.burst_id),
             photos_without_date=len(photos) - len(dated),
         )
+
+    @staticmethod
+    def _validate_parameters(profile: str, timeline_gap_minutes: float, burst_gap_seconds: float) -> None:
+        if profile not in {"timeline", "burst", "hybrid"}:
+            raise ValueError("Unknown grouping profile")
+        if not 0.1 <= timeline_gap_minutes <= 1440:
+            raise ValueError("Timeline gap must be between 0.1 and 1440 minutes")
+        if not 0.05 <= burst_gap_seconds <= 60:
+            raise ValueError("Burst gap must be between 0.05 and 60 seconds")
+
+    @staticmethod
+    def _dated_photos(photos):
+        return [photo for photo in photos if photo.metadata and photo.metadata.capture_time]
+
+    def _detect_sessions(self, profile: GroupingProfile, dated, timeline_gap_minutes: float):
+        if profile not in {"timeline", "hybrid"}:
+            return []
+        return SessionDetector(timeline_gap_minutes).detect_sessions(dated)
+
+    def _replace_sessions(self, sessions) -> None:
+        self.session.query(SessionDB).delete(synchronize_session=False)
+        self._clear_assignments("session_id")
+        self.session.add_all(
+            [
+                SessionDB(
+                    session_id=record.session_id,
+                    name=record.name,
+                    start_time=record.start_time,
+                    end_time=record.end_time,
+                    photo_count=record.photo_count,
+                )
+                for record in sessions
+            ]
+        )
+
+    def _detect_bursts(self, profile: GroupingProfile, dated, sessions, burst_gap_seconds: float):
+        if profile not in {"burst", "hybrid"}:
+            return []
+        detector = BurstDetector(burst_gap_seconds)
+        if profile == "burst":
+            return detector.detect_bursts(dated)
+        bursts = []
+        for record in sessions:
+            members = [photo for photo in dated if photo.session_id == record.session_id]
+            bursts.extend(detector.detect_bursts(members))
+        return bursts
+
+    def _clear_assignments(self, column: str) -> None:
+        self.session.execute(update(PhotoDB).values({column: None}))
+
+    def _persist_assignments(self, photos, column: str) -> None:
+        assignments = {photo.photo_id: getattr(photo, column) for photo in photos if getattr(photo, column)}
+        if assignments:
+            self.session.execute(
+                update(PhotoDB)
+                .where(PhotoDB.photo_id.in_(assignments))
+                .values({column: case(assignments, value=PhotoDB.photo_id)})
+            )
 
     def rename(self, session_id: str, name: str) -> SessionDB:
         clean_name = name.strip()

@@ -7,6 +7,7 @@ from threading import Event
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
+from starlette.responses import StreamingResponse
 
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
 from photo_culler.catalog.schema import SessionDB
@@ -35,6 +36,18 @@ def test_dashboard_page(web_client):
     response = web_client.get("/")
     assert response.status_code == 200
     assert "Dashboard del Catálogo" in response.text
+
+
+def test_i18n_middleware_does_not_buffer_streaming_html(web_client):
+    async def stream():
+        yield b"<html lang=\"es\"><body>Biblioteca</body></html>"
+
+    web_client.app.add_api_route(
+        "/streaming-html", lambda: StreamingResponse(stream(), media_type="text/html"), methods=["GET"]
+    )
+    response = web_client.get("/streaming-html?lang=de")
+    assert response.text == '<html lang="es"><body>Biblioteca</body></html>'
+    assert "language-picker" not in response.text
 
 
 def test_library_page(web_client):
@@ -300,6 +313,30 @@ def test_sessions_web_workflow_combines_timeline_and_burst_engines(web_client):
     deleted = web_client.post(f"/sessions/{session_id}/delete", follow_redirects=True)
     assert deleted.status_code == 200
     assert "Aún no hay sesiones" in deleted.text
+
+
+def test_sessions_web_workflow_reports_validation_and_missing_session_errors(web_client):
+    invalid_group = web_client.post(
+        "/sessions/group",
+        data={"profile": "unknown", "timeline_gap_minutes": "15", "burst_gap_seconds": "1.5"},
+    )
+    assert invalid_group.status_code == 422
+    assert invalid_group.json()["detail"] == "Unknown grouping profile"
+
+    invalid_gap = web_client.post(
+        "/sessions/group",
+        data={"profile": "hybrid", "timeline_gap_minutes": "0", "burst_gap_seconds": "1.5"},
+    )
+    assert invalid_gap.status_code == 422
+    assert "Timeline gap" in invalid_gap.json()["detail"]
+
+    missing_rename = web_client.post("/sessions/missing/rename", data={"name": "Missing"})
+    assert missing_rename.status_code == 404
+    invalid_name = web_client.post("/sessions/missing/rename", data={"name": "   "})
+    assert invalid_name.status_code == 422
+    missing_delete = web_client.post("/sessions/missing/delete")
+    assert missing_delete.status_code == 404
+
 
 def test_analysis_start_and_sse_progress(web_client):
     # Start analysis

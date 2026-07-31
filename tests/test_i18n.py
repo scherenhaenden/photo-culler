@@ -40,3 +40,8 @@ def test_html_localization_updates_language_and_adds_picker():
     assert "<span>Bibliothek</span>" in localized
     assert 'id="language-picker"' in localized
     assert '<script>"Biblioteca"</script>' in localized
+
+
+def test_html_localization_updates_a_lang_attribute_with_other_attributes():
+    localized = localize_html('<html class="app" LANG="en"><body></body></html>', "de")
+    assert 'LANG="de"' in localized

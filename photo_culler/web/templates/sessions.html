@@ -27,7 +27,7 @@
   {% for item in sessions %}<article class="session-row" data-session-id="{{ item.session_id }}">
     <div class="session-meta"><strong>{{ item.name }}</strong><span>{{ item.start_time.strftime('%d/%m/%Y %H:%M') }} — {{ item.end_time.strftime('%H:%M') }} · {{ item.photo_count }} fotos</span></div>
     <form method="post" action="/sessions/{{ item.session_id }}/rename" class="session-rename"><input aria-label="Nuevo nombre" name="name" value="{{ item.name }}" maxlength="255" required><button class="btn btn-secondary" type="submit">Guardar</button></form>
-    <form method="post" action="/sessions/{{ item.session_id }}/delete" onsubmit="return confirm('¿Desvincular y eliminar esta sesión?')"><button class="btn btn-danger" type="submit">Eliminar</button></form>
+    <form method="post" action="/sessions/{{ item.session_id }}/delete" class="session-delete" onsubmit="return confirm('¿Desvincular y eliminar esta sesión?')"><button class="btn btn-danger" type="submit">Eliminar</button></form>
   </article>{% endfor %}
   </div>{% else %}<div class="session-empty"><strong>Aún no hay sesiones.</strong><span>Elige el perfil híbrido para organizar el catálogo y detectar ráfagas a la vez.</span></div>{% endif %}
 </section>

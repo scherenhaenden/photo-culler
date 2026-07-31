@@ -156,7 +156,7 @@ def test_operator_pages_render_in_real_chrome(tmp_path):
         time.sleep(0.02)
 
     try:
-        dashboard = render_in_chrome(f"http://127.0.0.1:{port}/")
+        dashboard = render_in_chrome(f"http://127.0.0.1:{port}/?lang=es")
         assert "Dashboard del Catálogo" in dashboard
 
         library = render_in_chrome(f"http://127.0.0.1:{port}/library")
@@ -296,6 +296,9 @@ def test_hybrid_session_administration_in_real_chrome(tmp_path):
             "document.querySelector('.session-rename').requestSubmit()"
         )
         browser.wait_for("document.body.innerText.includes('Sesión Chrome')")
+        browser.evaluate("document.querySelector('.session-delete').requestSubmit()")
+        browser.wait_for("document.body.innerText.includes('Aún no hay sesiones')")
+        assert browser.evaluate("document.querySelectorAll('.session-row').length") == 0
     finally:
         browser.close()
         server.should_exit = True
