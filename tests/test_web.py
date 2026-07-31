@@ -527,3 +527,18 @@ def test_analysis_cooperative_controls_and_idle_conflicts(web_client):
     assert "Pausar" in page.text
     assert "Reanudar" in page.text
     assert "Cancelar" in page.text
+
+
+def test_system_usage_api(web_client):
+    response = web_client.get("/api/v1/system-usage")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["contract_version"] == 1
+    assert "cpu_system" in data
+    assert "cpu_app" in data
+    assert "gpu_system" in data
+    assert "gpu_name" in data
+    assert isinstance(data["cpu_system"], (int, float))
+    assert isinstance(data["cpu_app"], (int, float))
+    assert isinstance(data["gpu_system"], (int, float))
+    assert isinstance(data["gpu_name"], str)
