@@ -3,6 +3,7 @@
 import time
 from datetime import datetime, timedelta
 from threading import Event
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -629,3 +630,31 @@ def test_analysis_cooperative_controls_and_idle_conflicts(web_client):
     assert "Pausar" in page.text
     assert "Reanudar" in page.text
     assert "Cancelar" in page.text
+
+
+def test_system_usage_api(web_client):
+    response = web_client.get("/api/v1/system-usage")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["contract_version"] == 1
+    assert "cpu_system" in data
+    assert "cpu_app" in data
+    assert "gpu_system" in data
+    assert "gpu_name" in data
+    assert isinstance(data["cpu_system"], (int, float))
+    assert isinstance(data["cpu_app"], (int, float))
+    assert isinstance(data["gpu_system"], (int, float))
+    assert isinstance(data["gpu_name"], str)
+
+
+def test_system_usage_uses_first_gpu_line(web_client, monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda command: "/usr/bin/nvidia-smi")
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(stdout="10, GPU0\n20, GPU1"),
+    )
+
+    data = web_client.get("/api/v1/system-usage").json()
+
+    assert data["gpu_system"] == 10.0
+    assert data["gpu_name"] == "GPU0"
