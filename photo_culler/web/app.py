@@ -6,38 +6,66 @@ from typing import Optional, Union
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.datastructures import MutableHeaders
+from starlette.requests import Request
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from photo_culler.analysis.profiles import AnalysisProfileStore
 from photo_culler.catalog.database import Database
 from photo_culler.editing import EditService
 from photo_culler.importing import GalleryImportService
-from photo_culler.web.i18n import SUPPORTED_LOCALES, localize_html, resolve_locale
+from photo_culler.web.i18n import SUPPORTED_LOCALES, language_selector, localize_html, resolve_locale
 from photo_culler.web.routes import analysis, api, dashboard, editing, groups, library, photos, sessions
 
 
-class InternationalizationMiddleware(BaseHTTPMiddleware):
-    """Localize rendered HTML and persist an explicit language selection."""
+class InternationalizationMiddleware:
+    """Localize complete HTML responses without consuming streaming response iterators."""
 
-    async def dispatch(self, request, call_next):
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope)
         locale = resolve_locale(request)
-        response = await call_next(request)
-        content_type = response.headers.get("content-type", "")
-        # A content length identifies a fully materialized response.  Leave
-        # streaming HTML untouched so this middleware never consumes its iterator.
-        if "text/html" in content_type and "content-length" in response.headers:
-            body = b"".join([chunk async for chunk in response.body_iterator])
-            localized = localize_html(body.decode(response.charset or "utf-8"), locale)
-            localized_body = localized.encode(response.charset or "utf-8")
+        set_locale_cookie = request.query_params.get("lang") in SUPPORTED_LOCALES
+        start_message: Message | None = None
+        buffered_body = bytearray()
+        localize_response = False
 
-            async def body_iterator():
-                yield localized_body
+        async def send_wrapper(message: Message) -> None:
+            nonlocal localize_response, start_message
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(raw=message["headers"])
+                content_type = headers.get("content-type", "")
+                localize_response = "text/html" in content_type and "content-length" in headers
+                if set_locale_cookie:
+                    headers.append(
+                        "set-cookie", f"photo_culler_locale={locale}; Max-Age=31536000; Path=/; SameSite=lax"
+                    )
+                if localize_response:
+                    start_message = message
+                    return
+                await send(message)
+                return
 
-            response.body_iterator = body_iterator()
-            response.headers["content-length"] = str(len(localized_body))
-        if request.query_params.get("lang") in SUPPORTED_LOCALES:
-            response.set_cookie("photo_culler_locale", locale, max_age=31536000, samesite="lax")
-        return response
+            if message["type"] == "http.response.body" and localize_response:
+                buffered_body.extend(message.get("body", b""))
+                if message.get("more_body", False):
+                    return
+                localized_body = localize_html(buffered_body.decode("utf-8"), locale).encode("utf-8")
+                assert start_message is not None
+                MutableHeaders(raw=start_message["headers"])["content-length"] = str(len(localized_body))
+                await send(start_message)
+                await send({"type": "http.response.body", "body": localized_body, "more_body": False})
+                return
+
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
 
 
 def create_app(
@@ -146,6 +174,8 @@ def create_app(
             }
 
     app.state.templates.env.globals["get_sidebar_stats"] = get_sidebar_stats
+    app.state.templates.env.globals["language_selector"] = language_selector
+    app.state.templates.env.globals["resolve_locale"] = resolve_locale
 
     # Register Routes
     app.include_router(dashboard.router)

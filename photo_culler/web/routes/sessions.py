@@ -1,5 +1,7 @@
 """Sessions Web Route."""
 
+from urllib.parse import urlencode
+
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
@@ -8,6 +10,10 @@ from photo_culler.catalog.schema import PhotoDB
 from photo_culler.sessions import SessionManagementService
 
 router = APIRouter()
+
+
+def _sessions_redirect(message: str) -> RedirectResponse:
+    return RedirectResponse(url=f"/sessions?{urlencode({'message': message})}", status_code=303)
 
 
 @router.get("/sessions", response_class=HTMLResponse)
@@ -52,7 +58,7 @@ def group_sessions(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     message = f"Procesadas: {result.sessions} sesiones y {result.bursts} ráfagas"
-    return RedirectResponse(url=f"/sessions?message={message}", status_code=303)
+    return _sessions_redirect(message)
 
 
 @router.post("/sessions/{session_id}/rename")
@@ -64,7 +70,7 @@ def rename_session(request: Request, session_id: str, name: str = Form(...)):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return RedirectResponse(url="/sessions?message=Sesión renombrada", status_code=303)
+    return _sessions_redirect("Sesión renombrada")
 
 
 @router.post("/sessions/{session_id}/delete")
@@ -74,4 +80,4 @@ def delete_session(request: Request, session_id: str):
             SessionManagementService(session).delete(session_id)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return RedirectResponse(url="/sessions?message=Sesión eliminada", status_code=303)
+    return _sessions_redirect("Sesión eliminada")

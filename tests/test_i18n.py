@@ -33,12 +33,12 @@ def test_locale_resolution_precedence_and_regional_tags():
     assert resolve_locale(request({"lang": "invalid"})) == "es"
 
 
-def test_html_localization_updates_language_and_adds_picker():
+def test_html_localization_updates_language_without_mutating_template_structure():
     html = '<html lang="es"><body><span>Biblioteca</span><!-- Active Operator Footer --><script>"Biblioteca"</script></body></html>'
     localized = localize_html(html, "de")
     assert '<html lang="de">' in localized
     assert "<span>Bibliothek</span>" in localized
-    assert 'id="language-picker"' in localized
+    assert 'id="language-picker"' not in localized
     assert '<script>"Biblioteca"</script>' in localized
 
 

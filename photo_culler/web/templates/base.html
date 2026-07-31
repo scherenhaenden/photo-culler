@@ -81,8 +81,8 @@
       </div>
     </div>
 
-    <!-- Active Operator Footer -->
     <div class="sidebar-footer">
+      {{ language_selector(resolve_locale(request)) | safe }}
       <div class="operator-avatar" aria-hidden="true">OP</div>
       <div class="operator-details">
         <div class="operator-name">OPERATOR_01</div>

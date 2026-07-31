@@ -36,11 +36,12 @@ def test_dashboard_page(web_client):
     response = web_client.get("/")
     assert response.status_code == 200
     assert "Dashboard del Catálogo" in response.text
+    assert 'id="language-picker"' in response.text
 
 
 def test_i18n_middleware_does_not_buffer_streaming_html(web_client):
     async def stream():
-        yield b"<html lang=\"es\"><body>Biblioteca</body></html>"
+        yield b'<html lang="es"><body>Biblioteca</body></html>'
 
     web_client.app.add_api_route(
         "/streaming-html", lambda: StreamingResponse(stream(), media_type="text/html"), methods=["GET"]
@@ -313,6 +314,16 @@ def test_sessions_web_workflow_combines_timeline_and_burst_engines(web_client):
     deleted = web_client.post(f"/sessions/{session_id}/delete", follow_redirects=True)
     assert deleted.status_code == 200
     assert "Aún no hay sesiones" in deleted.text
+
+
+def test_sessions_redirects_percent_encode_messages(web_client):
+    response = web_client.post(
+        "/sessions/group",
+        data={"profile": "hybrid", "timeline_gap_minutes": "15", "burst_gap_seconds": "1.5"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert "%C3%A1fagas" in response.headers["location"]
 
 
 def test_sessions_web_workflow_reports_validation_and_missing_session_errors(web_client):

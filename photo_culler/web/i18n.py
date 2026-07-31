@@ -44,7 +44,7 @@ SUPPORTED_LOCALES = frozenset(language.code for language in LANGUAGES)
 # The source UI historically mixed Spanish and English.  Keeping source strings as
 # message ids lets the application migrate template-by-template without untranslated
 # screens.  Entries absent from a locale intentionally use the Spanish source text.
-_TERMS: Mapping[str, Mapping[str, str]] = {
+_CORE_TERMS: Mapping[str, Mapping[str, str]] = {
     "en": {
         "Biblioteca": "Library",
         "Análisis": "Analysis",
@@ -111,9 +111,8 @@ _TERMS: Mapping[str, Mapping[str, str]] = {
     },
 }
 
-# Compact translations shared by the other 15 supported languages. More specific
-# product copy can be added without changing templates or routing.
-_NAV = {
+# Compact navigation translations for the other supported languages.
+_NAV_VALUES = {
     "fr": ("Photothèque", "Analyse", "Groupes", "Sessions"),
     "nl": ("Bibliotheek", "Analyse", "Groepen", "Sessies"),
     "pl": ("Biblioteka", "Analiza", "Grupy", "Sesje"),
@@ -130,8 +129,9 @@ _NAV = {
     "ko": ("라이브러리", "분석", "그룹", "세션"),
     "zh": ("照片库", "分析", "分组", "会话"),
 }
-for _locale, _values in _NAV.items():
-    _TERMS[_locale] = dict(zip(("Biblioteca", "Análisis", "Grupos", "Sesiones"), _values))
+_NAV_KEYS = ("Biblioteca", "Análisis", "Grupos", "Sesiones")
+_NAV_TERMS = {locale: dict(zip(_NAV_KEYS, values)) for locale, values in _NAV_VALUES.items()}
+_TERMS: Mapping[str, Mapping[str, str]] = {**_CORE_TERMS, **_NAV_TERMS}
 
 
 def resolve_locale(request: Request) -> str:
@@ -168,9 +168,6 @@ _HTML_LANG = re.compile(r'(<html\b[^>]*\blang\s*=\s*["\'])[^"\']*(["\'])', re.IG
 def localize_html(document: str, locale: str) -> str:
     """Translate exact text nodes while leaving data, markup and scripts intact."""
     document = _HTML_LANG.sub(rf"\g<1>{locale}\g<2>", document, count=1)
-    document = document.replace(
-        "<!-- Active Operator Footer -->", language_selector(locale) + "<!-- Active Operator Footer -->", 1
-    )
 
     def replace(match: re.Match[str]) -> str:
         raw = match.group(1)

@@ -66,9 +66,9 @@ class SessionManagementService:
     def _validate_parameters(profile: str, timeline_gap_minutes: float, burst_gap_seconds: float) -> None:
         if profile not in {"timeline", "burst", "hybrid"}:
             raise ValueError("Unknown grouping profile")
-        if not 0.1 <= timeline_gap_minutes <= 1440:
+        if profile in {"timeline", "hybrid"} and not 0.1 <= timeline_gap_minutes <= 1440:
             raise ValueError("Timeline gap must be between 0.1 and 1440 minutes")
-        if not 0.05 <= burst_gap_seconds <= 60:
+        if profile in {"burst", "hybrid"} and not 0.05 <= burst_gap_seconds <= 60:
             raise ValueError("Burst gap must be between 0.05 and 60 seconds")
 
     @staticmethod

@@ -97,6 +97,14 @@ def test_hybrid_session_management_persists_sessions_and_scoped_bursts(tmp_path)
         assert session.query(PhotoDB).filter_by(session_id=removed_id).count() == 0
 
 
+def test_grouping_profiles_validate_only_their_own_gap(tmp_path):
+    database = Database(tmp_path / "profiles.db")
+    with database.session() as session:
+        service = SessionManagementService(session)
+        assert service.apply_profile("timeline", timeline_gap_minutes=15, burst_gap_seconds=0).bursts == 0
+        assert service.apply_profile("burst", timeline_gap_minutes=0, burst_gap_seconds=1.5).sessions == 0
+
+
 def test_similarity_grouper_assigns_representative_for_nearby_visual_matches(tmp_path):
     from PIL import Image
 
