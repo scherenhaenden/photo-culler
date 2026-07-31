@@ -20,19 +20,16 @@
           <strong>Grupo {{ loop.index }}</strong>
           <span style="color:var(--text-secondary);font-size:11px;">· {{ group.photo_count }} tomas parecidas{% if group.photo_count > group.photos|length %} · mostrando las primeras {{ group.photos|length }}{% endif %}</span>
         </div>
-        <a href="/photos/{{ group.recommended.photo_id }}?group={{ group.id }}" style="font-size:11px;color:var(--accent-teal);">Recomendada: {{ group.recommended.stem_name }} · {{ (group.recommended.score * 100)|round|int }}/100</a>
+        <a href="/groups/{{ group.id }}" class="btn btn-secondary" style="font-size:11px;">Comparar en grande →</a>
       </div>
-      <div class="photo-grid">
-        {% for photo in group.photos %}
-          <div style="position:relative;">
-            {% if photo.photo_id == group.recommended.photo_id %}
-              <span style="position:absolute;z-index:1;left:.45rem;top:.45rem;background:var(--accent-teal);color:#061410;border-radius:99px;padding:.18rem .45rem;font-size:9px;font-weight:800;">RECOMENDADA</span>
-            {% endif %}
-            {% set group_id = group.id %}
-            {% include "partials/photo_card.html" %}
-          </div>
-        {% endfor %}
-      </div>
+      <a href="/groups/{{ group.id }}" style="display:flex;gap:1rem;align-items:center;text-decoration:none;color:inherit;">
+        <img src="/thumbnails/{{ group.recommended.photo_id }}/800" alt="{{ group.recommended.stem_name }}" loading="lazy" style="width:220px;height:150px;object-fit:cover;border-radius:8px;border:1px solid var(--border-color);">
+        <div>
+          <div style="color:var(--accent-teal);font-size:11px;font-weight:800;">RECOMENDADA</div>
+          <strong>{{ group.recommended.stem_name }}</strong>
+          <div style="color:var(--text-secondary);font-size:11px;margin-top:.3rem;">Score {{ (group.recommended.score * 100)|round|int }}/100 · Abrir comparación grande</div>
+        </div>
+      </a>
     </section>
   {% endfor %}
   </div>

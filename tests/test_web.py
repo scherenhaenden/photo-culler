@@ -601,7 +601,14 @@ def test_group_similar_endpoint_persists_detected_groups(web_client, tmp_path):
     assert result.json()["groups"] == 1
     page = web_client.get("/groups")
     assert "similar-one" in page.text
-    assert "similar-two" in page.text
+    with web_client.app.state.db_engine.session() as session:
+        group_id = PhotoRepository(session).get_by_id("similar-one").burst_id
+    assert group_id is not None
+    comparison = web_client.get(f"/groups/{group_id}")
+    assert comparison.status_code == 200
+    assert "similar-one" in comparison.text
+    assert "similar-two" in comparison.text
+    assert "/1600?representation=jpeg" in comparison.text
 
 
 def test_profiles_run_distinct_analyzer_sets_and_report_cache_usage(web_client, tmp_path):

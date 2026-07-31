@@ -7,6 +7,14 @@
   margin-top: 1rem;
 }
 
+.group-compare-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(420px, 1fr));
+  gap:1.25rem;
+}
+
+.group-compare-grid .thumbnail-wrapper { height:min(48vw, 430px); }
+
 .photo-card {
   background-color: var(--bg-card);
   border: 1px solid var(--border-color);
