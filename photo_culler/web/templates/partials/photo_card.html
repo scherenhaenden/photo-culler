@@ -3,10 +3,16 @@
     <img src="/thumbnails/{{ photo.photo_id }}/800?representation={{ representation|default('jpeg') }}" alt="{{ photo.stem_name }}" loading="lazy">
   </div>
   <div class="photo-meta">
-    <div class="photo-stem">{{ photo.stem_name }}</div>
+    {% set preview_file = photo.display_file(representation|default('jpeg')) %}
+    <div class="photo-stem" title="{{ preview_file.path.name if preview_file else photo.stem_name }}">
+      {{ photo.stem_name }}{{ preview_file.path.suffix if preview_file else '' }}
+    </div>
     <div class="photo-badge-row">
       {% set d_val = photo.decision.value if photo.decision.value is defined else photo.decision %}
       <span class="photo-badge badge-{{ d_val|lower }}">{{ d_val }}</span>
+      {% if preview_file %}
+      <span class="photo-badge preview-format" title="Archivo usado para esta vista">{{ preview_file.role.value|upper }}</span>
+      {% endif %}
       {% if photo.availability_status != 'present' %}
       <span class="photo-badge">{{ photo.availability_status }}</span>
       {% endif %}

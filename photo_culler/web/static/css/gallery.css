@@ -83,6 +83,8 @@
   width: fit-content;
 }
 
+.preview-format { background:rgba(88, 166, 255, .16); color:#79c0ff; border:1px solid rgba(88, 166, 255, .35); }
+
 .badge-best { background: var(--badge-best-bg); color: var(--badge-best-text); }
 .badge-keep { background: var(--badge-keep-bg); color: var(--badge-keep-text); }
 .badge-review { background: var(--badge-review-bg); color: var(--badge-review-text); }
