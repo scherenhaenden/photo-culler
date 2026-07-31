@@ -34,6 +34,7 @@ The three frontend directions are intentionally retained. Shared behavior belong
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for replacement boundaries and promotion gates.
 See [`docs/FUTURE_INTELLIGENT_WORKFLOW.md`](docs/FUTURE_INTELLIGENT_WORKFLOW.md) for the planned human-approved selection, auto-editing and restoration workflow.
+See [`docs/DESKTOP_READINESS.md`](docs/DESKTOP_READINESS.md) for the evidence-based comparison of the two Python desktop paths and the completed easy Linux scope.
 
 ### Catalog storage choices
 
