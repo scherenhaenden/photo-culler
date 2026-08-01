@@ -3,7 +3,7 @@
 import time
 from datetime import datetime, timedelta
 from io import BytesIO
-from threading import Event
+from threading import Event, Lock
 from types import SimpleNamespace
 
 import pytest
@@ -136,8 +136,26 @@ def test_black_raw_preview_falls_back_to_its_jpeg_tandem(web_client, tmp_path):
     assert preview.headers["x-photo-culler-representation"] == "jpeg"
     assert Image.open(BytesIO(preview.content)).convert("RGB").getpixel((0, 0))[2] > 100
     library = web_client.get("/library?representation=raw")
-    assert "dark.jpg" in library.text
-    assert "JPEG" in library.text
+    assert "dark.nef" in library.text
+    assert "RAW" in library.text
+
+
+def test_full_preview_sets_the_heic_content_type(web_client, tmp_path):
+    image = tmp_path / "frame.heic"
+    image.write_bytes(b"not-decoded-by-this-route")
+    with web_client.app.state.db_engine.session() as session:
+        PhotoRepository(session).save_photo(
+            Photo(
+                "heic-frame",
+                "frame",
+                files=[FileRecord(image, FileRole.IMAGE, image.stat().st_size, image.stat().st_mtime)],
+            )
+        )
+
+    preview = web_client.get("/previews/heic-frame")
+
+    assert preview.status_code == 200
+    assert preview.headers["content-type"] == "image/heic"
 
 
 def test_gallery_import_api_and_empty_state(web_client, tmp_path):
@@ -576,6 +594,26 @@ def test_similarity_groups_page_shows_recommended_photo(web_client):
     assert "?group=similar-example" in inspector.text
 
 
+def test_similarity_groups_page_clamps_out_of_range_pages(web_client):
+    with web_client.app.state.db_engine.session() as session:
+        repository = PhotoRepository(session)
+        for index in range(13):
+            repository.save_photo(
+                Photo(
+                    f"group-{index}",
+                    f"Group_{index}",
+                    burst_id=f"similar-example-{index}",
+                    score=0.5,
+                )
+            )
+
+    page = web_client.get("/groups?page=999")
+
+    assert page.status_code == 200
+    assert "Página 2 de 2" in page.text
+    assert "Group_9" in page.text
+
+
 def test_group_similar_endpoint_persists_detected_groups(web_client, tmp_path):
     image = tmp_path / "similar.jpg"
     Image.new("RGB", (80, 60), (90, 120, 160)).save(image)
@@ -737,3 +775,36 @@ def test_system_usage_uses_first_gpu_line(web_client, monkeypatch):
 
     assert data["gpu_system"] == 10.0
     assert data["gpu_name"] == "GPU0"
+
+
+def test_system_usage_serializes_shared_cpu_sampling(monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from types import ModuleType
+
+    from photo_culler.web.routes.api import get_system_usage
+
+    active = 0
+    peak_active = 0
+    counter_lock = Lock()
+
+    def sample_cpu(*_args, **_kwargs):
+        nonlocal active, peak_active
+        with counter_lock:
+            active += 1
+            peak_active = max(peak_active, active)
+        time.sleep(0.01)
+        with counter_lock:
+            active -= 1
+        return 10.0
+
+    fake_psutil = ModuleType("psutil")
+    fake_psutil.cpu_percent = sample_cpu
+    fake_psutil.cpu_count = lambda: 4
+    fake_psutil.Process = lambda _pid: SimpleNamespace(cpu_percent=sample_cpu)
+    monkeypatch.setitem(__import__("sys").modules, "psutil", fake_psutil)
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        list(executor.map(lambda _index: get_system_usage(request), range(4)))
+
+    assert peak_active == 1

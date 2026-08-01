@@ -1,5 +1,7 @@
 """Single Photo Inspector & Decision Toggle Route."""
 
+import mimetypes
+
 from fastapi import APIRouter, Form, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse
 from sqlalchemy import and_, or_
@@ -106,7 +108,17 @@ def get_full_preview(photo_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Preview not found")
     if display_file.role not in {FileRole.JPEG, FileRole.IMAGE}:
         raise HTTPException(status_code=404, detail="A browser-viewable original is not available")
-    return FileResponse(display_file.path, headers={"Cache-Control": "private, max-age=3600"})
+    media_type = {
+        ".heic": "image/heic",
+        ".heif": "image/heif",
+    }.get(
+        display_file.path.suffix.lower(), mimetypes.guess_type(display_file.path.name)[0] or "application/octet-stream"
+    )
+    return FileResponse(
+        display_file.path,
+        media_type=media_type,
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
 
 
 @router.post("/photos/{photo_id}/decision", response_class=HTMLResponse)

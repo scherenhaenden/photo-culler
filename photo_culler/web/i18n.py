@@ -184,13 +184,16 @@ def localize_html(document: str, locale: str) -> str:
 
     # Script/style contents can contain markup-like text and must be preserved,
     # but scripts may appear before later rendered markup in the body.
+    placeholder_prefix = "__PHOTO_CULLER_PROTECTED_"
+    while placeholder_prefix in document:
+        placeholder_prefix = f"_{placeholder_prefix}"
     protected: list[str] = []
 
     def protect(match: re.Match[str]) -> str:
         protected.append(match.group(0))
-        return f"__PHOTO_CULLER_PROTECTED_{len(protected) - 1}__"
+        return f"{placeholder_prefix}{len(protected) - 1}__"
 
     localized = _TEXT_NODE.sub(replace, _SCRIPT_OR_STYLE.sub(protect, document))
     for index, block in enumerate(protected):
-        localized = localized.replace(f"__PHOTO_CULLER_PROTECTED_{index}__", block)
+        localized = localized.replace(f"{placeholder_prefix}{index}__", block)
     return localized

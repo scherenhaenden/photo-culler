@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Callable
 
 from photo_culler.core.models import BurstGroup, Photo
-from photo_culler.identity.perceptual_hash import compute_dhash, hamming_distance
+from photo_culler.identity.perceptual_hash import compute_dhash, hamming_distance, is_valid_perceptual_hash
 
 
 class SimilarityGrouper:
@@ -30,7 +30,7 @@ class SimilarityGrouper:
                 continue
             photo.perceptual_hash = compute_dhash(asset)
 
-        candidates = [photo for photo in photos if photo.perceptual_hash]
+        candidates = [photo for photo in photos if is_valid_perceptual_hash(photo.perceptual_hash)]
         candidates.sort(
             key=lambda photo: (
                 photo.metadata.capture_time.isoformat() if photo.metadata and photo.metadata.capture_time else ""
@@ -105,7 +105,7 @@ class SimilarityGrouper:
             return left.stem_name[:12] == right.stem_name[:12]
         try:
             return abs(left_time.timestamp() - right_time.timestamp()) <= self.max_gap.total_seconds()
-        except (OSError, TypeError, ValueError):
+        except OSError, TypeError, ValueError:
             # Mixed/invalid EXIF timezone data must not make grouping fail.
             return left.stem_name[:12] == right.stem_name[:12]
 

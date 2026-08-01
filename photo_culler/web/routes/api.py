@@ -1,5 +1,6 @@
 """Versioned REST application API for frontends and local integrations."""
 
+import threading
 from pathlib import Path
 from typing import cast
 
@@ -219,20 +220,26 @@ def get_system_usage(request: Request) -> dict[str, object]:
 
     cpu_sys = 0.0
     cpu_app = 0.0
+    cpu_app_capacity = 0.0
+    cpu_count = 1
     try:
         import psutil
 
-        cpu_sys = psutil.cpu_percent(interval=None)
-
-        proc = getattr(request.app.state, "system_usage_process", None)
-        if proc is None:
-            proc = psutil.Process(os.getpid())
-            proc.cpu_percent(interval=None)  # Establish psutil's non-blocking baseline once.
-            request.app.state.system_usage_process = proc
-        cpu_app_raw = proc.cpu_percent(interval=None)
-        cpu_count = psutil.cpu_count() or 1
-        cpu_app = cpu_app_raw
-        cpu_app_capacity = cpu_app_raw / cpu_count
+        sampler_lock = getattr(request.app.state, "system_usage_lock", None)
+        if sampler_lock is None:
+            sampler_lock = threading.Lock()
+            request.app.state.system_usage_lock = sampler_lock
+        with sampler_lock:
+            cpu_sys = psutil.cpu_percent(interval=None)
+            proc = getattr(request.app.state, "system_usage_process", None)
+            if proc is None:
+                proc = psutil.Process(os.getpid())
+                proc.cpu_percent(interval=None)  # Establish psutil's non-blocking baseline once.
+                request.app.state.system_usage_process = proc
+            cpu_app_raw = proc.cpu_percent(interval=None)
+            cpu_count = psutil.cpu_count() or 1
+            cpu_app = cpu_app_raw
+            cpu_app_capacity = cpu_app_raw / cpu_count
     except Exception:
         cpu_sys = 5.0
         cpu_app = 1.0

@@ -17,6 +17,9 @@ def get_similarity_groups_page(request: Request, page: int = Query(1, ge=1)):
         repository = PhotoRepository(session)
         page_size = 12
         total_groups = repository.count_bursts("similar-")
+        total_pages = max(1, (total_groups + page_size - 1) // page_size)
+        if page > total_pages:
+            page = total_pages
         group_ids = repository.list_burst_ids("similar-", offset=(page - 1) * page_size, limit=page_size)
         photos = repository.list_by_burst_ids(group_ids)
 
@@ -41,7 +44,7 @@ def get_similarity_groups_page(request: Request, page: int = Query(1, ge=1)):
             "groups": groups,
             "grouped_photo_count": sum(group["photo_count"] for group in groups),
             "page": page,
-            "total_pages": max(1, (total_groups + page_size - 1) // page_size),
+            "total_pages": total_pages,
             "total_groups": total_groups,
         },
     )
