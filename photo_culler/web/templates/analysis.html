@@ -53,7 +53,7 @@
       <div class="panel-title" style="font-size:14px;">Perfiles disponibles</div>
       <span>⚡</span>
     </div>
-    <p class="analysis-intro">Selecciona uno para abrir sus analizadores, pesos y reglas. El botón de ejecución usa el perfil abierto.</p>
+    <p class="analysis-intro">Selecciona uno para abrir sus analizadores, pesos y reglas. Las mediciones ya calculadas se reutilizan entre perfiles; sólo se ejecutan los analizadores que falten.</p>
     <div id="profile-list" class="profile-list"></div>
   </section>
 
@@ -86,6 +86,7 @@
     <span id="stat-analyzers">0 analizadores</span>
     <span id="stat-executed">0 cálculos nuevos</span>
     <span id="stat-cached">0 desde caché</span>
+    <label>Hilos <input id="worker-count" type="number" min="1" max="16" value="1" onchange="setWorkers(this.value)" style="width:3.5rem;"></label>
   </div>
   <div style="display:flex;gap:.5rem;margin-top:1rem;">
     <button class="btn btn-secondary" id="btn-pause" type="button" onclick="controlAnalysis('pause')">Pausar</button>
@@ -172,7 +173,8 @@
         </select>
       </div>
       <div class="editor-actions">
-        <button id="btn-start" type="button" class="btn" onclick="startAnalysis()" ${isNew ? "disabled" : ""}>▶ Ejecutar este perfil</button>
+        <button id="btn-start" type="button" class="btn" onclick="startAnalysis()" ${isNew ? "disabled" : ""}>▶ Analizar pendientes</button>
+        <button id="btn-start-all" type="button" class="btn btn-secondary" onclick="startAnalysis('all')" ${isNew ? "disabled" : ""}>Analizar todo</button>
         <button type="button" class="btn btn-secondary" onclick="saveProfile(${isNew})">${isNew ? "Crear perfil" : "Guardar ajustes"}</button>
         ${profile.builtin && !isNew ? `<button type="button" class="btn btn-secondary" onclick="restoreProfile()">Restaurar base</button>` : ""}
         ${!profile.builtin && !isNew ? `<button type="button" class="btn btn-secondary" onclick="deleteProfile()">Eliminar</button>` : ""}
@@ -263,6 +265,9 @@
     document.getElementById("stat-analyzers").textContent = `${(data.analyzers || []).length} analizadores`;
     document.getElementById("stat-executed").textContent = `${data.executed_metrics || 0} cálculos nuevos`;
     document.getElementById("stat-cached").textContent = `${data.cached_metrics || 0} desde caché`;
+    const workerInput = document.getElementById("worker-count");
+    if (document.activeElement !== workerInput) workerInput.value = data.workers || 1;
+    workerInput.max = data.max_workers || 16;
     msg.style.color = "var(--text-secondary)";
 
     if (["running","paused","completed","failed","cancelled"].includes(data.status)) {
@@ -276,7 +281,7 @@
     const active = ["running","paused"].includes(data.status);
     if (btn) {
       btn.disabled = active;
-      btn.textContent = active ? "Analizando…" : "▶ Ejecutar este perfil";
+      btn.textContent = active ? "Analizando…" : "▶ Analizar pendientes";
     }
     pauseBtn.hidden = data.status !== "running";
     resumeBtn.hidden = data.status !== "paused";
@@ -291,10 +296,11 @@
     eventSource.onmessage = event => updateProgress(JSON.parse(event.data));
   }
 
-  async function startAnalysis() {
+  async function startAnalysis(scope = "remaining") {
     if (!selectedId) return;
     const formData = new FormData();
     formData.append("profile", selectedId);
+    formData.append("scope", scope);
     const result = await api("/analysis/start", {method:"POST", body:formData});
     if (result.status !== "ok") {
       document.getElementById("editor-status").className = "status-note error";
@@ -302,6 +308,15 @@
       return;
     }
     checkStatus();
+  }
+
+  async function setWorkers(value) {
+    const formData = new FormData();
+    formData.append("workers", value);
+    const result = await api("/analysis/workers", {method:"POST", body:formData});
+    const workerInput = document.getElementById("worker-count");
+    if (document.activeElement !== workerInput) workerInput.value = result.workers;
+    workerInput.max = result.max_workers;
   }
 
   async function groupSimilarPhotos() {

@@ -15,9 +15,16 @@ def get_dashboard(request: Request):
 
     lib_service = LibraryService(db_engine)
     summary = lib_service.get_summary()
+    analysis = request.app.state.analysis_jobs.snapshot()
+    import_jobs = request.app.state.gallery_imports.list_jobs(limit=5)
 
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
-        context={"active_tab": "dashboard", "summary": summary},
+        context={
+            "active_tab": "dashboard",
+            "summary": summary,
+            "analysis": analysis,
+            "import_jobs": import_jobs,
+        },
     )

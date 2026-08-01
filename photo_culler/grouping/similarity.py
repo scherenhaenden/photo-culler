@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Callable
 
 from photo_culler.core.models import BurstGroup, Photo
-from photo_culler.identity.perceptual_hash import compute_dhash, hamming_distance
+from photo_culler.identity.perceptual_hash import compute_dhash, hamming_distance, is_valid_perceptual_hash
 
 
 class SimilarityGrouper:
@@ -30,7 +30,7 @@ class SimilarityGrouper:
                 continue
             photo.perceptual_hash = compute_dhash(asset)
 
-        candidates = [photo for photo in photos if photo.perceptual_hash]
+        candidates = [photo for photo in photos if is_valid_perceptual_hash(photo.perceptual_hash)]
         candidates.sort(
             key=lambda photo: (
                 photo.metadata.capture_time.isoformat() if photo.metadata and photo.metadata.capture_time else ""
@@ -49,13 +49,31 @@ class SimilarityGrouper:
             if left_root != right_root:
                 parent[right_root] = left_root
 
+        # A distance of <= 8 guarantees that two 64-bit hashes share at least
+        # one exact chunk when split into nine chunks. The index avoids an
+        # O(n²) scan of a large catalog while retaining every valid candidate.
+        chunk_index: dict[tuple[int, str], list[int]] = {}
+        exact_representatives: dict[tuple[str, str], int] = {}
         for index, photo in enumerate(candidates):
-            for other_index in range(index - 1, -1, -1):
+            photo_hash = photo.perceptual_hash or ""
+            time_key = "" if photo.metadata and photo.metadata.capture_time else photo.stem_name[:12]
+            exact_key = (photo_hash, time_key)
+            exact_index = exact_representatives.get(exact_key)
+            if exact_index is not None and self._within_time_window(photo, candidates[exact_index]):
+                union(index, exact_index)
+
+            possible_matches: set[int] = set()
+            for chunk_position, chunk in enumerate(self._hash_chunks(photo_hash)):
+                possible_matches.update(chunk_index.get((chunk_position, chunk), []))
+            for other_index in possible_matches:
                 other = candidates[other_index]
-                if not self._within_time_window(photo, other):
-                    break
-                if hamming_distance(photo.perceptual_hash, other.perceptual_hash) <= self.max_distance:
+                if other.perceptual_hash == photo_hash or not self._within_time_window(photo, other):
+                    continue
+                if hamming_distance(photo_hash, other.perceptual_hash or "") <= self.max_distance:
                     union(index, other_index)
+            for chunk_position, chunk in enumerate(self._hash_chunks(photo_hash)):
+                chunk_index.setdefault((chunk_position, chunk), []).append(index)
+            exact_representatives[exact_key] = index
 
         clusters: dict[int, list[Photo]] = {}
         for index, photo in enumerate(candidates):
@@ -90,3 +108,19 @@ class SimilarityGrouper:
         except OSError, TypeError, ValueError:
             # Mixed/invalid EXIF timezone data must not make grouping fail.
             return left.stem_name[:12] == right.stem_name[:12]
+
+    def _hash_chunks(self, perceptual_hash: str) -> list[str]:
+        """Split a hexadecimal hash so a close hash shares one exact chunk."""
+        try:
+            bits = f"{int(perceptual_hash, 16):0{len(perceptual_hash) * 4}b}"
+        except ValueError:
+            bits = perceptual_hash
+        chunk_count = self.max_distance + 1
+        base_size, remainder = divmod(len(bits), chunk_count)
+        chunks = []
+        cursor = 0
+        for index in range(chunk_count):
+            size = base_size + (1 if index < remainder else 0)
+            chunks.append(bits[cursor : cursor + size])
+            cursor += size
+        return chunks

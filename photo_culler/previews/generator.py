@@ -44,3 +44,13 @@ class PreviewGenerator:
             pass
 
         return results
+
+    @staticmethod
+    def has_visible_content(image_path: Path) -> bool:
+        """Reject decoder previews that are effectively a uniform black frame."""
+        try:
+            with Image.open(image_path) as image:
+                low, high = image.convert("L").getextrema()
+                return high > 8 and high - low > 4
+        except Exception:
+            return False

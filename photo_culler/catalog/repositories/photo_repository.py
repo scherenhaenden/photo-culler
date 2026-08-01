@@ -1,9 +1,11 @@
 """Photo Repository for persisting and querying Photo domain objects."""
 
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session as SQLAlchemySession
 
 from ...core.enums import DecisionState, FileRole, QualityTier
@@ -64,6 +66,13 @@ class PhotoRepository:
                     full_hash=f.full_hash,
                 )
                 self.session.add(db_file)
+                self.session.flush()
+            else:
+                existing_file.role = f.role.value if isinstance(f.role, FileRole) else str(f.role)
+                existing_file.size_bytes = f.size_bytes
+                existing_file.modified_time = f.modified_time
+                existing_file.quick_hash = f.quick_hash
+                existing_file.full_hash = f.full_hash
 
         # Save metadata
         if photo.metadata:
@@ -115,6 +124,77 @@ class PhotoRepository:
         """Return all photos in catalog as domain objects."""
         db_photos = self.session.query(PhotoDB).all()
         return [self._to_domain(p) for p in db_photos]
+
+    def list_needing_analysis(self, profile_id: str, profile_fingerprint: str) -> List[Photo]:
+        """Return only photos missing, outdating, or changing since an analysis.
+
+        The first lightweight query avoids constructing domain objects (and their file
+        records) for the already-complete majority of a large catalog.
+        """
+        rows = (
+            self.session.query(
+                PhotoDB.photo_id,
+                PhotoDB.analysis_summary_json,
+                func.max(FileDB.modified_time),
+            )
+            .outerjoin(FileDB, FileDB.photo_id == PhotoDB.id)
+            .group_by(PhotoDB.id)
+            .all()
+        )
+        pending_ids = [
+            photo_id
+            for photo_id, summary_json, newest_file_mtime in rows
+            if self._needs_analysis(summary_json, newest_file_mtime, profile_id, profile_fingerprint)
+        ]
+        if not pending_ids:
+            return []
+        db_photos = self.session.query(PhotoDB).filter(PhotoDB.photo_id.in_(pending_ids)).all()
+        return [self._to_domain(photo) for photo in db_photos]
+
+    def list_by_burst_prefix(self, prefix: str) -> List[Photo]:
+        """Return only photos belonging to burst groups with the given prefix."""
+        db_photos = self.session.query(PhotoDB).filter(PhotoDB.burst_id.like(f"{prefix}%")).all()
+        return [self._to_domain(photo) for photo in db_photos]
+
+    def list_burst_ids(self, prefix: str, offset: int, limit: int) -> List[str]:
+        """Return one bounded page of burst IDs without loading their photos."""
+        return [
+            row[0]
+            for row in self.session.query(PhotoDB.burst_id)
+            .filter(PhotoDB.burst_id.like(f"{prefix}%"))
+            .distinct()
+            .order_by(PhotoDB.burst_id)
+            .offset(offset)
+            .limit(limit)
+            .all()
+        ]
+
+    def count_bursts(self, prefix: str) -> int:
+        """Count logical similarity groups in SQL."""
+        return self.session.query(PhotoDB.burst_id).filter(PhotoDB.burst_id.like(f"{prefix}%")).distinct().count()
+
+    def list_by_burst_ids(self, burst_ids: List[str]) -> List[Photo]:
+        """Load photos only for the requested similarity groups."""
+        if not burst_ids:
+            return []
+        db_photos = self.session.query(PhotoDB).filter(PhotoDB.burst_id.in_(burst_ids)).all()
+        return [self._to_domain(photo) for photo in db_photos]
+
+    @staticmethod
+    def _needs_analysis(
+        summary_json: str, newest_file_mtime: float | None, profile_id: str, profile_fingerprint: str
+    ) -> bool:
+        try:
+            summary = json.loads(summary_json or "{}")
+            analyzed_at = datetime.fromisoformat(str(summary.get("analyzed_at", "")).replace("Z", "+00:00"))
+        except TypeError, ValueError, json.JSONDecodeError:
+            return True
+        if summary.get("profile_id") != profile_id:
+            return True
+        stored_fingerprint = summary.get("profile_fingerprint")
+        if stored_fingerprint != profile_fingerprint:
+            return True
+        return newest_file_mtime is not None and newest_file_mtime > analyzed_at.timestamp()
 
     def list_page(
         self,

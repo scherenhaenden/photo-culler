@@ -1,38 +1,35 @@
 {% extends "base.html" %}
-
 {% block title %}Sesiones y Ráfagas - Photo Culler{% endblock %}
-
 {% block content %}
-<div class="header-bar">
-  <h1>Sesiones y Ráfagas</h1>
-</div>
+<div class="header-bar"><div><h1>Sesiones y Ráfagas</h1><div class="session-subtitle">Organiza una toma completa y encuentra sus secuencias continuas en una sola pasada.</div></div></div>
 
-<div class="dashboard-panel" style="max-width: 800px; margin-bottom: 2rem;">
-  <div class="dashboard-panel-header">
-    <div class="panel-title" style="font-size: 14px;">Administración de Sesiones</div>
-    <span class="panel-badge" style="background-color: var(--accent-teal);">{{ photo_count }} fotos registradas</span>
-  </div>
+{% if message %}<div class="session-notice" role="status">✓ {{ message }}</div>{% endif %}
 
-  <p style="color: var(--text-secondary); line-height: 1.6; font-size: 12px; margin-bottom: 1.5rem;">
-    Actualmente hay <strong style="color: #ffffff;">{{ photo_count }}</strong> fotografías registradas en el catálogo. Utiliza los potentes algoritmos del motor de agrupación para clasificar automáticamente tus sesiones y detectar ráfagas de alta frecuencia.
-  </p>
-
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-top: 1.5rem;">
-    <div class="pipeline-job-card">
-      <div class="job-card-header">
-        <span class="job-name">Timeline Engine</span>
-        <span>⏱️ Active</span>
-      </div>
-      <p class="job-desc" style="margin-top: 0.5rem;">Agrupación cronológica por intervalos de inactividad (umbral configurable de 15 minutos).</p>
+<section class="dashboard-panel session-control-panel">
+  <div class="dashboard-panel-header"><div class="panel-title">Motor de agrupación</div><span class="panel-badge">{{ photo_count }} fotos · {{ burst_count }} ráfagas</span></div>
+  <form method="post" action="/sessions/group" id="session-group-form">
+    <div class="profile-grid">
+      <label class="profile-option"><input type="radio" name="profile" value="timeline"><span><strong>Timeline</strong><small>Separa sesiones cuando hay una pausa larga.</small></span></label>
+      <label class="profile-option"><input type="radio" name="profile" value="burst"><span><strong>Burst</strong><small>Busca disparos continuos sin cambiar tus sesiones.</small></span></label>
+      <label class="profile-option selected"><input type="radio" name="profile" value="hybrid" checked><span><strong>Híbrido recomendado</strong><small>Primero crea sesiones y luego detecta ráfagas dentro de cada una.</small></span></label>
     </div>
-
-    <div class="pipeline-job-card">
-      <div class="job-card-header">
-        <span class="job-name">Burst Analyzer</span>
-        <span>⚡ Ready</span>
-      </div>
-      <p class="job-desc" style="margin-top: 0.5rem;">Identificación de disparos continuos a alta velocidad (intervalo menor de 1.5 segundos).</p>
+    <div class="session-settings">
+      <label>Pausa entre sesiones (min)<input name="timeline_gap_minutes" type="number" min="0.1" max="1440" step="0.1" value="15" required></label>
+      <label>Intervalo de ráfaga (s)<input name="burst_gap_seconds" type="number" min="0.05" max="60" step="0.05" value="1.5" required></label>
+      <button class="btn" id="run-grouping" type="submit">Analizar y organizar</button>
     </div>
-  </div>
-</div>
+  </form>
+</section>
+
+<section class="dashboard-panel">
+  <div class="dashboard-panel-header"><div class="panel-title">Sesiones detectadas</div><span class="panel-badge">{{ sessions|length }}</span></div>
+  {% if sessions %}<div class="session-list">
+  {% for item in sessions %}<article class="session-row" data-session-id="{{ item.session_id }}">
+    <div class="session-meta"><strong>{{ item.name }}</strong><span>{{ item.start_time.strftime('%d/%m/%Y %H:%M') }} — {{ item.end_time.strftime('%H:%M') }} · {{ item.photo_count }} fotos</span></div>
+    <form method="post" action="/sessions/{{ item.session_id }}/rename" class="session-rename"><input aria-label="Nuevo nombre" name="name" value="{{ item.name }}" maxlength="255" required><button class="btn btn-secondary" type="submit">Guardar</button></form>
+    <form method="post" action="/sessions/{{ item.session_id }}/delete" class="session-delete" onsubmit="return confirm('¿Desvincular y eliminar esta sesión?')"><button class="btn btn-danger" type="submit">Eliminar</button></form>
+  </article>{% endfor %}
+  </div>{% else %}<div class="session-empty"><strong>Aún no hay sesiones.</strong><span>Elige el perfil híbrido para organizar el catálogo y detectar ráfagas a la vez.</span></div>{% endif %}
+</section>
+<script>document.querySelectorAll('.profile-option input').forEach(input => input.addEventListener('change', () => { document.querySelectorAll('.profile-option').forEach(x => x.classList.toggle('selected', x.contains(input))); }));</script>
 {% endblock %}

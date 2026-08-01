@@ -2,14 +2,18 @@
 
 import time
 from datetime import datetime, timedelta
-from threading import Event
+from io import BytesIO
+from threading import Event, Lock
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
+from starlette.responses import StreamingResponse
 
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
-from photo_culler.core.enums import FileRole
+from photo_culler.catalog.schema import FileDB, SessionDB
+from photo_culler.core.enums import DecisionState, FileRole
 from photo_culler.core.models import FileRecord, MetadataRecord, Photo
 from photo_culler.scanner.directory_scanner import DirectoryScanner
 from photo_culler.web.app import create_app
@@ -34,6 +38,28 @@ def test_dashboard_page(web_client):
     response = web_client.get("/")
     assert response.status_code == 200
     assert "Dashboard del Catálogo" in response.text
+    assert 'id="language-picker"' in response.text
+
+
+def test_language_query_localizes_html_and_persists_cookie(web_client):
+    response = web_client.get("/?lang=de")
+
+    assert response.status_code == 200
+    assert '<html lang="de">' in response.text
+    assert "Bibliothek" in response.text
+    assert "photo_culler_locale=de" in response.headers["set-cookie"]
+
+
+def test_i18n_middleware_does_not_buffer_streaming_html(web_client):
+    async def stream():
+        yield b'<html lang="es"><body>Biblioteca</body></html>'
+
+    web_client.app.add_api_route(
+        "/streaming-html", lambda: StreamingResponse(stream(), media_type="text/html"), methods=["GET"]
+    )
+    response = web_client.get("/streaming-html?lang=de")
+    assert response.text == '<html lang="es"><body>Biblioteca</body></html>'
+    assert "language-picker" not in response.text
 
 
 def test_library_page(web_client):
@@ -44,11 +70,92 @@ def test_library_page(web_client):
     assert "/api/v1/import-estimates" not in response.text
 
 
+def test_groups_and_sessions_do_not_load_the_full_catalog(web_client, monkeypatch):
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("The full catalog must not be loaded for this page")
+
+    monkeypatch.setattr(PhotoRepository, "list_all", fail_if_called)
+
+    assert web_client.get("/groups").status_code == 200
+    assert web_client.get("/sessions").status_code == 200
+
+
 def test_library_pagination_and_filters(web_client):
     # Test library route with query params
     response = web_client.get("/library?page=1&limit=5&sort=score_desc&decision=best")
     assert response.status_code == 200
     assert "Biblioteca de Fotografías" in response.text
+
+
+def test_raw_jpeg_tandem_uses_jpeg_for_the_default_preview(web_client, tmp_path):
+    raw = tmp_path / "frame.nef"
+    raw.write_bytes(b"raw source is never modified")
+    jpeg = tmp_path / "frame.jpg"
+    Image.new("RGB", (48, 32), color=(90, 120, 160)).save(jpeg)
+    with web_client.app.state.db_engine.session() as session:
+        PhotoRepository(session).save_photo(
+            Photo(
+                "tandem",
+                "frame",
+                files=[
+                    FileRecord(raw, FileRole.RAW, raw.stat().st_size, raw.stat().st_mtime),
+                    FileRecord(jpeg, FileRole.JPEG, jpeg.stat().st_size, jpeg.stat().st_mtime),
+                ],
+            )
+        )
+
+    preview = web_client.get("/thumbnails/tandem/800")
+    assert preview.status_code == 200
+    assert preview.headers["content-type"] == "image/jpeg"
+    assert raw.read_bytes() == b"raw source is never modified"
+    library = web_client.get("/library?representation=jpeg")
+    assert "frame.jpg" in library.text
+    assert "JPEG" in library.text
+
+
+def test_black_raw_preview_falls_back_to_its_jpeg_tandem(web_client, tmp_path):
+    raw = tmp_path / "dark.nef"
+    Image.new("RGB", (32, 32), color=(0, 0, 0)).save(raw, format="JPEG")
+    jpeg = tmp_path / "dark.jpg"
+    Image.new("RGB", (32, 32), color=(80, 130, 180)).save(jpeg)
+    with web_client.app.state.db_engine.session() as session:
+        PhotoRepository(session).save_photo(
+            Photo(
+                "dark-tandem",
+                "dark",
+                files=[
+                    FileRecord(raw, FileRole.RAW, raw.stat().st_size, raw.stat().st_mtime),
+                    FileRecord(jpeg, FileRole.JPEG, jpeg.stat().st_size, jpeg.stat().st_mtime),
+                ],
+            )
+        )
+
+    preview = web_client.get("/thumbnails/dark-tandem/800?representation=raw")
+
+    assert preview.status_code == 200
+    assert preview.headers["x-photo-culler-representation"] == "jpeg"
+    assert Image.open(BytesIO(preview.content)).convert("RGB").getpixel((0, 0))[2] > 100
+    library = web_client.get("/library?representation=raw")
+    assert "dark.nef" in library.text
+    assert "RAW" in library.text
+
+
+def test_full_preview_sets_the_heic_content_type(web_client, tmp_path):
+    image = tmp_path / "frame.heic"
+    image.write_bytes(b"not-decoded-by-this-route")
+    with web_client.app.state.db_engine.session() as session:
+        PhotoRepository(session).save_photo(
+            Photo(
+                "heic-frame",
+                "frame",
+                files=[FileRecord(image, FileRole.IMAGE, image.stat().st_size, image.stat().st_mtime)],
+            )
+        )
+
+    preview = web_client.get("/previews/heic-frame")
+
+    assert preview.status_code == 200
+    assert preview.headers["content-type"] == "image/heic"
 
 
 def test_gallery_import_api_and_empty_state(web_client, tmp_path):
@@ -270,6 +377,70 @@ def test_desktop_token_middleware_blocked(tmp_path):
     assert response_cookie.status_code == 200
 
 
+def test_sessions_web_workflow_combines_timeline_and_burst_engines(web_client):
+    base_time = datetime(2026, 7, 25, 18, 0, 0)
+    with web_client.app.state.db_engine.session() as session:
+        repository = PhotoRepository(session)
+        repository.save_photo(Photo("session-a", "A", metadata=MetadataRecord(capture_time=base_time)))
+        repository.save_photo(
+            Photo("session-b", "B", metadata=MetadataRecord(capture_time=base_time + timedelta(seconds=1)))
+        )
+
+    grouped = web_client.post(
+        "/sessions/group",
+        data={"profile": "hybrid", "timeline_gap_minutes": "15", "burst_gap_seconds": "1.5"},
+        follow_redirects=True,
+    )
+    assert grouped.status_code == 200
+    assert "Procesadas: 1 sesiones y 1 ráfagas" in grouped.text
+    assert "Híbrido recomendado" in grouped.text
+
+    with web_client.app.state.db_engine.session() as session:
+        session_id = session.query(SessionDB).one().session_id
+    renamed = web_client.post(
+        f"/sessions/{session_id}/rename", data={"name": "Retratos familiares"}, follow_redirects=True
+    )
+    assert renamed.status_code == 200
+    assert "Retratos familiares" in renamed.text
+
+    deleted = web_client.post(f"/sessions/{session_id}/delete", follow_redirects=True)
+    assert deleted.status_code == 200
+    assert "Aún no hay sesiones" in deleted.text
+
+
+def test_sessions_redirects_percent_encode_messages(web_client):
+    response = web_client.post(
+        "/sessions/group",
+        data={"profile": "hybrid", "timeline_gap_minutes": "15", "burst_gap_seconds": "1.5"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert "%C3%A1fagas" in response.headers["location"]
+
+
+def test_sessions_web_workflow_reports_validation_and_missing_session_errors(web_client):
+    invalid_group = web_client.post(
+        "/sessions/group",
+        data={"profile": "unknown", "timeline_gap_minutes": "15", "burst_gap_seconds": "1.5"},
+    )
+    assert invalid_group.status_code == 422
+    assert invalid_group.json()["detail"] == "Unknown grouping profile"
+
+    invalid_gap = web_client.post(
+        "/sessions/group",
+        data={"profile": "hybrid", "timeline_gap_minutes": "0", "burst_gap_seconds": "1.5"},
+    )
+    assert invalid_gap.status_code == 422
+    assert "Timeline gap" in invalid_gap.json()["detail"]
+
+    missing_rename = web_client.post("/sessions/missing/rename", data={"name": "Missing"})
+    assert missing_rename.status_code == 404
+    invalid_name = web_client.post("/sessions/missing/rename", data={"name": "   "})
+    assert invalid_name.status_code == 422
+    missing_delete = web_client.post("/sessions/missing/delete")
+    assert missing_delete.status_code == 404
+
+
 def test_analysis_start_and_sse_progress(web_client):
     # Start analysis
     response = web_client.post("/analysis/start", data={"profile": "fast"})
@@ -348,6 +519,14 @@ def test_analysis_rejects_unknown_profile(web_client):
     assert response.status_code == 422
 
 
+def test_analysis_workers_can_be_changed_without_restarting(web_client):
+    response = web_client.post("/analysis/workers", data={"workers": "1"})
+
+    assert response.status_code == 200
+    assert response.json()["workers"] == 1
+    assert response.json()["max_workers"] >= 1
+
+
 def test_analysis_profiles_can_be_inspected_created_updated_and_deleted(web_client):
     profiles = web_client.get("/analysis/profiles")
     assert profiles.status_code == 200
@@ -415,6 +594,26 @@ def test_similarity_groups_page_shows_recommended_photo(web_client):
     assert "?group=similar-example" in inspector.text
 
 
+def test_similarity_groups_page_clamps_out_of_range_pages(web_client):
+    with web_client.app.state.db_engine.session() as session:
+        repository = PhotoRepository(session)
+        for index in range(13):
+            repository.save_photo(
+                Photo(
+                    f"group-{index}",
+                    f"Group_{index}",
+                    burst_id=f"similar-example-{index}",
+                    score=0.5,
+                )
+            )
+
+    page = web_client.get("/groups?page=999")
+
+    assert page.status_code == 200
+    assert "Página 2 de 2" in page.text
+    assert "Group_9" in page.text
+
+
 def test_group_similar_endpoint_persists_detected_groups(web_client, tmp_path):
     image = tmp_path / "similar.jpg"
     Image.new("RGB", (80, 60), (90, 120, 160)).save(image)
@@ -444,7 +643,15 @@ def test_group_similar_endpoint_persists_detected_groups(web_client, tmp_path):
     assert result.json()["groups"] == 1
     page = web_client.get("/groups")
     assert "similar-one" in page.text
-    assert "similar-two" in page.text
+    with web_client.app.state.db_engine.session() as session:
+        group_id = PhotoRepository(session).get_by_id("similar-one").burst_id
+    assert group_id is not None
+    comparison = web_client.get(f"/groups/{group_id}")
+    assert comparison.status_code == 200
+    assert "similar-one" in comparison.text
+    assert "similar-two" in comparison.text
+    assert "/previews/similar-one" in comparison.text
+    assert web_client.get("/previews/similar-one").status_code == 200
 
 
 def test_profiles_run_distinct_analyzer_sets_and_report_cache_usage(web_client, tmp_path):
@@ -465,8 +672,8 @@ def test_profiles_run_distinct_analyzer_sets_and_report_cache_usage(web_client, 
     with web_client.app.state.db_engine.session() as session:
         PhotoRepository(session).save_photo(photo)
 
-    def run(profile_id):
-        assert web_client.post("/analysis/start", data={"profile": profile_id}).json()["status"] == "ok"
+    def run(profile_id, scope="all"):
+        assert web_client.post("/analysis/start", data={"profile": profile_id, "scope": scope}).json()["status"] == "ok"
         deadline = time.monotonic() + 8
         while web_client.app.state.analysis_jobs.is_running and time.monotonic() < deadline:
             time.sleep(0.02)
@@ -475,14 +682,25 @@ def test_profiles_run_distinct_analyzer_sets_and_report_cache_usage(web_client, 
         return result
 
     fast = run("fast")
+    with web_client.app.state.db_engine.session() as session:
+        assert PhotoRepository(session).get_by_id("profile-check").decision is not DecisionState.UNPROCESSED
+    fast_remaining = run("fast", "remaining")
+    with web_client.app.state.db_engine.session() as session:
+        session.query(FileDB).filter(FileDB.relative_path == str(image_path)).update(
+            {FileDB.modified_time: time.time() + 1}
+        )
+    changed_fast = run("fast", "remaining")
     technical = run("technical")
     technical_again = run("technical")
     concert = run("concert")
 
     assert (fast["executed_metrics"], fast["cached_metrics"]) == (4, 0)
-    assert (technical["executed_metrics"], technical["cached_metrics"]) == (8, 0)
+    assert fast_remaining["total"] == 0
+    assert "No quedan fotos pendientes" in str(fast_remaining["message"])
+    assert (changed_fast["total"], changed_fast["executed_metrics"], changed_fast["cached_metrics"]) == (1, 0, 4)
+    assert (technical["executed_metrics"], technical["cached_metrics"]) == (4, 4)
     assert (technical_again["executed_metrics"], technical_again["cached_metrics"]) == (0, 8)
-    assert (concert["executed_metrics"], concert["cached_metrics"]) == (8, 0)
+    assert (concert["executed_metrics"], concert["cached_metrics"]) == (0, 8)
 
     detail = web_client.get("/photos/profile-check")
     assert detail.status_code == 200
@@ -527,3 +745,66 @@ def test_analysis_cooperative_controls_and_idle_conflicts(web_client):
     assert "Pausar" in page.text
     assert "Reanudar" in page.text
     assert "Cancelar" in page.text
+
+
+def test_system_usage_api(web_client):
+    response = web_client.get("/api/v1/system-usage")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["contract_version"] == 1
+    assert "cpu_system" in data
+    assert "cpu_app" in data
+    assert "cpu_app_capacity" in data
+    assert "cpu_core_count" in data
+    assert "gpu_system" in data
+    assert "gpu_name" in data
+    assert isinstance(data["cpu_system"], (int, float))
+    assert isinstance(data["cpu_app"], (int, float))
+    assert isinstance(data["gpu_system"], (int, float))
+    assert isinstance(data["gpu_name"], str)
+
+
+def test_system_usage_uses_first_gpu_line(web_client, monkeypatch):
+    monkeypatch.setattr("shutil.which", lambda command: "/usr/bin/nvidia-smi")
+    monkeypatch.setattr(
+        "subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(stdout="10, GPU0\n20, GPU1"),
+    )
+
+    data = web_client.get("/api/v1/system-usage").json()
+
+    assert data["gpu_system"] == 10.0
+    assert data["gpu_name"] == "GPU0"
+
+
+def test_system_usage_serializes_shared_cpu_sampling(monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from types import ModuleType
+
+    from photo_culler.web.routes.api import get_system_usage
+
+    active = 0
+    peak_active = 0
+    counter_lock = Lock()
+
+    def sample_cpu(*_args, **_kwargs):
+        nonlocal active, peak_active
+        with counter_lock:
+            active += 1
+            peak_active = max(peak_active, active)
+        time.sleep(0.01)
+        with counter_lock:
+            active -= 1
+        return 10.0
+
+    fake_psutil = ModuleType("psutil")
+    fake_psutil.cpu_percent = sample_cpu
+    fake_psutil.cpu_count = lambda: 4
+    fake_psutil.Process = lambda _pid: SimpleNamespace(cpu_percent=sample_cpu)
+    monkeypatch.setitem(__import__("sys").modules, "psutil", fake_psutil)
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        list(executor.map(lambda _index: get_system_usage(request), range(4)))
+
+    assert peak_active == 1

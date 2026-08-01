@@ -43,9 +43,20 @@ def compute_dhash(image_input, hash_size: int = 8) -> Optional[str]:
         return None
 
 
+def is_valid_perceptual_hash(value: str | None) -> bool:
+    """Return whether a persisted perceptual hash is valid hexadecimal text."""
+    if not value:
+        return False
+    try:
+        int(value, 16)
+    except ValueError:
+        return False
+    return True
+
+
 def hamming_distance(hash1: str, hash2: str) -> int:
     """Calculate bitwise Hamming distance between two hex perceptual hashes."""
-    if not hash1 or not hash2 or len(hash1) != len(hash2):
+    if not is_valid_perceptual_hash(hash1) or not is_valid_perceptual_hash(hash2) or len(hash1) != len(hash2):
         return 999
     val1 = int(hash1, 16)
     val2 = int(hash2, 16)

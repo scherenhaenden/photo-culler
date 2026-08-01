@@ -1,12 +1,19 @@
 <a href="/photos/{{ photo.photo_id }}{% if group_id %}?group={{ group_id }}{% endif %}" class="photo-card" id="photo-card-{{ photo.photo_id }}">
   <div class="thumbnail-wrapper">
-    <img src="/thumbnails/{{ photo.photo_id }}/800" alt="{{ photo.stem_name }}" loading="lazy">
+    {% set effective_representation = effective_representations.get(photo.photo_id, representation|default('jpeg')) if effective_representations is defined else representation|default('jpeg') %}
+    <img src="/thumbnails/{{ photo.photo_id }}/{{ thumbnail_size|default('800') }}?representation={{ effective_representation }}" alt="{{ photo.stem_name }}" loading="lazy">
   </div>
   <div class="photo-meta">
-    <div class="photo-stem">{{ photo.stem_name }}</div>
+    {% set preview_file = photo.display_file(effective_representation) %}
+    <div class="photo-stem" title="{{ preview_file.path.name if preview_file else photo.stem_name }}">
+      {{ photo.stem_name }}{{ preview_file.path.suffix if preview_file else '' }}
+    </div>
     <div class="photo-badge-row">
       {% set d_val = photo.decision.value if photo.decision.value is defined else photo.decision %}
       <span class="photo-badge badge-{{ d_val|lower }}">{{ d_val }}</span>
+      {% if preview_file %}
+      <span class="photo-badge preview-format" title="{{ translate('Archivo usado para esta vista', resolve_locale(request)) }}">{{ preview_file.role.value|upper }}</span>
+      {% endif %}
       {% if photo.availability_status != 'present' %}
       <span class="photo-badge">{{ photo.availability_status }}</span>
       {% endif %}

@@ -16,7 +16,7 @@ _COMPONENTS = {
 
 
 def build_score_explanation(
-    profile: dict[str, Any], score: dict[str, Any], results: dict[str, AnalysisResult]
+    profile: dict[str, Any], score: dict[str, Any], results: dict[str, AnalysisResult], profile_fingerprint: str
 ) -> dict[str, Any]:
     """Return the exact weighted calculation plus the measurements behind it."""
     weights = profile["weights"]
@@ -46,6 +46,7 @@ def build_score_explanation(
     return {
         "profile_id": profile["id"],
         "profile_name": profile["name"],
+        "profile_fingerprint": profile_fingerprint,
         "final_score_percent": round(float(score["final_score"]) * 100, 1),
         "quality_tier": score["quality_tier"],
         "confidence_percent": round(float(score["overall_confidence"]) * 100, 1),

@@ -67,6 +67,19 @@ class Photo:
             return jpegs[0]
         return self.files[0] if self.files else None
 
+    def display_file(self, representation: str = "jpeg") -> Optional[FileRecord]:
+        """Choose a non-destructive representation for previews of this logical photo."""
+        preferred_roles = (
+            (FileRole.JPEG, FileRole.IMAGE, FileRole.RAW)
+            if representation != "raw"
+            else (FileRole.RAW, FileRole.JPEG, FileRole.IMAGE)
+        )
+        for role in preferred_roles:
+            match = next((file for file in self.files if file.role == role and file.status == "present"), None)
+            if match:
+                return match
+        return self.primary_file
+
     @property
     def availability_status(self) -> str:
         """Summarize whether at least one physical representation is usable."""

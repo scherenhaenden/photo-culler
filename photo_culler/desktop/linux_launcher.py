@@ -1,5 +1,7 @@
 """Clickable Linux launcher using an isolated Chrome app window."""
 
+import logging
+import os
 import secrets
 import shutil
 import subprocess
@@ -17,9 +19,33 @@ from photo_culler.desktop.app import (
 from photo_culler.web.app import create_app
 
 
+def find_chrome() -> str | None:
+    """Locate a supported browser, allowing an explicit packaged-install override."""
+    override = os.environ.get("PHOTO_CULLER_CHROME")
+    if override:
+        candidate = os.path.abspath(os.path.expanduser(override))
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+        raise RuntimeError(f"PHOTO_CULLER_CHROME is not an executable file: {candidate}")
+    return shutil.which("google-chrome") or shutil.which("chromium") or shutil.which("chromium-browser")
+
+
+def chrome_command(chrome: str, url: str, profile: str, extra_args: list[str] | None = None) -> list[str]:
+    """Build the isolated app-window command without inheriting a browser profile."""
+    command = [
+        chrome,
+        f"--app={url}",
+        f"--user-data-dir={profile}",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-sync",
+    ]
+    return command + (extra_args or [])
+
+
 def main() -> None:
-    """Run the local server for the lifetime of a dedicated Chrome app window."""
-    chrome = shutil.which("google-chrome") or shutil.which("chromium")
+    """Run the local server for exactly the lifetime of a dedicated Chrome app window."""
+    chrome = find_chrome()
     if not chrome:
         raise RuntimeError("Photo Culler requires Google Chrome or Chromium on Linux")
 
@@ -35,23 +61,18 @@ def main() -> None:
     server_thread.start()
 
     url = f"http://127.0.0.1:{port}"
-    wait_until_ready(url, token)
-
     try:
+        wait_until_ready(url, token)
         with tempfile.TemporaryDirectory(prefix="photo-culler-chrome-") as profile:
-            subprocess.run(
-                [
-                    chrome,
-                    f"--app={url}/?token={token}",
-                    f"--user-data-dir={profile}",
-                    "--no-first-run",
-                    "--no-default-browser-check",
-                ],
-                check=False,
-            )
+            result = subprocess.run(chrome_command(chrome, f"{url}/?token={token}", profile), check=False)
+            if result.returncode != 0:
+                raise RuntimeError(f"Chrome exited unexpectedly (status {result.returncode})")
     finally:
         server.should_exit = True
         server_thread.join(timeout=5)
+        if server_thread.is_alive():
+            logging.error("Photo Culler local server thread did not stop cleanly after shutdown signal")
+            raise RuntimeError("Photo Culler local server did not stop cleanly")
 
 
 if __name__ == "__main__":

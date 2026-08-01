@@ -6,7 +6,7 @@
 <div class="header-bar">
   <div>
     <h1>Grupos de fotos parecidas</h1>
-    <div style="color:var(--text-secondary);font-size:12px;">{{ groups|length }} grupos · {{ grouped_photo_count }} fotos. La primera de cada grupo es la recomendada por la puntuación técnica.</div>
+    <div style="color:var(--text-secondary);font-size:12px;">{{ total_groups }} grupos · {{ grouped_photo_count }} fotos en esta página. La primera de cada grupo es la recomendada por la puntuación técnica.</div>
   </div>
   <a href="/analysis" class="btn btn-secondary">← Volver a análisis</a>
 </div>
@@ -18,24 +18,28 @@
       <div style="display:flex;justify-content:space-between;gap:1rem;align-items:baseline;margin-bottom:.8rem;">
         <div>
           <strong>Grupo {{ loop.index }}</strong>
-          <span style="color:var(--text-secondary);font-size:11px;">· {{ group.photos|length }} tomas parecidas</span>
+          <span style="color:var(--text-secondary);font-size:11px;">· {{ group.photo_count }} tomas parecidas{% if group.photo_count > group.photos|length %} · mostrando las primeras {{ group.photos|length }}{% endif %}</span>
         </div>
-        <a href="/photos/{{ group.recommended.photo_id }}?group={{ group.id }}" style="font-size:11px;color:var(--accent-teal);">Recomendada: {{ group.recommended.stem_name }} · {{ (group.recommended.score * 100)|round|int }}/100</a>
+        <a href="/groups/{{ group.id }}" class="btn btn-secondary" style="font-size:11px;">Comparar en grande →</a>
       </div>
-      <div class="photo-grid">
-        {% for photo in group.photos %}
-          <div style="position:relative;">
-            {% if photo.photo_id == group.recommended.photo_id %}
-              <span style="position:absolute;z-index:1;left:.45rem;top:.45rem;background:var(--accent-teal);color:#061410;border-radius:99px;padding:.18rem .45rem;font-size:9px;font-weight:800;">RECOMENDADA</span>
-            {% endif %}
-            {% set group_id = group.id %}
-            {% include "partials/photo_card.html" %}
-          </div>
-        {% endfor %}
-      </div>
+      <a href="/groups/{{ group.id }}" style="display:flex;gap:1rem;align-items:center;text-decoration:none;color:inherit;">
+        <img src="/thumbnails/{{ group.recommended.photo_id }}/800" alt="{{ group.recommended.stem_name }}" loading="lazy" style="width:220px;height:150px;object-fit:cover;border-radius:8px;border:1px solid var(--border-color);">
+        <div>
+          <div style="color:var(--accent-teal);font-size:11px;font-weight:800;">RECOMENDADA</div>
+          <strong>{{ group.recommended.stem_name }}</strong>
+          <div style="color:var(--text-secondary);font-size:11px;margin-top:.3rem;">Score {{ (group.recommended.score * 100)|round|int }}/100 · Abrir comparación grande</div>
+        </div>
+      </a>
     </section>
   {% endfor %}
   </div>
+  {% if total_pages > 1 %}
+  <nav style="display:flex;justify-content:center;gap:.75rem;margin-top:1.25rem;align-items:center;">
+    {% if page > 1 %}<a class="btn btn-secondary" href="/groups?page={{ page - 1 }}">Anterior</a>{% endif %}
+    <span style="color:var(--text-secondary);font-size:12px;">Página {{ page }} de {{ total_pages }}</span>
+    {% if page < total_pages %}<a class="btn btn-secondary" href="/groups?page={{ page + 1 }}">Siguiente</a>{% endif %}
+  </nav>
+  {% endif %}
 {% else %}
   <section class="dashboard-panel" style="text-align:center;padding:3rem;">
     <h2>Todavía no hay grupos</h2>

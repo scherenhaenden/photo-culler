@@ -27,6 +27,7 @@ class AnalysisPipeline:
         image_hash: Optional[str] = None,
         analyzers: Optional[List[Analyzer]] = None,
         exif_data: Optional[Dict[str, Any]] = None,
+        cache_fallback_hashes: Optional[List[str]] = None,
     ) -> Dict[str, AnalysisResult]:
         """Run all requested (or default registered) analyzers on a single image.
 
@@ -49,6 +50,18 @@ class AnalysisPipeline:
                     cached_result = self.cache.get(
                         image_hash=context.image_hash, analyzer_name=analyzer.name, analyzer_version=analyzer.version
                     )
+                    if cached_result is None:
+                        for fallback_hash in cache_fallback_hashes or []:
+                            cached_result = self.cache.get(
+                                image_hash=fallback_hash,
+                                analyzer_name=analyzer.name,
+                                analyzer_version=analyzer.version,
+                            )
+                            if cached_result is not None:
+                                # Migrate an older profile-scoped entry to the shared
+                                # asset cache as it is reused.
+                                self.cache.put(image_hash=context.image_hash, result=cached_result)
+                                break
 
                 if cached_result:
                     results[analyzer.name] = cached_result

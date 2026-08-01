@@ -1,5 +1,6 @@
 """Versioned REST application API for frontends and local integrations."""
 
+import threading
 from pathlib import Path
 from typing import cast
 
@@ -208,3 +209,68 @@ def resume_import_job(job_id: str, request: Request) -> dict[str, object]:
     if result is ResumeResult.SOURCE_UNAVAILABLE:
         raise HTTPException(status_code=409, detail="Import source is unavailable")
     return {"contract_version": 1, "job_id": job_id, "state": "queued"}
+
+
+@router.get("/v1/system-usage")
+def get_system_usage(request: Request) -> dict[str, object]:
+    """Retrieve system-wide and application-specific CPU and GPU utilization."""
+    import os
+    import shutil
+    import subprocess
+
+    cpu_sys = 0.0
+    cpu_app = 0.0
+    cpu_app_capacity = 0.0
+    cpu_count = 1
+    try:
+        import psutil
+
+        sampler_lock = getattr(request.app.state, "system_usage_lock", None)
+        if sampler_lock is None:
+            sampler_lock = threading.Lock()
+            request.app.state.system_usage_lock = sampler_lock
+        with sampler_lock:
+            cpu_sys = psutil.cpu_percent(interval=None)
+            proc = getattr(request.app.state, "system_usage_process", None)
+            if proc is None:
+                proc = psutil.Process(os.getpid())
+                proc.cpu_percent(interval=None)  # Establish psutil's non-blocking baseline once.
+                request.app.state.system_usage_process = proc
+            cpu_app_raw = proc.cpu_percent(interval=None)
+            cpu_count = psutil.cpu_count() or 1
+            cpu_app = cpu_app_raw
+            cpu_app_capacity = cpu_app_raw / cpu_count
+    except Exception:
+        cpu_sys = 5.0
+        cpu_app = 1.0
+        cpu_app_capacity = 1.0
+
+    gpu_sys = 0.0
+    gpu_name = "N/A"
+    try:
+        if shutil.which("nvidia-smi"):
+            res = subprocess.run(
+                ["nvidia-smi", "--query-gpu=utilization.gpu,name", "--format=csv,noheader,nounits"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=1.0,
+                check=True,
+            )
+            first_gpu = next((line for line in res.stdout.splitlines() if line.strip()), "")
+            parts = first_gpu.split(",")
+            if parts and parts[0].strip():
+                gpu_sys = float(parts[0].strip())
+                gpu_name = parts[1].strip() if len(parts) > 1 else "NVIDIA GPU"
+    except Exception:
+        pass
+
+    return {
+        "contract_version": 1,
+        "cpu_system": round(cpu_sys, 1),
+        "cpu_app": round(cpu_app, 1),
+        "cpu_app_capacity": round(cpu_app_capacity, 1),
+        "cpu_core_count": cpu_count,
+        "gpu_system": round(gpu_sys, 1),
+        "gpu_name": gpu_name,
+    }

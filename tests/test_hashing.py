@@ -35,3 +35,7 @@ def test_perceptual_dhash(tmp_path):
     assert hash1 is not None
     assert hash2 is not None
     assert hamming_distance(hash1, hash2) == 0
+
+
+def test_hamming_distance_rejects_malformed_hashes():
+    assert hamming_distance("0" * 16, "x" * 16) == 999
