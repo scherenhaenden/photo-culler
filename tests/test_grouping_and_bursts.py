@@ -129,3 +129,21 @@ def test_similarity_grouper_assigns_representative_for_nearby_visual_matches(tmp
     assert groups[0].representative_photo_id == "second"
     assert photos[0].burst_id == photos[1].burst_id
     assert photos[2].burst_id is None
+
+
+def test_similarity_grouper_ignores_malformed_persisted_hashes():
+    captured = datetime(2026, 7, 25, 18, 0, 0)
+    photos = [
+        Photo("first", "first", perceptual_hash="xxxxxxxxxxxxxxxx", metadata=MetadataRecord(capture_time=captured)),
+        Photo(
+            "second",
+            "second",
+            perceptual_hash="xxxxxxxxyyyyyyyy",
+            metadata=MetadataRecord(capture_time=captured + timedelta(seconds=1)),
+        ),
+    ]
+
+    groups, skipped = SimilarityGrouper().group(photos, lambda _photo: None)
+
+    assert groups == []
+    assert skipped == 0

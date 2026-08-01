@@ -53,3 +53,15 @@ def test_html_localization_translates_markup_after_a_script_without_mutating_the
 def test_html_localization_updates_a_lang_attribute_with_other_attributes():
     localized = localize_html('<html class="app" LANG="en"><body></body></html>', "de")
     assert 'LANG="de"' in localized
+
+
+def test_html_localization_does_not_restore_protected_blocks_into_matching_content():
+    html = (
+        '<html lang="es"><body><p>__PHOTO_CULLER_PROTECTED_0__</p>'
+        "<script>const protectedBlock = true;</script></body></html>"
+    )
+
+    localized = localize_html(html, "de")
+
+    assert localized.count("<script>const protectedBlock = true;</script>") == 1
+    assert "<p>__PHOTO_CULLER_PROTECTED_0__</p>" in localized

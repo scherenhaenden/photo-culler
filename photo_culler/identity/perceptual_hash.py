@@ -47,6 +47,9 @@ def hamming_distance(hash1: str, hash2: str) -> int:
     """Calculate bitwise Hamming distance between two hex perceptual hashes."""
     if not hash1 or not hash2 or len(hash1) != len(hash2):
         return 999
-    val1 = int(hash1, 16)
-    val2 = int(hash2, 16)
+    try:
+        val1 = int(hash1, 16)
+        val2 = int(hash2, 16)
+    except ValueError:
+        return 999
     return bin(val1 ^ val2).count("1")

@@ -65,7 +65,7 @@ def wait_until_ready(url: str, token: str, timeout: float = 10.0) -> None:
             with urllib.request.urlopen(health_url, timeout=0.25) as response:
                 if response.status == 200:
                     return
-        except (OSError, urllib.error.URLError):
+        except OSError, urllib.error.URLError:
             time.sleep(0.05)
 
     raise RuntimeError("Photo Culler server did not start")
