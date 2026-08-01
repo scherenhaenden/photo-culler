@@ -38,4 +38,4 @@ def test_perceptual_dhash(tmp_path):
 
 
 def test_hamming_distance_rejects_malformed_hashes():
-    assert hamming_distance("not-a-hash-value", "also-bad-hash!") == 999
+    assert hamming_distance("0" * 16, "x" * 16) == 999
