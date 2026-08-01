@@ -68,6 +68,12 @@ class ChromeDevTools:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+        self._socket = None
+        self._command_id = 0
+        self._connect_to_page()
+
+    def _connect_to_page(self) -> None:
+        """Attach to the current page target, including after form navigation."""
         deadline = time.monotonic() + 10
         targets = []
         while time.monotonic() < deadline:
@@ -82,8 +88,9 @@ class ChromeDevTools:
         if page is None:
             self.close()
             raise RuntimeError("Chrome did not expose a page target")
+        if self._socket is not None:
+            self._socket.close()
         self._socket = connect(page["webSocketDebuggerUrl"])
-        self._command_id = 0
 
     def command(self, method: str, params: dict | None = None) -> dict:
         self._command_id += 1
@@ -112,7 +119,14 @@ class ChromeDevTools:
     def wait_for(self, expression: str, timeout: float = 10) -> None:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            if self.evaluate(expression):
+            try:
+                matched = self.evaluate(expression)
+            except RuntimeError as error:
+                if "Inspected target navigated or closed" not in str(error):
+                    raise
+                self._connect_to_page()
+                continue
+            if matched:
                 return
             time.sleep(0.05)
         raise AssertionError(f"Browser condition timed out: {expression}")
