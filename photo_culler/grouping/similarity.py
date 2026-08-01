@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Callable
 
 from photo_culler.core.models import BurstGroup, Photo
-from photo_culler.identity.perceptual_hash import compute_dhash, hamming_distance
+from photo_culler.identity.perceptual_hash import compute_dhash, hamming_distance, is_valid_perceptual_hash
 
 
 class SimilarityGrouper:
@@ -30,7 +30,7 @@ class SimilarityGrouper:
                 continue
             photo.perceptual_hash = compute_dhash(asset)
 
-        candidates = [photo for photo in photos if photo.perceptual_hash]
+        candidates = [photo for photo in photos if is_valid_perceptual_hash(photo.perceptual_hash)]
         candidates.sort(
             key=lambda photo: (
                 photo.metadata.capture_time.isoformat() if photo.metadata and photo.metadata.capture_time else ""

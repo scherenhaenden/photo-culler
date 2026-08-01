@@ -138,7 +138,7 @@ def test_similarity_grouper_ignores_malformed_persisted_hashes():
         Photo(
             "second",
             "second",
-            perceptual_hash="xxxxxxxxyyyyyyyy",
+            perceptual_hash="xxxxxxxxxxxxxxxx",
             metadata=MetadataRecord(capture_time=captured + timedelta(seconds=1)),
         ),
     ]
