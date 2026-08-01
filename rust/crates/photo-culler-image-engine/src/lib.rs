@@ -28,6 +28,13 @@ pub struct PixelFeatures {
     pub underexposed_probability: f64,
     pub overexposed_probability: f64,
     pub exposure_score: f64,
+    pub luminance_noise_stddev: f64,
+    pub chroma_noise_stddev: f64,
+    pub shadow_noise_stddev: f64,
+    pub estimated_noise_level: f64,
+    pub gradient_energy: f64,
+    pub edge_density: f64,
+    pub laplacian_variance: f64,
 }
 
 impl PixelFeatures {
@@ -48,6 +55,9 @@ impl PixelFeatures {
         let mut overexposed = 0_u64;
         let mut luminance_sum = 0_f64;
         let mut luminance_squared_sum = 0_f64;
+        let mut luminance_values = Vec::with_capacity(width as usize * height as usize);
+        let mut red_green_values = Vec::with_capacity(width as usize * height as usize);
+        let mut blue_green_values = Vec::with_capacity(width as usize * height as usize);
         let center_y_start = height / 4;
         let center_y_end = height * 3 / 4;
         let center_x_start = width / 4;
@@ -65,6 +75,9 @@ impl PixelFeatures {
             histogram[luminance.floor() as usize] += 1;
             luminance_sum += luminance;
             luminance_squared_sum += luminance * luminance;
+            luminance_values.push(luminance);
+            red_green_values.push(f64::from(red) - f64::from(green));
+            blue_green_values.push(f64::from(blue) - f64::from(green));
             shadows += u64::from(luminance <= 1.0);
             highlights += u64::from(luminance >= 254.0);
             underexposed += u64::from(luminance < 60.0);
@@ -93,6 +106,14 @@ impl PixelFeatures {
             })
             .sum();
         let exposure_score = (1.0 - (mean_luminance - 118.0).abs() / 118.0).clamp(0.0, 1.0);
+        let (luminance_noise_stddev, shadow_noise_stddev) =
+            noise_standard_deviations(&luminance_values, width as usize, height as usize);
+        let chroma_noise_stddev =
+            (standard_deviation(&red_green_values) + standard_deviation(&blue_green_values)) / 2.0;
+        let estimated_noise_level =
+            ((luminance_noise_stddev + chroma_noise_stddev * 0.5) / 30.0).clamp(0.0, 1.0);
+        let (gradient_energy, edge_density, laplacian_variance) =
+            edge_statistics(&luminance_values, width as usize, height as usize);
         Self {
             width,
             height,
@@ -111,6 +132,13 @@ impl PixelFeatures {
             underexposed_probability: underexposed as f64 / count,
             overexposed_probability: overexposed as f64 / count,
             exposure_score,
+            luminance_noise_stddev,
+            chroma_noise_stddev,
+            shadow_noise_stddev,
+            estimated_noise_level,
+            gradient_energy,
+            edge_density,
+            laplacian_variance,
         }
     }
 }
@@ -194,8 +222,123 @@ impl AnalysisEngine for NativePixelEngine {
                 features.center_highlight_clipping_ratio,
                 elapsed_micros,
             ),
+            metric(
+                "noise.luminance_stddev",
+                features.luminance_noise_stddev,
+                elapsed_micros,
+            ),
+            metric(
+                "noise.chroma_stddev",
+                features.chroma_noise_stddev,
+                elapsed_micros,
+            ),
+            metric(
+                "noise.shadow_stddev",
+                features.shadow_noise_stddev,
+                elapsed_micros,
+            ),
+            metric(
+                "noise.estimated_level",
+                features.estimated_noise_level,
+                elapsed_micros,
+            ),
+            metric(
+                "sharpness.gradient_energy",
+                features.gradient_energy,
+                elapsed_micros,
+            ),
+            metric(
+                "sharpness.edge_density",
+                features.edge_density,
+                elapsed_micros,
+            ),
+            metric(
+                "sharpness.laplacian_variance",
+                features.laplacian_variance,
+                elapsed_micros,
+            ),
         ])
     }
+}
+
+fn standard_deviation(values: &[f64]) -> f64 {
+    if values.is_empty() {
+        return 0.0;
+    }
+    let mean = values.iter().sum::<f64>() / values.len() as f64;
+    let variance = values
+        .iter()
+        .map(|value| (value - mean).powi(2))
+        .sum::<f64>()
+        / values.len() as f64;
+    variance.sqrt()
+}
+
+fn noise_standard_deviations(luminance: &[f64], width: usize, height: usize) -> (f64, f64) {
+    if width < 2 || height < 2 {
+        return (0.0, 0.0);
+    }
+    let mut horizontal_differences = Vec::with_capacity((height - 1) * width);
+    let mut vertical_differences = Vec::with_capacity(height * (width - 1));
+    let mut shadow_differences = Vec::new();
+    for y in 0..height {
+        for x in 0..width {
+            let index = y * width + x;
+            if y > 0 {
+                let difference = (luminance[index] - luminance[index - width]).abs();
+                horizontal_differences.push(difference);
+                if luminance[index - width] < 40.0 {
+                    shadow_differences.push(difference);
+                }
+            }
+            if x > 0 {
+                vertical_differences.push((luminance[index] - luminance[index - 1]).abs());
+            }
+        }
+    }
+    let luminance_noise = (standard_deviation(&horizontal_differences)
+        + standard_deviation(&vertical_differences))
+        / 2.0;
+    let shadow_noise = if shadow_differences.len() > 100 {
+        standard_deviation(&shadow_differences)
+    } else {
+        luminance_noise
+    };
+    (luminance_noise, shadow_noise)
+}
+
+fn edge_statistics(luminance: &[f64], width: usize, height: usize) -> (f64, f64, f64) {
+    if width < 3 || height < 3 {
+        return (0.0, 0.0, 0.0);
+    }
+    let mut gradient_energy_sum = 0.0;
+    let mut edge_count = 0_u64;
+    let mut laplacians = Vec::with_capacity((width - 2) * (height - 2));
+    let mut gradient_count = 0_u64;
+    for y in 1..height - 1 {
+        for x in 1..width - 1 {
+            let index = y * width + x;
+            let gradient_x = (luminance[index + 1] - luminance[index - 1]) / 2.0;
+            let gradient_y = (luminance[index + width] - luminance[index - width]) / 2.0;
+            let energy = gradient_x.powi(2) + gradient_y.powi(2);
+            gradient_energy_sum += energy;
+            edge_count += u64::from(energy.sqrt() > 12.0);
+            laplacians.push(
+                luminance[index - 1]
+                    + luminance[index + 1]
+                    + luminance[index - width]
+                    + luminance[index + width]
+                    - 4.0 * luminance[index],
+            );
+            gradient_count += 1;
+        }
+    }
+    let count = gradient_count.max(1) as f64;
+    (
+        gradient_energy_sum / count,
+        edge_count as f64 / count,
+        standard_deviation(&laplacians).powi(2),
+    )
 }
 
 fn normalize(image: DynamicImage, max_dimension: u32) -> DynamicImage {
@@ -254,6 +397,10 @@ mod tests {
         assert_eq!(features.center_highlight_clipping_ratio, 0.25);
         assert_eq!(features.underexposed_probability, 1.0 / 16.0);
         assert_eq!(features.overexposed_probability, 1.0 / 16.0);
+        assert!(features.luminance_noise_stddev > 0.0);
+        assert!(features.gradient_energy > 0.0);
+        assert!(features.edge_density > 0.0);
+        assert!(features.laplacian_variance > 0.0);
     }
 
     #[test]
