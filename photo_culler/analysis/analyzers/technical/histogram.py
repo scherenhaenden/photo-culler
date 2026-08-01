@@ -15,7 +15,11 @@ class HistogramAnalyzer(Analyzer):
     category = "technical"
 
     def analyze(self, context: AnalysisContext) -> AnalysisResult:
-        arr = context.get_numpy_array()
+        # Technical analysis shares one resolution-bounded RGB buffer.  This
+        # keeps the Python reference aligned with the Rust shadow engine and
+        # prevents each technical analyzer from materializing a full sensor
+        # resolution array independently.
+        arr = context.get_analysis_array(max_dim=1920)
 
         # Calculate per-channel histograms (256 bins)
         r_hist, _ = np.histogram(arr[:, :, 0], bins=256, range=(0, 256))

@@ -6,17 +6,19 @@
 
 use image::{DynamicImage, GenericImageView, imageops::FilterType};
 use photo_culler_core::{AnalysisEngine, AnalysisRequest, MetricResult};
+use rustfft::{FftPlanner, num_complex::Complex};
+use serde::Serialize;
 
 const IMPLEMENTATION_VERSION: &str = "rust-pixels-0.1";
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PixelFeatures {
     pub width: u32,
     pub height: u32,
-    pub red_histogram: [u64; 256],
-    pub green_histogram: [u64; 256],
-    pub blue_histogram: [u64; 256],
-    pub histogram: [u64; 256],
+    pub red_histogram: Vec<u64>,
+    pub green_histogram: Vec<u64>,
+    pub blue_histogram: Vec<u64>,
+    pub histogram: Vec<u64>,
     pub pixel_count: u64,
     pub mean_luminance: f64,
     pub luminance_stddev: f64,
@@ -35,6 +37,10 @@ pub struct PixelFeatures {
     pub gradient_energy: f64,
     pub edge_density: f64,
     pub laplacian_variance: f64,
+    pub center_laplacian_variance: f64,
+    pub effective_focus_variance: f64,
+    pub global_sharpness: f64,
+    pub fft_high_frequency_ratio: f64,
 }
 
 impl PixelFeatures {
@@ -43,10 +49,10 @@ impl PixelFeatures {
         let normalized = normalize(image, max_dimension);
         let (width, height) = normalized.dimensions();
         let rgb = normalized.to_rgb8();
-        let mut red_histogram = [0_u64; 256];
-        let mut green_histogram = [0_u64; 256];
-        let mut blue_histogram = [0_u64; 256];
-        let mut histogram = [0_u64; 256];
+        let mut red_histogram = vec![0_u64; 256];
+        let mut green_histogram = vec![0_u64; 256];
+        let mut blue_histogram = vec![0_u64; 256];
+        let mut histogram = vec![0_u64; 256];
         let mut shadows = 0_u64;
         let mut highlights = 0_u64;
         let mut center_shadows = 0_u64;
@@ -81,7 +87,9 @@ impl PixelFeatures {
             shadows += u64::from(luminance <= 1.0);
             highlights += u64::from(luminance >= 254.0);
             underexposed += u64::from(luminance < 60.0);
-            overexposed += u64::from(luminance > 195.0);
+            // Exposure consumes the cached histogram in Python, where bins
+            // 195..255 are counted as overexposed.
+            overexposed += u64::from(luminance >= 195.0);
             if (center_x_start..center_x_end).contains(&x)
                 && (center_y_start..center_y_end).contains(&y)
             {
@@ -105,15 +113,29 @@ impl PixelFeatures {
                 -probability * probability.log2()
             })
             .sum();
-        let exposure_score = (1.0 - (mean_luminance - 118.0).abs() / 118.0).clamp(0.0, 1.0);
+        // Exposure in Python consumes the integer luminance histogram rather
+        // than the floating-point luminance array. Preserve that contract in
+        // the shadow engine while keeping the true mean for histogram output.
+        let histogram_mean_luminance = histogram
+            .iter()
+            .enumerate()
+            .map(|(bin, count)| bin as f64 * *count as f64)
+            .sum::<f64>()
+            / count;
+        let exposure_score =
+            (1.0 - (histogram_mean_luminance - 118.0).abs() / 118.0).clamp(0.0, 1.0);
         let (luminance_noise_stddev, shadow_noise_stddev) =
             noise_standard_deviations(&luminance_values, width as usize, height as usize);
         let chroma_noise_stddev =
             (standard_deviation(&red_green_values) + standard_deviation(&blue_green_values)) / 2.0;
         let estimated_noise_level =
             ((luminance_noise_stddev + chroma_noise_stddev * 0.5) / 30.0).clamp(0.0, 1.0);
-        let (gradient_energy, edge_density, laplacian_variance) =
+        let (gradient_energy, edge_density, laplacian_variance, center_laplacian_variance) =
             edge_statistics(&luminance_values, width as usize, height as usize);
+        let effective_focus_variance = center_laplacian_variance * 0.6 + laplacian_variance * 0.4;
+        let global_sharpness = effective_focus_variance.max(1.0).log10() / 3.5;
+        let fft_high_frequency_ratio =
+            fft_high_frequency_ratio(&luminance_values, width as usize, height as usize);
         Self {
             width,
             height,
@@ -139,6 +161,10 @@ impl PixelFeatures {
             gradient_energy,
             edge_density,
             laplacian_variance,
+            center_laplacian_variance,
+            effective_focus_variance,
+            global_sharpness: global_sharpness.clamp(0.0, 1.0),
+            fft_high_frequency_ratio,
         }
     }
 }
@@ -257,6 +283,26 @@ impl AnalysisEngine for NativePixelEngine {
                 features.laplacian_variance,
                 elapsed_micros,
             ),
+            metric(
+                "sharpness.center_laplacian_variance",
+                features.center_laplacian_variance,
+                elapsed_micros,
+            ),
+            metric(
+                "sharpness.effective_focus_variance",
+                features.effective_focus_variance,
+                elapsed_micros,
+            ),
+            metric(
+                "sharpness.global_score",
+                features.global_sharpness,
+                elapsed_micros,
+            ),
+            metric(
+                "sharpness.fft_high_frequency_ratio",
+                features.fft_high_frequency_ratio,
+                elapsed_micros,
+            ),
         ])
     }
 }
@@ -307,38 +353,116 @@ fn noise_standard_deviations(luminance: &[f64], width: usize, height: usize) -> 
     (luminance_noise, shadow_noise)
 }
 
-fn edge_statistics(luminance: &[f64], width: usize, height: usize) -> (f64, f64, f64) {
-    if width < 3 || height < 3 {
-        return (0.0, 0.0, 0.0);
+fn edge_statistics(luminance: &[f64], width: usize, height: usize) -> (f64, f64, f64, f64) {
+    if width < 2 || height < 2 {
+        return (0.0, 0.0, 0.0, 0.0);
+    }
+    let mut gradient_x = vec![0.0; luminance.len()];
+    let mut gradient_y = vec![0.0; luminance.len()];
+    for y in 0..height {
+        for x in 0..width {
+            let index = y * width + x;
+            gradient_x[index] = if x == 0 {
+                luminance[index + 1] - luminance[index]
+            } else if x + 1 == width {
+                luminance[index] - luminance[index - 1]
+            } else {
+                (luminance[index + 1] - luminance[index - 1]) / 2.0
+            };
+            gradient_y[index] = if y == 0 {
+                luminance[index + width] - luminance[index]
+            } else if y + 1 == height {
+                luminance[index] - luminance[index - width]
+            } else {
+                (luminance[index + width] - luminance[index - width]) / 2.0
+            };
+        }
     }
     let mut gradient_energy_sum = 0.0;
     let mut edge_count = 0_u64;
-    let mut laplacians = Vec::with_capacity((width - 2) * (height - 2));
-    let mut gradient_count = 0_u64;
-    for y in 1..height - 1 {
-        for x in 1..width - 1 {
+    let mut laplacians = vec![0.0; luminance.len()];
+    for y in 0..height {
+        for x in 0..width {
             let index = y * width + x;
-            let gradient_x = (luminance[index + 1] - luminance[index - 1]) / 2.0;
-            let gradient_y = (luminance[index + width] - luminance[index - width]) / 2.0;
-            let energy = gradient_x.powi(2) + gradient_y.powi(2);
+            let energy = gradient_x[index].powi(2) + gradient_y[index].powi(2);
             gradient_energy_sum += energy;
             edge_count += u64::from(energy.sqrt() > 12.0);
-            laplacians.push(
-                luminance[index - 1]
-                    + luminance[index + 1]
-                    + luminance[index - width]
-                    + luminance[index + width]
-                    - 4.0 * luminance[index],
-            );
-            gradient_count += 1;
+            let gxx = if x == 0 {
+                gradient_x[index + 1] - gradient_x[index]
+            } else if x + 1 == width {
+                gradient_x[index] - gradient_x[index - 1]
+            } else {
+                (gradient_x[index + 1] - gradient_x[index - 1]) / 2.0
+            };
+            let gyy = if y == 0 {
+                gradient_y[index + width] - gradient_y[index]
+            } else if y + 1 == height {
+                gradient_y[index] - gradient_y[index - width]
+            } else {
+                (gradient_y[index + width] - gradient_y[index - width]) / 2.0
+            };
+            laplacians[index] = gxx + gyy;
         }
     }
-    let count = gradient_count.max(1) as f64;
+    let count = luminance.len() as f64;
+    let center_laplacians = laplacians
+        .chunks(width)
+        .skip(height / 4)
+        .take(height * 3 / 4 - height / 4)
+        .flat_map(|row| row[width / 4..width * 3 / 4].iter().copied())
+        .collect::<Vec<_>>();
     (
         gradient_energy_sum / count,
         edge_count as f64 / count,
         standard_deviation(&laplacians).powi(2),
+        standard_deviation(&center_laplacians).powi(2),
     )
+}
+
+fn fft_high_frequency_ratio(luminance: &[f64], width: usize, height: usize) -> f64 {
+    if width == 0 || height == 0 {
+        return 0.0;
+    }
+    let mut values = luminance
+        .iter()
+        .copied()
+        .map(|real| Complex::new(real, 0.0))
+        .collect::<Vec<_>>();
+    let mut planner = FftPlanner::<f64>::new();
+    let row_fft = planner.plan_fft_forward(width);
+    for row in values.chunks_exact_mut(width) {
+        row_fft.process(row);
+    }
+    let column_fft = planner.plan_fft_forward(height);
+    let mut column = vec![Complex::new(0.0, 0.0); height];
+    for x in 0..width {
+        for y in 0..height {
+            column[y] = values[y * width + x];
+        }
+        column_fft.process(&mut column);
+        for y in 0..height {
+            values[y * width + x] = column[y];
+        }
+    }
+    let center_x = width / 2;
+    let center_y = height / 2;
+    let radius = width.min(height) / 10;
+    let mut high_frequency = 0.0;
+    let mut total = 0.0;
+    for y in 0..height {
+        for x in 0..width {
+            let magnitude = values[y * width + x].norm();
+            total += magnitude;
+            let shifted_x = (x + center_x) % width;
+            let shifted_y = (y + center_y) % height;
+            let dx = shifted_x as i64 - center_x as i64;
+            let dy = shifted_y as i64 - center_y as i64;
+            if dx * dx + dy * dy > (radius * radius) as i64 {
+                high_frequency += magnitude;
+            }
+        }
+    }
+    high_frequency / (total + 1e-8)
 }
 
 fn normalize(image: DynamicImage, max_dimension: u32) -> DynamicImage {

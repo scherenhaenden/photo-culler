@@ -7,3 +7,5 @@ license.workspace = true
 [dependencies]
 image.workspace = true
 photo-culler-core.workspace = true
+serde.workspace = true
+rustfft.workspace = true
