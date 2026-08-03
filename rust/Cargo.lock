@@ -4,25 +4,25 @@ version = 4
 
 [[package]]
 name = "photo-culler-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "photo-culler-core",
 ]
 
 [[package]]
 name = "photo-culler-core"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "photo-culler-egui"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "photo-culler-core",
 ]
 
 [[package]]
 name = "photo-culler-tauri"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "photo-culler-core",
 ]
