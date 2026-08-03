@@ -348,3 +348,113 @@
 .keyboard-shortcut-legend strong {
   color: #ffffff;
 }
+
+/* GALLERY IMPORT PANEL & BEAUTIFUL FORM DESIGN */
+.gallery-import-panel {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  padding: 2.25rem 2rem;
+  max-width: 36rem;
+  margin: 0 auto 1.5rem auto;
+  box-shadow: var(--shadow-md);
+  text-align: left;
+}
+
+.gallery-import-panel h2 {
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin-bottom: 0.5rem;
+  color: #ffffff;
+  text-align: center;
+}
+
+.gallery-import-panel p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+  margin-bottom: 1.75rem;
+}
+
+.gallery-import-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.gallery-import-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.gallery-import-form .form-group label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.gallery-import-form input[type="text"],
+.gallery-import-form select {
+  background-color: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  padding: 0.7rem 0.9rem;
+  font-family: inherit;
+  font-size: 13px;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.gallery-import-form input[type="text"]::placeholder {
+  color: var(--text-muted);
+}
+
+.gallery-import-form input[type="text"]:focus,
+.gallery-import-form select:focus {
+  outline: none;
+  border-color: var(--accent-orange);
+  box-shadow: 0 0 0 1px var(--accent-orange);
+}
+
+.gallery-import-form .checkbox-group {
+  margin-top: 0.25rem;
+}
+
+.gallery-import-form .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.gallery-import-form input[type="checkbox"] {
+  accent-color: var(--accent-orange);
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.gallery-import-form .btn {
+  align-self: center;
+  padding: 0.75rem 2rem;
+  width: 100%;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+#gallery-import-status {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+  text-align: center;
+}
