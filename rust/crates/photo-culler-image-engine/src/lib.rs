@@ -10,6 +10,7 @@ use rustfft::{FftPlanner, num_complex::Complex};
 use serde::Serialize;
 
 const IMPLEMENTATION_VERSION: &str = "rust-pixels-0.1";
+const DEFAULT_MAX_DIMENSION: u32 = 1920;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PixelFeatures {
@@ -62,8 +63,10 @@ impl PixelFeatures {
         let mut luminance_sum = 0_f64;
         let mut luminance_squared_sum = 0_f64;
         let mut luminance_values = Vec::with_capacity(width as usize * height as usize);
-        let mut red_green_values = Vec::with_capacity(width as usize * height as usize);
-        let mut blue_green_values = Vec::with_capacity(width as usize * height as usize);
+        let mut red_green_sum = 0_f64;
+        let mut red_green_squared_sum = 0_f64;
+        let mut blue_green_sum = 0_f64;
+        let mut blue_green_squared_sum = 0_f64;
         let center_y_start = height / 4;
         let center_y_end = height * 3 / 4;
         let center_x_start = width / 4;
@@ -82,8 +85,12 @@ impl PixelFeatures {
             luminance_sum += luminance;
             luminance_squared_sum += luminance * luminance;
             luminance_values.push(luminance);
-            red_green_values.push(f64::from(red) - f64::from(green));
-            blue_green_values.push(f64::from(blue) - f64::from(green));
+            let red_green = f64::from(red) - f64::from(green);
+            let blue_green = f64::from(blue) - f64::from(green);
+            red_green_sum += red_green;
+            red_green_squared_sum += red_green * red_green;
+            blue_green_sum += blue_green;
+            blue_green_squared_sum += blue_green * blue_green;
             shadows += u64::from(luminance <= 1.0);
             highlights += u64::from(luminance >= 254.0);
             underexposed += u64::from(luminance < 60.0);
@@ -127,7 +134,9 @@ impl PixelFeatures {
         let (luminance_noise_stddev, shadow_noise_stddev) =
             noise_standard_deviations(&luminance_values, width as usize, height as usize);
         let chroma_noise_stddev =
-            (standard_deviation(&red_green_values) + standard_deviation(&blue_green_values)) / 2.0;
+            (standard_deviation_from_moments(red_green_sum, red_green_squared_sum, count)
+                + standard_deviation_from_moments(blue_green_sum, blue_green_squared_sum, count))
+                / 2.0;
         let estimated_noise_level =
             ((luminance_noise_stddev + chroma_noise_stddev * 0.5) / 30.0).clamp(0.0, 1.0);
         let (gradient_energy, edge_density, laplacian_variance, center_laplacian_variance) =
@@ -320,6 +329,15 @@ fn standard_deviation(values: &[f64]) -> f64 {
     variance.sqrt()
 }
 
+fn standard_deviation_from_moments(sum: f64, squared_sum: f64, count: f64) -> f64 {
+    if count == 0.0 {
+        return 0.0;
+    }
+    (squared_sum / count - (sum / count).powi(2))
+        .max(0.0)
+        .sqrt()
+}
+
 fn noise_standard_deviations(luminance: &[f64], width: usize, height: usize) -> (f64, f64) {
     if width < 2 || height < 2 {
         return (0.0, 0.0);
@@ -425,16 +443,15 @@ fn fft_high_frequency_ratio(luminance: &[f64], width: usize, height: usize) -> f
     }
     let mut values = luminance
         .iter()
-        .copied()
-        .map(|real| Complex::new(real, 0.0))
+        .map(|&real| Complex::<f32>::new(real as f32, 0.0))
         .collect::<Vec<_>>();
-    let mut planner = FftPlanner::<f64>::new();
+    let mut planner = FftPlanner::<f32>::new();
     let row_fft = planner.plan_fft_forward(width);
     for row in values.chunks_exact_mut(width) {
         row_fft.process(row);
     }
     let column_fft = planner.plan_fft_forward(height);
-    let mut column = vec![Complex::new(0.0, 0.0); height];
+    let mut column = vec![Complex::<f32>::new(0.0, 0.0); height];
     for x in 0..width {
         for y in 0..height {
             column[y] = values[y * width + x];
@@ -451,7 +468,7 @@ fn fft_high_frequency_ratio(luminance: &[f64], width: usize, height: usize) -> f
     let mut total = 0.0;
     for y in 0..height {
         for x in 0..width {
-            let magnitude = values[y * width + x].norm();
+            let magnitude = f64::from(values[y * width + x].norm());
             total += magnitude;
             let shifted_x = (x + center_x) % width;
             let shifted_y = (y + center_y) % height;
@@ -467,10 +484,22 @@ fn fft_high_frequency_ratio(luminance: &[f64], width: usize, height: usize) -> f
 
 fn normalize(image: DynamicImage, max_dimension: u32) -> DynamicImage {
     let (width, height) = image.dimensions();
-    if max_dimension == 0 || width.max(height) <= max_dimension {
+    let max_dimension = if max_dimension == 0 {
+        DEFAULT_MAX_DIMENSION
+    } else {
+        max_dimension
+    };
+    if width.max(height) <= max_dimension {
         return image;
     }
-    image.resize(max_dimension, max_dimension, FilterType::Triangle)
+    let scale = max_dimension as f64 / f64::from(width.max(height));
+    let normalized_width = (f64::from(width) * scale) as u32;
+    let normalized_height = (f64::from(height) * scale) as u32;
+    image.resize_exact(
+        normalized_width.max(1),
+        normalized_height.max(1),
+        FilterType::Triangle,
+    )
 }
 
 fn metric(analyzer: &str, value: f64, elapsed_micros: u64) -> MetricResult {
@@ -531,6 +560,14 @@ mod tests {
     fn bounds_the_analysis_resolution() {
         let image = DynamicImage::ImageRgb8(RgbImage::new(6000, 4000));
         let features = PixelFeatures::from_image(image, 1920);
+
+        assert_eq!((features.width, features.height), (1920, 1280));
+    }
+
+    #[test]
+    fn zero_dimension_uses_the_default_bound() {
+        let image = DynamicImage::ImageRgb8(RgbImage::new(6000, 4000));
+        let features = PixelFeatures::from_image(image, 0);
 
         assert_eq!((features.width, features.height), (1920, 1280));
     }

@@ -43,18 +43,18 @@
     </div>
     <div class="form-group" id="new-gallery-name-group" style="display: none;">
       <label for="new-gallery-name-input">Nombre de la nueva galería</label>
-      <input name="name" id="new-gallery-name-input" maxlength="255" placeholder="Mi nueva galería">
+      <input name="name" id="new-gallery-name-input" type="text" maxlength="255" placeholder="Mi nueva galería">
     </div>
     {% else %}
     <div class="form-group">
       <label for="gallery-name-input">Nombre de galería</label>
-      <input name="name" id="gallery-name-input" required maxlength="255" value="Mi galería">
+      <input name="name" id="gallery-name-input" type="text" required maxlength="255" value="Mi galería">
     </div>
     {% endif %}
 
     <div class="form-group">
       <label for="gallery-path-input">Carpeta local</label>
-      <input name="path" id="gallery-path-input" required placeholder="/ruta/a/mis/fotos">
+      <input name="path" id="gallery-path-input" type="text" required placeholder="/ruta/a/mis/fotos">
     </div>
 
     <div class="form-group checkbox-group">
@@ -66,7 +66,7 @@
 
     <div class="form-group">
       <label for="gallery-exclude-input">Excluir patrones</label>
-      <input name="exclude_patterns" id="gallery-exclude-input" placeholder="previews/**, *.tmp">
+      <input name="exclude_patterns" id="gallery-exclude-input" type="text" placeholder="previews/**, *.tmp">
     </div>
 
     <button class="btn" id="submit-gallery-import" type="submit">Importar galería</button>
@@ -116,11 +116,14 @@ if (gallerySelect) {
 }
 
 // Submit Import Form Logic
-document.getElementById('gallery-import-form').addEventListener('submit', async (event) => {
+const importForm = document.getElementById('gallery-import-form');
+if (importForm) {
+importForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
   const output = document.getElementById('gallery-import-status');
   const submitButton = document.getElementById('submit-gallery-import');
+  if (!output || !submitButton) return;
   const exclusions = String(form.get('exclude_patterns') || '').split(',').map((pattern) => pattern.trim()).filter(Boolean);
 
   submitButton.disabled = true;
@@ -171,6 +174,12 @@ document.getElementById('gallery-import-form').addEventListener('submit', async 
     const pauseButton = document.getElementById('pause-import');
     const resumeButton = document.getElementById('resume-import');
     const cancelButton = document.getElementById('cancel-import');
+    if (!controls || !pauseButton || !resumeButton || !cancelButton) {
+      output.textContent = 'No se pudieron preparar los controles de importación.';
+      submitButton.disabled = false;
+      submitButton.textContent = 'Importar galería';
+      return;
+    }
     controls.hidden = false;
 
     const control = async (action) => {
@@ -184,19 +193,20 @@ document.getElementById('gallery-import-form').addEventListener('submit', async 
       }
     };
 
-    // Clean up existing event listeners before binding to prevent duplicate triggers
-    pauseButton.onclick = null;
-    resumeButton.onclick = null;
-    cancelButton.onclick = null;
-
-    pauseButton.addEventListener('click', () => control('pause'));
-    resumeButton.addEventListener('click', () => control('resume'));
-    cancelButton.addEventListener('click', () => control('cancel'));
+    // Property handlers replace the previous import's handlers instead of accumulating.
+    pauseButton.onclick = () => void control('pause');
+    resumeButton.onclick = () => void control('resume');
+    cancelButton.onclick = () => void control('cancel');
 
     const poll = async () => {
       try {
         const response = await fetch(`/api/v1/import-jobs/${job.job_id}`);
-        if (!response.ok) return;
+        if (!response.ok) {
+          output.textContent = 'Error de red al consultar el progreso de la importación.';
+          submitButton.disabled = false;
+          submitButton.textContent = 'Importar galería';
+          return;
+        }
         const progress = await response.json();
         output.textContent = `Estado: ${progress.state}. Descubiertas: ${progress.discovered}. Importadas: ${progress.imported}.`;
         const paused = progress.state === 'paused';
@@ -223,6 +233,7 @@ document.getElementById('gallery-import-form').addEventListener('submit', async 
     submitButton.textContent = 'Importar galería';
   }
 });
+}
 </script>
 
 {% if gallery_sources %}
@@ -375,10 +386,10 @@ document.addEventListener("DOMContentLoaded", () => {
     </div>
 
     <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-      <label for="representation-select" style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600;">Archivo mostrado por tándem RAW + JPEG</label>
+      <label for="representation-select" style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600;">Representación preferida para tándems RAW + JPEG</label>
       <select id="representation-select" name="representation" onchange="this.form.submit()">
-        <option value="jpeg" {% if representation == 'jpeg' %}selected{% endif %}>JPEG (recomendado; se indica si falta)</option>
-        <option value="raw" {% if representation == 'raw' %}selected{% endif %}>RAW (JPEG si el RAW no tiene preview)</option>
+        <option value="jpeg" {% if representation == 'jpeg' %}selected{% endif %}>JPEG (los RAW sin JPEG también se muestran)</option>
+        <option value="raw" {% if representation == 'raw' %}selected{% endif %}>RAW (JPEG solo como respaldo si no se puede renderizar el RAW)</option>
       </select>
     </div>
     {% endif %}

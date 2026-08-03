@@ -122,6 +122,12 @@
             <td>Captured</td>
             <td>{{ photo.metadata.capture_time.strftime('%Y-%m-%d %H:%M:%S') if photo.metadata and photo.metadata.capture_time else 'N/A' }}</td>
           </tr>
+          {% if photo.is_tandem %}
+          <tr>
+            <td>Asociación</td>
+            <td>Tándem RAW + JPEG ({{ photo.files|length }} archivos)</td>
+          </tr>
+          {% endif %}
         </table>
       </div>
 
@@ -133,6 +139,11 @@
           {% set d_val = photo.decision.value if photo.decision.value is defined else photo.decision %}
           <span class="photo-badge badge-{{ d_val|lower }}" style="vertical-align: middle; margin-left: 4px;">{{ d_val }}</span>
         </div>
+        {% if photo.is_tandem %}
+        <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 0.5rem;">
+          Asociación: <span class="photo-badge badge-tandem" style="vertical-align: middle; margin-left: 4px;">Tándem RAW + JPEG</span>
+        </div>
+        {% endif %}
 
         <div class="decision-actions-list">
           <form hx-post="/photos/{{ photo.photo_id }}/decision" hx-target="body" hx-swap="innerHTML">

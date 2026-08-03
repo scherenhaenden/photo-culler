@@ -93,7 +93,7 @@ impl SelectionStats {
 fn card_frame(fill: Color32, corner_radius: u8, inner_margin: egui::Margin) -> egui::Frame {
     egui::Frame::new()
         .fill(fill)
-        .stroke(egui::Stroke::new(1.0, BORDER_COLOR))
+        .stroke(egui::Stroke::new(1.0_f32, BORDER_COLOR))
         .corner_radius(corner_radius)
         .inner_margin(inner_margin)
 }
@@ -170,6 +170,8 @@ struct AnalysisStart<'a> {
 
 struct NativeApp {
     server_url: String,
+    server_token: Option<String>,
+    http: ureq::Agent,
     galleries: Vec<Gallery>,
     active_gallery: Option<String>,
     photos: Vec<Photo>,
@@ -203,6 +205,14 @@ impl Default for NativeApp {
         Self {
             server_url: std::env::var("PHOTO_CULLER_SERVER")
                 .unwrap_or_else(|_| DEFAULT_SERVER.into()),
+            server_token: std::env::var("PHOTO_CULLER_SERVER_TOKEN").ok(),
+            http: ureq::Agent::config_builder()
+                .timeout_connect(Some(Duration::from_secs(2)))
+                .timeout_recv_response(Some(Duration::from_secs(3)))
+                .timeout_recv_body(Some(Duration::from_secs(5)))
+                .timeout_global(Some(Duration::from_secs(8)))
+                .build()
+                .new_agent(),
             galleries: Vec::new(),
             active_gallery: None,
             photos: Vec::new(),
@@ -235,11 +245,20 @@ impl Default for NativeApp {
 
 impl NativeApp {
     fn endpoint(&self, path: &str) -> String {
-        format!("{}{}", self.server_url.trim_end_matches('/'), path)
+        let endpoint = format!("{}{}", self.server_url.trim_end_matches('/'), path);
+        match &self.server_token {
+            Some(token) => format!(
+                "{endpoint}{}token={token}",
+                if path.contains('?') { '&' } else { '?' }
+            ),
+            None => endpoint,
+        }
     }
 
     fn get_json<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T, String> {
-        let response = ureq::get(&self.endpoint(path))
+        let response = self
+            .http
+            .get(&self.endpoint(path))
             .call()
             .map_err(|error| error.to_string())?;
         response
@@ -256,9 +275,9 @@ impl NativeApp {
     ) -> Result<T, String> {
         let url = self.endpoint(path);
         let response = match method {
-            "POST" => ureq::post(&url).send_json(&body),
-            "PUT" => ureq::put(&url).send_json(&body),
-            "PATCH" => ureq::patch(&url).send_json(&body),
+            "POST" => self.http.post(&url).send_json(&body),
+            "PUT" => self.http.put(&url).send_json(&body),
+            "PATCH" => self.http.patch(&url).send_json(&body),
             unsupported => return Err(format!("unsupported HTTP method: {unsupported}")),
         }
         .map_err(|error| error.to_string())?;
@@ -360,7 +379,7 @@ impl NativeApp {
 
     fn select_photo(&mut self, ctx: &egui::Context, photo_id: String, thumbnail_url: String) {
         self.selected_photo = Some(photo_id);
-        match ureq::get(&self.endpoint(&thumbnail_url)).call() {
+        match self.http.get(&self.endpoint(&thumbnail_url)).call() {
             Ok(response) => match response.into_body().read_to_vec() {
                 Ok(bytes) => match image::load_from_memory(&bytes) {
                     Ok(image) => {
@@ -526,7 +545,7 @@ impl eframe::App for NativeApp {
                 egui::Frame::new()
                     .fill(BG_SIDEBAR)
                     .inner_margin(egui::Margin::symmetric(20, 14))
-                    .stroke(egui::Stroke::new(1.0, BORDER_COLOR)),
+                    .stroke(egui::Stroke::new(1.0_f32, BORDER_COLOR)),
             )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
@@ -546,7 +565,7 @@ impl eframe::App for NativeApp {
                     );
 
                     ui.add_space(20.0);
-                    let separator_stroke = egui::Stroke::new(1.0, BORDER_COLOR);
+                    let separator_stroke = egui::Stroke::new(1.0_f32, BORDER_COLOR);
                     let (rect, _) =
                         ui.allocate_exact_size(egui::vec2(1.0, 20.0), egui::Sense::hover());
                     ui.painter()
@@ -600,7 +619,7 @@ impl eframe::App for NativeApp {
                 egui::Frame::new()
                     .fill(BG_SIDEBAR)
                     .inner_margin(egui::Margin::symmetric(20, 8))
-                    .stroke(egui::Stroke::new(1.0, BORDER_COLOR)),
+                    .stroke(egui::Stroke::new(1.0_f32, BORDER_COLOR)),
             )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
@@ -701,7 +720,7 @@ impl eframe::App for NativeApp {
                 egui::Frame::new()
                     .fill(BG_SIDEBAR)
                     .inner_margin(egui::Margin::same(16))
-                    .stroke(egui::Stroke::new(1.0, BORDER_COLOR)),
+                    .stroke(egui::Stroke::new(1.0_f32, BORDER_COLOR)),
             )
             .show(ctx, |ui| {
                 // Catalog / Archive Branding Block
@@ -951,7 +970,7 @@ impl eframe::App for NativeApp {
                         ui.painter().circle_stroke(
                             rect.center(),
                             14.0,
-                            egui::Stroke::new(1.0, BORDER_COLOR),
+                            egui::Stroke::new(1.0_f32, BORDER_COLOR),
                         );
                         ui.painter().text(
                             rect.center(),
@@ -997,7 +1016,7 @@ impl eframe::App for NativeApp {
                 egui::Frame::new()
                     .fill(BG_SIDEBAR)
                     .inner_margin(egui::Margin::same(16))
-                    .stroke(egui::Stroke::new(1.0, BORDER_COLOR)),
+                    .stroke(egui::Stroke::new(1.0_f32, BORDER_COLOR)),
             )
             .show(ctx, |ui| {
                 ui.label(
@@ -1511,9 +1530,9 @@ impl eframe::App for NativeApp {
                                             let card_bg =
                                                 if selected { BG_CARD_HOVER } else { BG_CARD };
                                             let card_stroke = if selected {
-                                                egui::Stroke::new(1.5, ACCENT_ORANGE)
+                                                egui::Stroke::new(1.5_f32, ACCENT_ORANGE)
                                             } else {
-                                                egui::Stroke::new(1.0, BORDER_COLOR)
+                                                egui::Stroke::new(1.0_f32, BORDER_COLOR)
                                             };
 
                                             let frame = card_frame(

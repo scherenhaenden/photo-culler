@@ -2,7 +2,7 @@
 
 import threading
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, field_validator
@@ -53,7 +53,7 @@ class GalleryImportEstimateRequest(BaseModel):
 class NativeDecisionRequest(BaseModel):
     """Decision mutation used by native delivery adapters."""
 
-    decision: str = Field(min_length=1, max_length=32)
+    decision: Literal["best", "keep", "alternate", "review", "reject", "recover"]
 
 
 class NativeAnalysisStartRequest(BaseModel):
@@ -145,7 +145,7 @@ def set_photo_decision_for_native_clients(
 @router.get("/v1/analysis/progress")
 def native_analysis_progress(request: Request) -> dict[str, object]:
     """Expose a polling-friendly analysis snapshot for native applications."""
-    return request.app.state.analysis_jobs.snapshot()
+    return cast(dict[str, object], request.app.state.analysis_jobs.snapshot())
 
 
 @router.post("/v1/analysis/start")
@@ -165,7 +165,7 @@ def native_start_analysis(request: Request, payload: NativeAnalysisStartRequest)
     )
     if not started:
         raise HTTPException(status_code=409, detail="Analysis already running")
-    return request.app.state.analysis_jobs.snapshot()
+    return cast(dict[str, object], request.app.state.analysis_jobs.snapshot())
 
 
 @router.post("/v1/analysis/{action}")
@@ -181,7 +181,7 @@ def native_control_analysis(action: str, request: Request) -> dict[str, object]:
         raise HTTPException(status_code=404, detail="Unknown analysis action")
     if not operation():
         raise HTTPException(status_code=409, detail=f"Analysis cannot be {action}d")
-    return request.app.state.analysis_jobs.snapshot()
+    return cast(dict[str, object], request.app.state.analysis_jobs.snapshot())
 
 
 @router.get("/v1/sessions")
@@ -191,10 +191,7 @@ def list_sessions_for_native_clients(request: Request) -> dict[str, object]:
         sessions = SessionManagementService(session).list_sessions()
         return {
             "contract_version": 1,
-            "items": [
-                {"id": item.session_id, "name": item.name, "photo_count": item.photo_count}
-                for item in sessions
-            ],
+            "items": [{"id": item.session_id, "name": item.name, "photo_count": item.photo_count} for item in sessions],
         }
 
 

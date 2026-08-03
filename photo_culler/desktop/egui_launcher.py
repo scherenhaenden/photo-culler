@@ -2,6 +2,7 @@
 
 import logging
 import os
+import secrets
 import subprocess
 import sys
 import threading
@@ -38,24 +39,36 @@ def main() -> None:
     """Run the private local service for the lifetime of the native window."""
     configure_desktop_logging()
     port = find_free_port()
-    app = create_app(catalog_path=default_desktop_catalog_path())
+    token = secrets.token_urlsafe(16)
+    app = create_app(catalog_path=default_desktop_catalog_path(), desktop_token=token)
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
     server_thread = threading.Thread(target=server.run, daemon=True)
     server_thread.start()
     url = f"http://127.0.0.1:{port}"
+    client_exit_code = 0
+    primary_error: BaseException | None = None
     try:
-        wait_until_ready(url, token="")
+        wait_until_ready(url, token=token)
         environment = os.environ.copy()
         environment["PHOTO_CULLER_SERVER"] = url
+        environment["PHOTO_CULLER_SERVER_TOKEN"] = token
         result = subprocess.run([str(native_binary_path())], check=False, env=environment)
         if result.returncode != 0:
-            raise RuntimeError(f"Native egui client exited unexpectedly (status {result.returncode})")
+            logging.error("Native egui client exited unexpectedly with status %s", result.returncode)
+            client_exit_code = result.returncode
+    except BaseException as error:
+        primary_error = error
+        raise
     finally:
         server.should_exit = True
         server_thread.join(timeout=5)
         if server_thread.is_alive():
             logging.error("Photo Culler local server did not stop cleanly after native client shutdown")
-            raise RuntimeError("Photo Culler local server did not stop cleanly")
+            if primary_error is None and client_exit_code == 0:
+                raise RuntimeError("Photo Culler local server did not stop cleanly")
+
+    if client_exit_code:
+        raise SystemExit(client_exit_code)
 
 
 if __name__ == "__main__":

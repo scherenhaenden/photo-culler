@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Photo Culler",
+  "version": "0.1.0",
+  "identifier": "com.edwardflores.photo-culler",
+  "build": {
+    "frontendDist": "web"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Photo Culler",
+        "width": 1440,
+        "height": 960,
+        "minWidth": 960,
+        "minHeight": 640
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' http://127.0.0.1:*; connect-src 'self' http://127.0.0.1:*; img-src 'self' data: blob: http://127.0.0.1:*; style-src 'self' 'unsafe-inline' http://127.0.0.1:*; script-src 'self' 'unsafe-inline' http://127.0.0.1:*"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "icon": ["icons/icon.png", "icons/icon.svg"],
+    "targets": ["deb"],
+    "externalBin": ["binaries/photo-culler-backend"]
+  }
+}

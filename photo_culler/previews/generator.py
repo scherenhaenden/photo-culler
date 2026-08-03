@@ -1,10 +1,14 @@
 """Thumbnail and preview image generator."""
 
 import io
+import logging
+import re
 from pathlib import Path
 from typing import Dict, Optional, Union
 
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 THUMBNAIL_SIZES = {
     "small": 256,
@@ -15,28 +19,20 @@ THUMBNAIL_SIZES = {
 
 
 def extract_embedded_jpeg(raw_path: Path) -> Optional[bytes]:
-    """Scan a RAW file for embedded JPEGs and return the largest one."""
-    import re
-    from typing import Optional
+    """Return the largest usable JPEG preview embedded in a RAW file."""
     try:
         data = raw_path.read_bytes()
-        # Find matches for JPEG start markers
-        matches = [m.start() for m in re.finditer(b'\xff\xd8\xff', data)]
-        if not matches:
-            return None
+    except OSError:
+        return None
 
-        largest_jpeg = b''
-        for start in matches:
-            end = data.find(b'\xff\xd9', start)
-            if end != -1 and end > start:
-                jpeg_data = data[start:end+2]
-                if len(jpeg_data) > len(largest_jpeg):
-                    largest_jpeg = jpeg_data
-        if len(largest_jpeg) > 5000:  # Must be at least 5KB to be a valid preview
-            return largest_jpeg
-    except Exception:
-        pass
-    return None
+    largest_jpeg = b""
+    for match in re.finditer(b"\xff\xd8\xff", data):
+        end = data.find(b"\xff\xd9", match.start())
+        if end != -1:
+            candidate = data[match.start() : end + 2]
+            if len(candidate) > len(largest_jpeg):
+                largest_jpeg = candidate
+    return largest_jpeg if len(largest_jpeg) > 5000 else None
 
 
 class PreviewGenerator:
@@ -50,36 +46,41 @@ class PreviewGenerator:
         """Generate and save thumbnails for photo_id. Returns dict of size -> output_path."""
         results = {}
         try:
-            img = None
-            try:
-                img = Image.open(image_path)
-            except Exception:
-                jpeg_bytes = extract_embedded_jpeg(image_path)
-                if jpeg_bytes:
-                    img = Image.open(io.BytesIO(jpeg_bytes))
-                else:
-                    raise
-
-            with img:
-                if img.mode != "RGB":
-                    img = img.convert("RGB")
-
-                for size_name, max_dim in THUMBNAIL_SIZES.items():
-                    out_path = self.cache_dir / f"{photo_id}_{size_name}.jpg"
-                    if out_path.exists():
-                        results[size_name] = out_path
-                        continue
-
-                    # Create copy and resize while maintaining aspect ratio
-                    thumb = img.copy()
-                    thumb.thumbnail((max_dim, max_dim), Image.Resampling.BILINEAR)
-                    thumb.save(out_path, format="JPEG", quality=85)
+            img = self._load_image(image_path)
+            for size_name, max_dim in THUMBNAIL_SIZES.items():
+                out_path = self.cache_dir / f"{photo_id}_{size_name}.jpg"
+                if out_path.exists():
                     results[size_name] = out_path
-
+                    continue
+                thumb = img.copy()
+                thumb.thumbnail((max_dim, max_dim), Image.Resampling.BILINEAR)
+                thumb.save(out_path, format="JPEG", quality=85)
+                results[size_name] = out_path
         except Exception:
+            logger.warning("Unable to generate previews for %s", image_path, exc_info=True)
+        return results
+
+    @staticmethod
+    def _load_image(image_path: Path) -> Image.Image:
+        """Load standard images, camera RAW files, or an embedded RAW JPEG preview."""
+        try:
+            with Image.open(image_path) as image:
+                return image.convert("RGB")
+        except (OSError, ValueError):
             pass
 
-        return results
+        try:
+            import rawpy
+
+            with rawpy.imread(str(image_path)) as raw:
+                pixels = raw.postprocess(use_camera_wb=True, output_bps=8, half_size=True)
+            return Image.fromarray(pixels).convert("RGB")
+        except Exception:
+            jpeg_bytes = extract_embedded_jpeg(image_path)
+            if jpeg_bytes:
+                with Image.open(io.BytesIO(jpeg_bytes)) as image:
+                    return image.convert("RGB")
+            raise
 
     @staticmethod
     def has_visible_content(image_path: Path) -> bool:

@@ -89,8 +89,9 @@ log rotativo en `${XDG_STATE_HOME:-~/.local/state}/photo-culler/photo-culler.log
 
 ## Estado de los caminos Rust
 
-Tauri/WebGL (7% declarado) sigue siendo un bootstrap: sólo dibuja un canvas WebGL y
-no abre el catálogo ni ejecuta importación/análisis.
+Tauri/WebGL conserva el **7%**: el shell empaquetado inicia un sidecar FastAPI
+autenticado y tiene cobertura de arranque DEB, pero la navegación Wayland hacia
+la UI de referencia no es todavía fiable.
 
 egui/wgpu se recalculó a **100% de readiness funcional para el alcance Linux
 experimental** con diez criterios de igual peso. Usa el API local versionado, sin
@@ -110,9 +111,9 @@ leer SQLite directamente, y su launcher empaquetado inicia/cierra el servicio lo
 | E2E de launcher nativo | ✅ |
 | **Resultado** | **100% (10/10)** |
 
-Tauri parece el candidato más corto para una futura entrega que reutilice la UI web;
-egui requiere completar la paridad de interacción y el empaquetado antes de competir
-como entrega de escritorio.
+Tauri parece el candidato más corto para reutilizar la UI web cuando su navegación
+sea fiable; egui ya cubre el alcance Linux experimental y requiere validación en
+instalaciones limpias antes de una promoción de producto.
 
 ## Siguiente corte recomendado
 

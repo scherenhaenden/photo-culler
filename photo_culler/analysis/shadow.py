@@ -66,12 +66,18 @@ class RustShadowComparator:
         return ShadowComparison(source=source_path, deltas=deltas)
 
     def _native_metrics(self, source: Path) -> dict[str, Any]:
+        if not self.binary.is_file() or not os.access(self.binary, os.X_OK):
+            raise FileNotFoundError(f"Native shadow CLI is not an executable file: {self.binary}")
+        if not source.is_file():
+            raise FileNotFoundError(f"Image for native shadow comparison does not exist: {source}")
+
         completed = subprocess.run(
             [str(self.binary), "analyze", str(source), str(self.max_dimension)],
             check=True,
             capture_output=True,
             text=True,
             timeout=120,
+            shell=False,
         )
         return cast(dict[str, Any], json.loads(completed.stdout))
 
