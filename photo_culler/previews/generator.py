@@ -1,9 +1,12 @@
 """Thumbnail and preview image generator."""
 
+import logging
 from pathlib import Path
 from typing import Dict, Union
 
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 THUMBNAIL_SIZES = {
     "small": 256,
@@ -39,7 +42,7 @@ class PreviewGenerator:
                 results[size_name] = out_path
 
         except Exception:
-            pass
+            logger.warning("Unable to generate previews for %s", image_path, exc_info=True)
 
         return results
 
