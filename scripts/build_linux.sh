@@ -3,6 +3,7 @@ set -euo pipefail
 
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 python_bin="${PHOTO_CULLER_PYTHON:-${project_root}/.venv/bin/python}"
+output_dir="${PHOTO_CULLER_LINUX_BUILD_DIR:-${project_root}/builds/linux}"
 
 if [[ ! -x "${python_bin}" ]]; then
   # CI installs the project into the runner Python rather than a local .venv.
@@ -19,27 +20,25 @@ if [[ ! -x "${python_bin}" ]]; then
 fi
 
 cd "${project_root}"
-build_type="chromium"
-build_dir="builds/linux/${build_type}"
-pyinstaller_dir="builds/.pyinstaller/${build_type}"
-mkdir -p "${pyinstaller_dir}" "${build_dir}"
+mkdir -p builds/.pyinstaller "${output_dir}"
 "${python_bin}" -m PyInstaller \
   --noconfirm \
   --clean \
   --onefile \
   --windowed \
   --name photo-culler \
-  --workpath "${pyinstaller_dir}/work" \
-  --specpath "${pyinstaller_dir}" \
-  --distpath "${build_dir}" \
+  --workpath "builds/.pyinstaller/work" \
+  --specpath "builds/.pyinstaller" \
+  --distpath "${output_dir}" \
   --exclude-module PyQt5 \
   --exclude-module PyQt6 \
   --exclude-module gi \
   --exclude-module webview \
+  --hidden-import rawpy \
   --add-data "${project_root}/photo_culler/web/static:photo_culler/web/static" \
   --add-data "${project_root}/photo_culler/web/templates:photo_culler/web/templates" \
   photo_culler/desktop/linux_launcher.py
 
-chmod +x "${build_dir}/photo-culler"
-cp packaging/linux/README.txt "${build_dir}/README.txt"
-echo "Linux Chromium desktop build created at ${project_root}/${build_dir}/photo-culler"
+chmod +x "${output_dir}/photo-culler"
+cp packaging/linux/README.txt "${output_dir}/README.txt"
+echo "Linux desktop build created at ${output_dir}/photo-culler"

@@ -191,10 +191,7 @@ def list_sessions_for_native_clients(request: Request) -> dict[str, object]:
         sessions = SessionManagementService(session).list_sessions()
         return {
             "contract_version": 1,
-            "items": [
-                {"id": item.session_id, "name": item.name, "photo_count": item.photo_count}
-                for item in sessions
-            ],
+            "items": [{"id": item.session_id, "name": item.name, "photo_count": item.photo_count} for item in sessions],
         }
 
 

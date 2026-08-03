@@ -86,8 +86,8 @@ mod tests {
     }
 
     #[test]
-    fn frontend_readiness_matches_the_verified_delivery_scope() {
-        assert!(Frontend::TauriWebGl.readiness() < 10);
+    fn frontend_readiness_reflects_the_verified_delivery_scope() {
+        assert_eq!(Frontend::TauriWebGl.readiness(), 7);
         assert_eq!(Frontend::EguiWgpu.readiness(), 100);
     }
 }
