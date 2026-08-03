@@ -27,7 +27,7 @@ def native_binary_path() -> Path:
             return candidate
         raise RuntimeError(f"PHOTO_CULLER_EGUI_BINARY is not an executable file: {candidate}")
     bundle_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
-    name = "photo-culler-egui.exe" if sys.platform == "win32" else "photo-culler-egui"
+    name = "photo-culler-egui-native.exe" if sys.platform == "win32" else "photo-culler-egui-native"
     candidate = bundle_root / name
     if not candidate.is_file():
         raise RuntimeError(f"Native egui executable is missing: {candidate}")

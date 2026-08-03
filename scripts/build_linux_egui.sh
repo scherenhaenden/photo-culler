@@ -11,9 +11,10 @@ cargo build --release -p photo-culler-egui
 
 cd "${project_root}"
 mkdir -p "${build_dir}" "${work_dir}"
+install -m 755 "${project_root}/rust/target/release/photo-culler-egui" "${work_dir}/photo-culler-egui-native"
 "${python_bin}" -m PyInstaller --noconfirm --clean --onefile --windowed \
   --name photo-culler-egui --workpath "${work_dir}/work" --specpath "${work_dir}" --distpath "${build_dir}" \
-  --add-binary "${project_root}/rust/target/release/photo-culler-egui:." \
+  --add-binary "${work_dir}/photo-culler-egui-native:." \
   --add-data "${project_root}/photo_culler/web/static:photo_culler/web/static" \
   --add-data "${project_root}/photo_culler/web/templates:photo_culler/web/templates" \
   photo_culler/desktop/egui_launcher.py
