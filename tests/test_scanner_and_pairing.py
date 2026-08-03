@@ -78,8 +78,8 @@ def test_scanner_applies_source_relative_exclusion_patterns(tmp_path):
 
 
 def test_photo_is_tandem_property():
-    from photo_culler.core.models import Photo, FileRecord
     from photo_culler.core.enums import FileRole
+    from photo_culler.core.models import FileRecord, Photo
 
     # 1. Tandem case: has both RAW and JPEG
     tandem_photo = Photo(
