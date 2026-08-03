@@ -103,6 +103,7 @@
 .badge-review { background: var(--badge-review-bg); color: var(--badge-review-text); }
 .badge-reject { background: var(--badge-reject-bg); color: var(--badge-reject-text); }
 .badge-unprocessed { background: var(--badge-unprocessed-bg); color: var(--badge-unprocessed-text); }
+.badge-tandem { background-color: var(--accent-teal); color: #000000; font-weight: bold; }
 
 .photo-score-label {
   font-size: 10px;
