@@ -49,7 +49,7 @@ class PreviewGenerator:
         try:
             with Image.open(image_path) as image:
                 return image.convert("RGB")
-        except (OSError, ValueError):
+        except OSError, ValueError:
             import rawpy
 
             with rawpy.imread(str(image_path)) as raw:

@@ -187,7 +187,7 @@ class PhotoRepository:
         try:
             summary = json.loads(summary_json or "{}")
             analyzed_at = datetime.fromisoformat(str(summary.get("analyzed_at", "")).replace("Z", "+00:00"))
-        except (TypeError, ValueError, json.JSONDecodeError):
+        except TypeError, ValueError, json.JSONDecodeError:
             return True
         if summary.get("profile_id") != profile_id:
             return True

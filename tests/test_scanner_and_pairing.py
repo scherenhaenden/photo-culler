@@ -88,7 +88,7 @@ def test_photo_is_tandem_property():
         files=[
             FileRecord(Path("DSC_100.NEF"), FileRole.RAW, 1000, 1.0),
             FileRecord(Path("DSC_100.JPG"), FileRole.JPEG, 500, 1.0),
-        ]
+        ],
     )
     assert tandem_photo.is_tandem is True
 
@@ -98,7 +98,7 @@ def test_photo_is_tandem_property():
         stem_name="DSC_101",
         files=[
             FileRecord(Path("DSC_101.NEF"), FileRole.RAW, 1000, 1.0),
-        ]
+        ],
     )
     assert raw_only_photo.is_tandem is False
 
@@ -108,6 +108,6 @@ def test_photo_is_tandem_property():
         stem_name="DSC_102",
         files=[
             FileRecord(Path("DSC_102.JPG"), FileRole.JPEG, 500, 1.0),
-        ]
+        ],
     )
     assert jpeg_only_photo.is_tandem is False
