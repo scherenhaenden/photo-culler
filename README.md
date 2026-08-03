@@ -174,11 +174,13 @@ photo-culler desktop
 ```bash
 uv venv --python 3.14
 uv pip install -e '.[linux,build]'
-./scripts/build_linux.sh
+./scripts/build.sh --linux
 ./builds/linux/photo-culler
 ```
 
 The generated `builds/linux/photo-culler` is a single executable containing the Python application, templates, and static assets. All PyInstaller output, including temporary work files, stays under `builds/`. Double-clicking it opens an isolated Google Chrome/Chromium app window; closing that window also stops the protected local server. The replaceable build directory never stores the user's catalog: on Linux the desktop catalog lives at `${XDG_DATA_HOME:-~/.local/share}/photo-culler/catalog.db`.
+
+`scripts/build.sh` is the unified local build command. It builds the Linux desktop application by default; choose targets explicitly with `--linux`, `--rust-cli`, `--rust-egui`, or `--rust-tauri`. `--all` builds them all, and exclusions such as `--no-rust-tauri` let you omit one: `./scripts/build.sh --all --no-rust-tauri`. Use `--output /ruta/a/builds` to place final artifacts elsewhere.
 
 ### 4. Rust workspace, CLI, and frontend bootstraps
 
