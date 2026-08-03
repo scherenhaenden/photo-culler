@@ -145,7 +145,7 @@ def set_photo_decision_for_native_clients(
 @router.get("/v1/analysis/progress")
 def native_analysis_progress(request: Request) -> dict[str, object]:
     """Expose a polling-friendly analysis snapshot for native applications."""
-    return request.app.state.analysis_jobs.snapshot()
+    return cast(dict[str, object], request.app.state.analysis_jobs.snapshot())
 
 
 @router.post("/v1/analysis/start")
@@ -165,7 +165,7 @@ def native_start_analysis(request: Request, payload: NativeAnalysisStartRequest)
     )
     if not started:
         raise HTTPException(status_code=409, detail="Analysis already running")
-    return request.app.state.analysis_jobs.snapshot()
+    return cast(dict[str, object], request.app.state.analysis_jobs.snapshot())
 
 
 @router.post("/v1/analysis/{action}")
@@ -181,7 +181,7 @@ def native_control_analysis(action: str, request: Request) -> dict[str, object]:
         raise HTTPException(status_code=404, detail="Unknown analysis action")
     if not operation():
         raise HTTPException(status_code=409, detail=f"Analysis cannot be {action}d")
-    return request.app.state.analysis_jobs.snapshot()
+    return cast(dict[str, object], request.app.state.analysis_jobs.snapshot())
 
 
 @router.get("/v1/sessions")

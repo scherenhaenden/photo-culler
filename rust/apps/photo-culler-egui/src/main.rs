@@ -93,7 +93,7 @@ impl SelectionStats {
 fn card_frame(fill: Color32, corner_radius: u8, inner_margin: egui::Margin) -> egui::Frame {
     egui::Frame::new()
         .fill(fill)
-        .stroke(egui::Stroke::new(1.0, BORDER_COLOR))
+        .stroke(egui::Stroke::new(1.0_f32, BORDER_COLOR))
         .corner_radius(corner_radius)
         .inner_margin(inner_margin)
 }
@@ -487,7 +487,7 @@ impl eframe::App for NativeApp {
                 egui::Frame::new()
                     .fill(BG_SIDEBAR)
                     .inner_margin(egui::Margin::symmetric(20, 14))
-                    .stroke(egui::Stroke::new(1.0, BORDER_COLOR)),
+                    .stroke(egui::Stroke::new(1.0_f32, BORDER_COLOR)),
             )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
@@ -507,7 +507,7 @@ impl eframe::App for NativeApp {
                     );
 
                     ui.add_space(20.0);
-                    let separator_stroke = egui::Stroke::new(1.0, BORDER_COLOR);
+                    let separator_stroke = egui::Stroke::new(1.0_f32, BORDER_COLOR);
                     let (rect, _) =
                         ui.allocate_exact_size(egui::vec2(1.0, 20.0), egui::Sense::hover());
                     ui.painter()
@@ -561,7 +561,7 @@ impl eframe::App for NativeApp {
                 egui::Frame::new()
                     .fill(BG_SIDEBAR)
                     .inner_margin(egui::Margin::symmetric(20, 8))
-                    .stroke(egui::Stroke::new(1.0, BORDER_COLOR)),
+                    .stroke(egui::Stroke::new(1.0_f32, BORDER_COLOR)),
             )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
@@ -662,7 +662,7 @@ impl eframe::App for NativeApp {
                 egui::Frame::new()
                     .fill(BG_SIDEBAR)
                     .inner_margin(egui::Margin::same(16))
-                    .stroke(egui::Stroke::new(1.0, BORDER_COLOR)),
+                    .stroke(egui::Stroke::new(1.0_f32, BORDER_COLOR)),
             )
             .show(ctx, |ui| {
                 // Catalog / Archive Branding Block
@@ -912,7 +912,7 @@ impl eframe::App for NativeApp {
                         ui.painter().circle_stroke(
                             rect.center(),
                             14.0,
-                            egui::Stroke::new(1.0, BORDER_COLOR),
+                            egui::Stroke::new(1.0_f32, BORDER_COLOR),
                         );
                         ui.painter().text(
                             rect.center(),
@@ -958,7 +958,7 @@ impl eframe::App for NativeApp {
                 egui::Frame::new()
                     .fill(BG_SIDEBAR)
                     .inner_margin(egui::Margin::same(16))
-                    .stroke(egui::Stroke::new(1.0, BORDER_COLOR)),
+                    .stroke(egui::Stroke::new(1.0_f32, BORDER_COLOR)),
             )
             .show(ctx, |ui| {
                 ui.label(
@@ -1472,9 +1472,9 @@ impl eframe::App for NativeApp {
                                             let card_bg =
                                                 if selected { BG_CARD_HOVER } else { BG_CARD };
                                             let card_stroke = if selected {
-                                                egui::Stroke::new(1.5, ACCENT_ORANGE)
+                                                egui::Stroke::new(1.5_f32, ACCENT_ORANGE)
                                             } else {
-                                                egui::Stroke::new(1.0, BORDER_COLOR)
+                                                egui::Stroke::new(1.0_f32, BORDER_COLOR)
                                             };
 
                                             let frame = card_frame(
