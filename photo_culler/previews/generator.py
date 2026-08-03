@@ -1,7 +1,8 @@
 """Thumbnail and preview image generator."""
 
+import io
 from pathlib import Path
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 
 from PIL import Image
 
@@ -11,6 +12,31 @@ THUMBNAIL_SIZES = {
     "large": 1600,
     "full": 3200,
 }
+
+
+def extract_embedded_jpeg(raw_path: Path) -> Optional[bytes]:
+    """Scan a RAW file for embedded JPEGs and return the largest one."""
+    import re
+    from typing import Optional
+    try:
+        data = raw_path.read_bytes()
+        # Find matches for JPEG start markers
+        matches = [m.start() for m in re.finditer(b'\xff\xd8\xff', data)]
+        if not matches:
+            return None
+
+        largest_jpeg = b''
+        for start in matches:
+            end = data.find(b'\xff\xd9', start)
+            if end != -1 and end > start:
+                jpeg_data = data[start:end+2]
+                if len(jpeg_data) > len(largest_jpeg):
+                    largest_jpeg = jpeg_data
+        if len(largest_jpeg) > 5000:  # Must be at least 5KB to be a valid preview
+            return largest_jpeg
+    except Exception:
+        pass
+    return None
 
 
 class PreviewGenerator:
@@ -24,7 +50,17 @@ class PreviewGenerator:
         """Generate and save thumbnails for photo_id. Returns dict of size -> output_path."""
         results = {}
         try:
-            with Image.open(image_path) as img:
+            img = None
+            try:
+                img = Image.open(image_path)
+            except Exception:
+                jpeg_bytes = extract_embedded_jpeg(image_path)
+                if jpeg_bytes:
+                    img = Image.open(io.BytesIO(jpeg_bytes))
+                else:
+                    raise
+
+            with img:
                 if img.mode != "RGB":
                     img = img.convert("RGB")
 

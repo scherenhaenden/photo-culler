@@ -117,11 +117,21 @@ class EditService:
         recipe = document["recipe"]
         assert isinstance(recipe, dict)
         try:
-            with Image.open(source) as opened:
+            try:
+                opened = Image.open(source)
+            except Exception:
+                from photo_culler.previews.generator import extract_embedded_jpeg
+                jpeg_bytes = extract_embedded_jpeg(source)
+                if jpeg_bytes:
+                    opened = Image.open(io.BytesIO(jpeg_bytes))
+                else:
+                    raise
+
+            with opened:
                 image = ImageOps.exif_transpose(opened).convert("RGB")
                 image.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
                 pixels = np.asarray(image, dtype=np.float32).copy()
-        except (OSError, UnidentifiedImageError) as exc:
+        except Exception as exc:
             raise ValueError("The selected source cannot be rendered") from exc
 
         exposure_gain = 2.0 ** float(recipe["exposure"])

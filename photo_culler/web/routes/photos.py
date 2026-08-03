@@ -101,13 +101,16 @@ def get_thumbnail(photo_id: str, size: str, request: Request, representation: st
 @router.get("/previews/{photo_id}")
 def get_full_preview(photo_id: str, request: Request):
     """Serve the original JPEG/image for focused comparison without thumbnailing it."""
+    from fastapi.responses import RedirectResponse
+
     with request.app.state.db_engine.session() as session:
         photo = PhotoRepository(session).get_by_id(photo_id)
         display_file = photo.display_file("jpeg") if photo else None
     if not display_file or not display_file.path.exists():
         raise HTTPException(status_code=404, detail="Preview not found")
     if display_file.role not in {FileRole.JPEG, FileRole.IMAGE}:
-        raise HTTPException(status_code=404, detail="A browser-viewable original is not available")
+        # Redirect standalone RAW previews to generated high-res thumbnails so they are viewable
+        return RedirectResponse(url=f"/thumbnails/{photo_id}/1600")
     media_type = {
         ".heic": "image/heic",
         ".heif": "image/heif",

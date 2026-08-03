@@ -277,10 +277,10 @@ document.getElementById('rescan-gallery').addEventListener('click', async (event
 {% if import_jobs %}
 <section class="dashboard-panel" style="margin-bottom:1.5rem;">
   <h2>Importaciones recientes</h2>
-  <div style="display:grid; gap:.75rem;">
+  <div style="display:grid; gap:.75rem;" id="recent-imports-container">
     {% for job in import_jobs %}
-    <article data-import-job="{{ job.id }}" style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
-      <span>
+    <article data-import-job="{{ job.id }}" data-job-state="{{ job.state }}" style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+      <span class="job-status-text">
         <strong>{{ job.state }}</strong>
         · {{ job.discovered }} descubiertas
         · {{ job.imported }} importadas
@@ -306,6 +306,57 @@ document.querySelectorAll('.import-job-action').forEach((button) => {
     const response = await fetch(`/api/v1/import-jobs/${jobId}/${button.dataset.action}`, {method:'POST'});
     if (response.ok) location.reload();
   });
+});
+
+const pollRecentJobs = async () => {
+  const container = document.getElementById('recent-imports-container');
+  if (!container) return;
+  const articles = container.querySelectorAll('article[data-import-job]');
+  let hasActive = false;
+  articles.forEach(art => {
+    const state = art.getAttribute('data-job-state');
+    if (!['completed', 'failed', 'cancelled'].includes(state)) {
+      hasActive = true;
+    }
+  });
+  if (!hasActive) return;
+
+  try {
+    const res = await fetch('/api/v1/import-jobs?limit=10');
+    if (!res.ok) return;
+    const data = await res.json();
+    let reloadNeeded = false;
+
+    data.items.forEach(job => {
+      const art = container.querySelector(`article[data-import-job="${job.id}"]`);
+      if (art) {
+        const prevState = art.getAttribute('data-job-state');
+        if (prevState !== job.state) {
+          art.setAttribute('data-job-state', job.state);
+          if (job.state === 'completed') {
+            reloadNeeded = true;
+          }
+        }
+        const textSpan = art.querySelector('.job-status-text');
+        if (textSpan) {
+          textSpan.innerHTML = `<strong>${job.state}</strong> · ${job.discovered} descubiertas · ${job.imported} importadas`;
+        }
+      }
+    });
+
+    if (reloadNeeded) {
+      setTimeout(() => location.reload(), 500);
+    } else {
+      setTimeout(pollRecentJobs, 2000);
+    }
+  } catch (err) {
+    console.error('Error polling import jobs:', err);
+    setTimeout(pollRecentJobs, 5000);
+  }
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+  pollRecentJobs();
 });
 </script>
 {% endif %}
