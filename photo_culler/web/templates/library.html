@@ -7,51 +7,113 @@
   <div>
     <h1>Biblioteca de Fotografías</h1>
     {% if active_gallery %}
-    <span style="color:var(--text-secondary);">Galería activa: <strong>{{ active_gallery.name }}</strong></span>
+    <span style="color:var(--text-secondary); margin-right: 0.5rem;">Galería activa: <strong>{{ active_gallery.name }}</strong></span>
     <button class="btn btn-secondary" id="rescan-gallery" data-gallery-id="{{ active_gallery.id }}" type="button">Reescanear</button>
     {% endif %}
+    <button class="btn btn-secondary" id="toggle-import-panel" type="button" style="margin-left: 0.5rem;">
+      {% if total_photos > 0 %}Importar / Nueva Galería{% else %}Ocultar Importador{% endif %}
+    </button>
   </div>
   <div style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; background: rgba(255, 255, 255, 0.05); padding: 4px 12px; border-radius: 9999px;">
     Mostrando <span style="color: #ffffff;">{{ photos|length }}</span> de {{ total_photos }} fotos
   </div>
 </div>
 
-<section class="dashboard-panel" style="text-align:center; padding:4rem 2rem; margin-bottom:1.5rem;">
-  <div style="font-size:3rem;" aria-hidden="true">▦</div>
+<section id="import-panel" class="gallery-import-panel" style="{% if total_photos > 0 %}display: none;{% endif %}">
   <h2>
     {% if not galleries %}Crea tu primera galería fotográfica
     {% elif total_photos == 0 %}Esta galería todavía está vacía
     {% else %}Añadir otra carpeta a una galería
     {% endif %}
   </h2>
-  <p style="color:var(--text-secondary); max-width:42rem; margin:0 auto 1.5rem;">
+  <p>
     Una galería es una colección lógica: los originales permanecen en sus carpetas y Photo Culler nunca los modifica.
   </p>
-  <form id="gallery-import-form" style="display:grid; gap:.75rem; max-width:34rem; margin:auto; text-align:left;">
+  <form id="gallery-import-form" class="gallery-import-form">
     {% if galleries %}
-    <label>Galería
-      <select name="gallery_id" required>
+    <div class="form-group">
+      <label for="gallery-select">Galería</label>
+      <select name="gallery_id" id="gallery-select" required>
         {% for gallery in galleries %}
         <option value="{{ gallery.id }}" {% if gallery.id == active_gallery_id %}selected{% endif %}>{{ gallery.name }} ({{ gallery.photo_count }} fotos)</option>
         {% endfor %}
+        <option value="new">— Crear nueva galería —</option>
       </select>
-    </label>
+    </div>
+    <div class="form-group" id="new-gallery-name-group" style="display: none;">
+      <label for="new-gallery-name-input">Nombre de la nueva galería</label>
+      <input name="name" id="new-gallery-name-input" maxlength="255" placeholder="Mi nueva galería">
+    </div>
     {% else %}
-    <label>Nombre de galería <input name="name" required maxlength="255" value="Mi galería"></label>
+    <div class="form-group">
+      <label for="gallery-name-input">Nombre de galería</label>
+      <input name="name" id="gallery-name-input" required maxlength="255" value="Mi galería">
+    </div>
     {% endif %}
-    <label>Carpeta local <input name="path" required placeholder="/ruta/a/mis/fotos"></label>
-    <label><input name="recursive" type="checkbox" checked> Incluir subdirectorios</label>
-    <label>Excluir patrones <input name="exclude_patterns" placeholder="previews/**, *.tmp"></label>
+
+    <div class="form-group">
+      <label for="gallery-path-input">Carpeta local</label>
+      <input name="path" id="gallery-path-input" required placeholder="/ruta/a/mis/fotos">
+    </div>
+
+    <div class="form-group checkbox-group">
+      <label class="checkbox-label">
+        <input name="recursive" type="checkbox" checked>
+        <span>Incluir subdirectorios</span>
+      </label>
+    </div>
+
+    <div class="form-group">
+      <label for="gallery-exclude-input">Excluir patrones</label>
+      <input name="exclude_patterns" id="gallery-exclude-input" placeholder="previews/**, *.tmp">
+    </div>
+
     <button class="btn" id="submit-gallery-import" type="submit">Importar galería</button>
     <output id="gallery-import-status" aria-live="polite"></output>
-    <div id="gallery-import-controls" hidden style="display:flex; gap:.5rem;">
+    <div id="gallery-import-controls" hidden style="display:flex; gap:.5rem; margin-top: 0.5rem;">
       <button class="btn btn-secondary" id="pause-import" type="button">Pausar</button>
       <button class="btn btn-secondary" id="resume-import" type="button" hidden>Reanudar</button>
       <button class="btn btn-secondary" id="cancel-import" type="button">Cancelar</button>
     </div>
   </form>
 </section>
+
 <script>
+// Toggle Import Panel
+const toggleBtn = document.getElementById('toggle-import-panel');
+if (toggleBtn) {
+  toggleBtn.addEventListener('click', () => {
+    const panel = document.getElementById('import-panel');
+    if (panel.style.display === 'none' || panel.style.display === '') {
+      panel.style.display = 'block';
+      toggleBtn.textContent = 'Ocultar Importador';
+    } else {
+      panel.style.display = 'none';
+      toggleBtn.textContent = 'Importar / Nueva Galería';
+    }
+  });
+}
+
+// Select Gallery Option Logic
+const gallerySelect = document.getElementById('gallery-select');
+if (gallerySelect) {
+  const handleSelectChange = () => {
+    const newNameGroup = document.getElementById('new-gallery-name-group');
+    const newNameInput = document.getElementById('new-gallery-name-input');
+    if (gallerySelect.value === 'new') {
+      newNameGroup.style.display = 'flex';
+      newNameInput.required = true;
+    } else {
+      newNameGroup.style.display = 'none';
+      newNameInput.required = false;
+    }
+  };
+  gallerySelect.addEventListener('change', handleSelectChange);
+  // Run on initial load to support preset selection
+  handleSelectChange();
+}
+
+// Submit Import Form Logic
 document.getElementById('gallery-import-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
@@ -62,8 +124,13 @@ document.getElementById('gallery-import-form').addEventListener('submit', async 
   submitButton.textContent = 'Importando…';
   output.textContent = 'Iniciando importación…';
   let galleryId = form.get('gallery_id');
-  if (!galleryId) {
-    const gallery = await fetch('/api/v1/galleries', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:form.get('name')})});
+
+  if (!galleryId || galleryId === 'new') {
+    const gallery = await fetch('/api/v1/galleries', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: form.get('name') })
+    });
     if (!gallery.ok) {
       output.textContent = 'No se pudo crear la galería.';
       submitButton.disabled = false;
@@ -72,7 +139,15 @@ document.getElementById('gallery-import-form').addEventListener('submit', async 
     }
     galleryId = (await gallery.json()).id;
   }
-  const queued = await fetch(`/api/v1/galleries/${galleryId}/imports`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({path:form.get('path'), recursive:form.has('recursive'), exclude_patterns:exclusions})});
+  const queued = await fetch(`/api/v1/galleries/${galleryId}/imports`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      path: form.get('path'),
+      recursive: form.has('recursive'),
+      exclude_patterns: exclusions
+    })
+  });
   if (!queued.ok) {
     output.textContent = 'La carpeta no es válida o no está disponible.';
     submitButton.disabled = false;
