@@ -93,7 +93,8 @@ struct NativeApp {
 impl Default for NativeApp {
     fn default() -> Self {
         Self {
-            server_url: DEFAULT_SERVER.into(),
+            server_url: std::env::var("PHOTO_CULLER_SERVER")
+                .unwrap_or_else(|_| DEFAULT_SERVER.into()),
             galleries: Vec::new(),
             active_gallery: None,
             photos: Vec::new(),
