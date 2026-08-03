@@ -90,12 +90,11 @@ fn wait_for_backend(app: &AppHandle, port: u16, token: &str) -> Result<(), Strin
 }
 
 fn stop_backend(app: &AppHandle) {
-    if let Some(state) = app.try_state::<Backend>() {
-        if let Ok(mut child) = state.0.lock() {
-            if let Some((child, _events)) = child.take() {
-                let _ = child.kill();
-            }
-        }
+    if let Some(state) = app.try_state::<Backend>()
+        && let Ok(mut child) = state.0.lock()
+        && let Some((child, _events)) = child.take()
+    {
+        let _ = child.kill();
     }
 }
 
