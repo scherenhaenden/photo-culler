@@ -10,12 +10,12 @@ import pytest
 
 def _native_standin() -> str:
     return textwrap.dedent(
-        """\
-        #!/usr/bin/env python3
+        f"""\
+        #!{sys.executable}
         import os
         import urllib.request
 
-        url = os.environ['PHOTO_CULLER_SERVER'] + '/api/health'
+        url = os.environ['PHOTO_CULLER_SERVER'] + '/api/health?token=' + os.environ['PHOTO_CULLER_SERVER_TOKEN']
         with urllib.request.urlopen(url, timeout=5) as response:
             assert response.status == 200
             assert response.read().decode('utf-8').find('photo-culler') >= 0

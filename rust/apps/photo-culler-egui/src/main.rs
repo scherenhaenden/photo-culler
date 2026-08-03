@@ -170,6 +170,8 @@ struct AnalysisStart<'a> {
 
 struct NativeApp {
     server_url: String,
+    server_token: Option<String>,
+    http: ureq::Agent,
     galleries: Vec<Gallery>,
     active_gallery: Option<String>,
     photos: Vec<Photo>,
@@ -201,6 +203,14 @@ impl Default for NativeApp {
         Self {
             server_url: std::env::var("PHOTO_CULLER_SERVER")
                 .unwrap_or_else(|_| DEFAULT_SERVER.into()),
+            server_token: std::env::var("PHOTO_CULLER_SERVER_TOKEN").ok(),
+            http: ureq::Agent::config_builder()
+                .timeout_connect(Some(Duration::from_secs(2)))
+                .timeout_recv_response(Some(Duration::from_secs(3)))
+                .timeout_recv_body(Some(Duration::from_secs(5)))
+                .timeout_global(Some(Duration::from_secs(8)))
+                .build()
+                .new_agent(),
             galleries: Vec::new(),
             active_gallery: None,
             photos: Vec::new(),
@@ -231,11 +241,20 @@ impl Default for NativeApp {
 
 impl NativeApp {
     fn endpoint(&self, path: &str) -> String {
-        format!("{}{}", self.server_url.trim_end_matches('/'), path)
+        let endpoint = format!("{}{}", self.server_url.trim_end_matches('/'), path);
+        match &self.server_token {
+            Some(token) => format!(
+                "{endpoint}{}token={token}",
+                if path.contains('?') { '&' } else { '?' }
+            ),
+            None => endpoint,
+        }
     }
 
     fn get_json<T: serde::de::DeserializeOwned>(&self, path: &str) -> Result<T, String> {
-        let response = ureq::get(&self.endpoint(path))
+        let response = self
+            .http
+            .get(&self.endpoint(path))
             .call()
             .map_err(|error| error.to_string())?;
         response
@@ -252,9 +271,9 @@ impl NativeApp {
     ) -> Result<T, String> {
         let url = self.endpoint(path);
         let response = match method {
-            "POST" => ureq::post(&url).send_json(&body),
-            "PUT" => ureq::put(&url).send_json(&body),
-            "PATCH" => ureq::patch(&url).send_json(&body),
+            "POST" => self.http.post(&url).send_json(&body),
+            "PUT" => self.http.put(&url).send_json(&body),
+            "PATCH" => self.http.patch(&url).send_json(&body),
             unsupported => return Err(format!("unsupported HTTP method: {unsupported}")),
         }
         .map_err(|error| error.to_string())?;
@@ -356,7 +375,7 @@ impl NativeApp {
 
     fn select_photo(&mut self, ctx: &egui::Context, photo_id: String, thumbnail_url: String) {
         self.selected_photo = Some(photo_id);
-        match ureq::get(&self.endpoint(&thumbnail_url)).call() {
+        match self.http.get(&self.endpoint(&thumbnail_url)).call() {
             Ok(response) => match response.into_body().read_to_vec() {
                 Ok(bytes) => match image::load_from_memory(&bytes) {
                     Ok(image) => {

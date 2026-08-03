@@ -2,7 +2,7 @@
 
 import threading
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, field_validator
@@ -53,7 +53,7 @@ class GalleryImportEstimateRequest(BaseModel):
 class NativeDecisionRequest(BaseModel):
     """Decision mutation used by native delivery adapters."""
 
-    decision: str = Field(min_length=1, max_length=32)
+    decision: Literal["best", "keep", "alternate", "review", "reject", "recover"]
 
 
 class NativeAnalysisStartRequest(BaseModel):

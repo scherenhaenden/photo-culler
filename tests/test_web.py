@@ -232,9 +232,13 @@ def test_native_frontend_contracts_use_application_services(web_client, tmp_path
     decision = web_client.put("/api/v1/photos/native-photo/decision", json={"decision": "keep"})
     assert decision.status_code == 200
     assert decision.json()["decision"] == "KEEP"
+    assert web_client.put("/api/v1/photos/native-photo/decision", json={"decision": "kepp"}).status_code == 422
+    assert web_client.put("/api/v1/photos/unknown/decision", json={"decision": "keep"}).status_code == 404
     assert web_client.get("/api/v1/analysis/progress").status_code == 200
     assert web_client.post("/api/v1/analysis/start", json={"profile": "missing"}).status_code == 422
     assert web_client.post("/api/v1/analysis/unknown").status_code == 404
+    assert web_client.get("/api/v1/sessions").status_code == 200
+    assert web_client.get("/api/v1/groups").status_code == 200
 
 
 def test_import_estimate_api(web_client, tmp_path):

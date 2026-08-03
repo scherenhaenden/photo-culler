@@ -151,7 +151,7 @@ process restart performs a fresh idempotent scan of the persisted source,
 full hashes still run only through explicit identity tools rather than a
 background tier. The current white-balance transform is an initial deterministic
 preview approximation, not a color-managed RAW pipeline. Export, PostgreSQL
-operations, Tauri, egui, advanced color management and local masks remain
+operations, Tauri, advanced color management and local masks remain
 planned or prototype-only.
 The percentages above must only be updated from measured test and coverage
 output.
