@@ -10,7 +10,8 @@
     <span style="color:var(--text-secondary); margin-right: 0.5rem;">Galería activa: <strong>{{ active_gallery.name }}</strong></span>
     <button class="btn btn-secondary" id="rescan-gallery" data-gallery-id="{{ active_gallery.id }}" type="button">Reescanear</button>
     {% endif %}
-    <button class="btn btn-secondary" id="toggle-import-panel" type="button" style="margin-left: 0.5rem;">
+    <button class="btn btn-secondary" id="toggle-import-panel" type="button" style="margin-left: 0.5rem;"
+      data-show-label="Importar / Nueva Galería" data-hide-label="Ocultar Importador">
       {% if total_photos > 0 %}Importar / Nueva Galería{% else %}Ocultar Importador{% endif %}
     </button>
   </div>
@@ -19,7 +20,7 @@
   </div>
 </div>
 
-<section id="import-panel" class="gallery-import-panel" style="{% if total_photos > 0 %}display: none;{% endif %}">
+<section id="import-panel" class="gallery-import-panel"{% if total_photos > 0 %} hidden{% endif %}>
   <h2>
     {% if not galleries %}Crea tu primera galería fotográfica
     {% elif total_photos == 0 %}Esta galería todavía está vacía
@@ -82,15 +83,14 @@
 // Toggle Import Panel
 const toggleBtn = document.getElementById('toggle-import-panel');
 if (toggleBtn) {
+  const panel = document.getElementById('import-panel');
+  const setImportPanelVisibility = (visible) => {
+    panel.hidden = !visible;
+    toggleBtn.textContent = visible ? toggleBtn.dataset.hideLabel : toggleBtn.dataset.showLabel;
+  };
+
   toggleBtn.addEventListener('click', () => {
-    const panel = document.getElementById('import-panel');
-    if (panel.style.display === 'none' || panel.style.display === '') {
-      panel.style.display = 'block';
-      toggleBtn.textContent = 'Ocultar Importador';
-    } else {
-      panel.style.display = 'none';
-      toggleBtn.textContent = 'Importar / Nueva Galería';
-    }
+    setImportPanelVisibility(panel.hidden);
   });
 }
 
@@ -119,74 +119,102 @@ document.getElementById('gallery-import-form').addEventListener('submit', async 
   const form = new FormData(event.currentTarget);
   const output = document.getElementById('gallery-import-status');
   const submitButton = document.getElementById('submit-gallery-import');
+  const previousButtonText = submitButton.textContent;
   const exclusions = String(form.get('exclude_patterns') || '').split(',').map((pattern) => pattern.trim()).filter(Boolean);
   submitButton.disabled = true;
   submitButton.textContent = 'Importando…';
   output.textContent = 'Iniciando importación…';
-  let galleryId = form.get('gallery_id');
+  let importStarted = false;
 
-  if (!galleryId || galleryId === 'new') {
-    const gallery = await fetch('/api/v1/galleries', {
+  try {
+    let galleryId = form.get('gallery_id');
+
+    if (!galleryId || galleryId === 'new') {
+      const galleryName = String(form.get('name') || '').trim();
+      if (!galleryName) {
+        output.textContent = 'Indica un nombre para la nueva galería.';
+        return;
+      }
+      const gallery = await fetch('/api/v1/galleries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: galleryName })
+      });
+      if (!gallery.ok) {
+        output.textContent = 'No se pudo crear la galería.';
+        return;
+      }
+      galleryId = (await gallery.json()).id;
+    }
+    const queued = await fetch(`/api/v1/galleries/${galleryId}/imports`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: form.get('name') })
+      body: JSON.stringify({
+        path: form.get('path'),
+        recursive: form.has('recursive'),
+        exclude_patterns: exclusions
+      })
     });
-    if (!gallery.ok) {
-      output.textContent = 'No se pudo crear la galería.';
-      submitButton.disabled = false;
-      submitButton.textContent = 'Importar galería';
+    if (!queued.ok) {
+      output.textContent = 'La carpeta no es válida o no está disponible.';
       return;
     }
-    galleryId = (await gallery.json()).id;
-  }
-  const queued = await fetch(`/api/v1/galleries/${galleryId}/imports`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      path: form.get('path'),
-      recursive: form.has('recursive'),
-      exclude_patterns: exclusions
-    })
-  });
-  if (!queued.ok) {
-    output.textContent = 'La carpeta no es válida o no está disponible.';
-    submitButton.disabled = false;
-    submitButton.textContent = 'Importar galería';
-    return;
-  }
-  const job = await queued.json();
-  const controls = document.getElementById('gallery-import-controls');
-  const pauseButton = document.getElementById('pause-import');
-  const resumeButton = document.getElementById('resume-import');
-  const cancelButton = document.getElementById('cancel-import');
-  controls.hidden = false;
+    const job = await queued.json();
+    importStarted = true;
+    const controls = document.getElementById('gallery-import-controls');
+    const pauseButton = document.getElementById('pause-import');
+    const resumeButton = document.getElementById('resume-import');
+    const cancelButton = document.getElementById('cancel-import');
+    controls.hidden = false;
 
-  const control = async (action) => {
-    const response = await fetch(`/api/v1/import-jobs/${job.job_id}/${action}`, {method:'POST'});
-    if (!response.ok) output.textContent = `No se pudo ${action === 'pause' ? 'pausar' : action === 'resume' ? 'reanudar' : 'cancelar'} la importación.`;
-  };
-  pauseButton.addEventListener('click', () => control('pause'));
-  resumeButton.addEventListener('click', () => control('resume'));
-  cancelButton.addEventListener('click', () => control('cancel'));
+    const control = async (action) => {
+      try {
+        const response = await fetch(`/api/v1/import-jobs/${job.job_id}/${action}`, {method:'POST'});
+        if (!response.ok) throw new Error(`Unable to ${action} import`);
+      } catch (error) {
+        console.error('Error controlling gallery import', error);
+        output.textContent = `No se pudo ${action === 'pause' ? 'pausar' : action === 'resume' ? 'reanudar' : 'cancelar'} la importación.`;
+      }
+    };
+    pauseButton.addEventListener('click', () => control('pause'));
+    resumeButton.addEventListener('click', () => control('resume'));
+    cancelButton.addEventListener('click', () => control('cancel'));
 
-  const poll = async () => {
-    const response = await fetch(`/api/v1/import-jobs/${job.job_id}`);
-    if (!response.ok) return;
-    const progress = await response.json();
-    output.textContent = `Estado: ${progress.state}. Descubiertas: ${progress.discovered}. Importadas: ${progress.imported}.`;
-    const paused = progress.state === 'paused';
-    pauseButton.hidden = paused;
-    resumeButton.hidden = !paused;
-    if (['completed', 'failed', 'cancelled'].includes(progress.state)) {
-      controls.hidden = true;
+    const poll = async () => {
+      try {
+        const response = await fetch(`/api/v1/import-jobs/${job.job_id}`);
+        if (!response.ok) throw new Error('Unable to retrieve import progress');
+        const progress = await response.json();
+        output.textContent = `Estado: ${progress.state}. Descubiertas: ${progress.discovered}. Importadas: ${progress.imported}.`;
+        const paused = progress.state === 'paused';
+        pauseButton.hidden = paused;
+        resumeButton.hidden = !paused;
+        if (['completed', 'failed', 'cancelled'].includes(progress.state)) {
+          controls.hidden = true;
+          submitButton.disabled = false;
+          submitButton.textContent = previousButtonText;
+          if (progress.state === 'completed') setTimeout(() => location.reload(), 500);
+          return;
+        }
+        setTimeout(poll, 250);
+      } catch (error) {
+        console.error('Error polling gallery import', error);
+        controls.hidden = true;
+        output.textContent = 'No se pudo consultar el estado de la importación. Inténtalo de nuevo.';
+        submitButton.disabled = false;
+        submitButton.textContent = previousButtonText;
+      }
+    };
+    poll();
+  } catch (error) {
+    console.error('Error during gallery import', error);
+    output.textContent = 'No se pudo completar la importación. Verifica tu conexión e inténtalo de nuevo.';
+  } finally {
+    if (!importStarted) {
       submitButton.disabled = false;
-      submitButton.textContent = 'Importar galería';
-      if (progress.state === 'completed') setTimeout(() => location.reload(), 500);
-      return;
+      submitButton.textContent = previousButtonText;
     }
-    setTimeout(poll, 250);
-  };
-  poll();
+  }
 });
 </script>
 
