@@ -11,6 +11,9 @@
     <div class="photo-badge-row">
       {% set d_val = photo.decision.value if photo.decision.value is defined else photo.decision %}
       <span class="photo-badge badge-{{ d_val|lower }}">{{ d_val }}</span>
+      {% if photo.is_tandem %}
+      <span class="photo-badge tandem-badge" style="background-color: var(--accent-teal); color: #000000; font-weight: bold;" title="Tándem RAW + JPEG">RAW+JPEG</span>
+      {% endif %}
       {% if preview_file %}
       <span class="photo-badge preview-format" title="{{ translate('Archivo usado para esta vista', resolve_locale(request)) }}">{{ preview_file.role.value|upper }}</span>
       {% endif %}

@@ -105,7 +105,7 @@ class SimilarityGrouper:
             return left.stem_name[:12] == right.stem_name[:12]
         try:
             return abs(left_time.timestamp() - right_time.timestamp()) <= self.max_gap.total_seconds()
-        except OSError, TypeError, ValueError:
+        except (OSError, TypeError, ValueError):
             # Mixed/invalid EXIF timezone data must not make grouping fail.
             return left.stem_name[:12] == right.stem_name[:12]
 

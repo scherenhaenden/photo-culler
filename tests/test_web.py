@@ -111,6 +111,7 @@ def test_raw_jpeg_tandem_uses_jpeg_for_the_default_preview(web_client, tmp_path)
     library = web_client.get("/library?representation=jpeg")
     assert "frame.jpg" in library.text
     assert "JPEG" in library.text
+    assert "RAW+JPEG" in library.text
 
 
 def test_black_raw_preview_falls_back_to_its_jpeg_tandem(web_client, tmp_path):

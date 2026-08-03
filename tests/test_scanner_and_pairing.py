@@ -75,3 +75,39 @@ def test_scanner_applies_source_relative_exclusion_patterns(tmp_path):
     )
 
     assert [record.path.name for record in records] == ["keep.jpg"]
+
+
+def test_photo_is_tandem_property():
+    from photo_culler.core.models import Photo, FileRecord
+    from photo_culler.core.enums import FileRole
+
+    # 1. Tandem case: has both RAW and JPEG
+    tandem_photo = Photo(
+        photo_id="tandem-test",
+        stem_name="DSC_100",
+        files=[
+            FileRecord(Path("DSC_100.NEF"), FileRole.RAW, 1000, 1.0),
+            FileRecord(Path("DSC_100.JPG"), FileRole.JPEG, 500, 1.0),
+        ]
+    )
+    assert tandem_photo.is_tandem is True
+
+    # 2. Only RAW case
+    raw_only_photo = Photo(
+        photo_id="raw-only",
+        stem_name="DSC_101",
+        files=[
+            FileRecord(Path("DSC_101.NEF"), FileRole.RAW, 1000, 1.0),
+        ]
+    )
+    assert raw_only_photo.is_tandem is False
+
+    # 3. Only JPEG case
+    jpeg_only_photo = Photo(
+        photo_id="jpeg-only",
+        stem_name="DSC_102",
+        files=[
+            FileRecord(Path("DSC_102.JPG"), FileRole.JPEG, 500, 1.0),
+        ]
+    )
+    assert jpeg_only_photo.is_tandem is False
