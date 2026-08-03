@@ -159,6 +159,24 @@ def test_full_preview_sets_the_heic_content_type(web_client, tmp_path):
     assert preview.headers["content-type"] == "image/heic"
 
 
+def test_photo_inspector_shows_the_display_filename(web_client, tmp_path):
+    source = tmp_path / "DSC_0068.NEF"
+    source.write_bytes(b"raw source")
+    with web_client.app.state.db_engine.session() as session:
+        PhotoRepository(session).save_photo(
+            Photo(
+                "filename-frame",
+                "DSC_0068",
+                files=[FileRecord(source, FileRole.RAW, source.stat().st_size, source.stat().st_mtime)],
+            )
+        )
+
+    inspector = web_client.get("/photos/filename-frame")
+
+    assert inspector.status_code == 200
+    assert "DSC_0068.NEF" in inspector.text
+
+
 def test_gallery_import_api_and_empty_state(web_client, tmp_path):
     source = tmp_path / "photos"
     source.mkdir()

@@ -25,6 +25,7 @@ def inspect_photo(photo_id: str, request: Request, group: str | None = Query(def
         photo = repo.get_by_id(photo_id)
         if not photo:
             raise HTTPException(status_code=404, detail="Photo not found")
+        display_file = photo.display_file("jpeg")
         analysis_summary = repo.get_analysis_summary(photo_id)
 
         # Query only adjacent records. Loading and converting the entire catalog made
@@ -68,6 +69,7 @@ def inspect_photo(photo_id: str, request: Request, group: str | None = Query(def
         context={
             "active_tab": "library",
             "photo": photo,
+            "display_file": display_file,
             "analysis_summary": analysis_summary,
             "prev_photo_id": prev_photo_id,
             "next_photo_id": next_photo_id,
