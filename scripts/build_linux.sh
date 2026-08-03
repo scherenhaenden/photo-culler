@@ -19,16 +19,19 @@ if [[ ! -x "${python_bin}" ]]; then
 fi
 
 cd "${project_root}"
-mkdir -p builds/.pyinstaller builds/linux
+build_type="chromium"
+build_dir="builds/linux/${build_type}"
+pyinstaller_dir="builds/.pyinstaller/${build_type}"
+mkdir -p "${pyinstaller_dir}" "${build_dir}"
 "${python_bin}" -m PyInstaller \
   --noconfirm \
   --clean \
   --onefile \
   --windowed \
   --name photo-culler \
-  --workpath "builds/.pyinstaller/work" \
-  --specpath "builds/.pyinstaller" \
-  --distpath "builds/linux" \
+  --workpath "${pyinstaller_dir}/work" \
+  --specpath "${pyinstaller_dir}" \
+  --distpath "${build_dir}" \
   --exclude-module PyQt5 \
   --exclude-module PyQt6 \
   --exclude-module gi \
@@ -37,6 +40,6 @@ mkdir -p builds/.pyinstaller builds/linux
   --add-data "${project_root}/photo_culler/web/templates:photo_culler/web/templates" \
   photo_culler/desktop/linux_launcher.py
 
-chmod +x builds/linux/photo-culler
-cp packaging/linux/README.txt builds/linux/README.txt
-echo "Linux desktop build created at ${project_root}/builds/linux/photo-culler"
+chmod +x "${build_dir}/photo-culler"
+cp packaging/linux/README.txt "${build_dir}/README.txt"
+echo "Linux Chromium desktop build created at ${project_root}/${build_dir}/photo-culler"

@@ -86,4 +86,4 @@ jobs:
           cache: pip
       - run: python -m pip install -e '.[build,test]'
       - run: ./scripts/build_linux.sh
-      - run: test -x builds/linux/photo-culler
+      - run: test -x builds/linux/chromium/photo-culler

@@ -51,7 +51,7 @@ interpretarse como 100% de readiness comercial multiplataforma.
 - End-to-end del launcher: `pytest -m e2e tests/e2e/test_linux_desktop_launcher.py`.
 - Suite completa: `pytest`.
 - Calidad estática: `ruff check photo_culler tests` y `ruff format --check photo_culler tests`.
-- Build: `./scripts/build_linux.sh`; CI comprueba que `builds/linux/photo-culler` sea ejecutable.
+- Build: `./scripts/build_linux.sh`; CI comprueba que `builds/linux/chromium/photo-culler` sea ejecutable.
 
 El E2E inicia el launcher como proceso real. Un navegador controlado de prueba abre
 la URL autenticada generada por el launcher, solicita el dashboard FastAPI real,
@@ -66,13 +66,13 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[build]'
 ./scripts/build_linux.sh
-./builds/linux/photo-culler
+./builds/linux/chromium/photo-culler
 ```
 
 Si Chrome/Chromium no está en `PATH`:
 
 ```bash
-PHOTO_CULLER_CHROME=/ruta/al/chromium ./builds/linux/photo-culler
+PHOTO_CULLER_CHROME=/ruta/al/chromium ./builds/linux/chromium/photo-culler
 ```
 
 El catálogo queda en `${XDG_DATA_HOME:-~/.local/share}/photo-culler/catalog.db` y el

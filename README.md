@@ -175,10 +175,10 @@ photo-culler desktop
 uv venv --python 3.14
 uv pip install -e '.[linux,build]'
 ./scripts/build_linux.sh
-./builds/linux/photo-culler
+./builds/linux/chromium/photo-culler
 ```
 
-The generated `builds/linux/photo-culler` is a single executable containing the Python application, templates, and static assets. All PyInstaller output, including temporary work files, stays under `builds/`. Double-clicking it opens an isolated Google Chrome/Chromium app window; closing that window also stops the protected local server. The replaceable build directory never stores the user's catalog: on Linux the desktop catalog lives at `${XDG_DATA_HOME:-~/.local/share}/photo-culler/catalog.db`.
+The generated `builds/linux/chromium/photo-culler` is a single executable containing the Python application, templates, and static assets. All PyInstaller output, including temporary work files, stays under `builds/`. The `chromium` directory identifies this desktop delivery type, leaving room for future Linux builds without mixing their artifacts. Double-clicking it opens an isolated Google Chrome/Chromium app window; closing that window also stops the protected local server. The replaceable build directory never stores the user's catalog: on Linux the desktop catalog lives at `${XDG_DATA_HOME:-~/.local/share}/photo-culler/catalog.db`.
 
 ### 4. Rust workspace, CLI, and frontend bootstraps
 
