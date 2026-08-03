@@ -6,3 +6,10 @@ license.workspace = true
 
 [dependencies]
 photo-culler-core.workspace = true
+tauri = { version = "2", features = [] }
+tauri-plugin-shell = "2"
+url = "2"
+uuid = { version = "1", features = ["v4"] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }

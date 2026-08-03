@@ -87,14 +87,18 @@ log rotativo en `${XDG_STATE_HOME:-~/.local/state}/photo-culler/photo-culler.log
 5. Decidir si el coste de Qt/WebKit mejora realmente la experiencia frente al build
    Linux fácil ya terminado.
 
-## Los dos prototipos Rust no son versiones terminadas
+## Estado Rust
 
-Tauri/WebGL (7% declarado) y egui/wgpu (5% declarado) siguen siendo bootstraps: el
-primero sólo dibuja un canvas WebGL y el segundo sólo imprime estado. Ninguno abre el
-catálogo ni ejecuta el flujo de importación/análisis. No se incrementan esos números
-en esta entrega porque hacerlo sin funcionalidad ni pruebas de aceptación sería
-engañoso. Tauri parece el candidato más corto para una futura tercera entrega porque
-puede reutilizar la UI y API actuales; egui exigiría reconstruir toda la interacción.
+| Superficie | Estado | Readiness declarado | Alcance real |
+|---|---|---:|---|
+| Rust + Tauri + WebGL | Bootstrap | 7% | Ventana y sidecar empaquetados en investigación; la navegación Wayland a la UI no es fiable |
+| Rust + egui + wgpu | Alpha funcional | 5% declarado, pendiente de recalcular | UI nativa wgpu conectada al API: catálogo, galerías, importación, miniaturas, análisis y decisiones |
+
+Tauri/WebGL conserva el `7%` declarado. El experimento empaqueta un sidecar,
+asigna puerto/token por sesión y puede crear una ventana, pero la navegación Wayland
+a la UI de referencia no es todavía fiable. Por tanto no cuenta con paridad
+funcional, E2E de flujo ni entrega standalone promovida. egui/wgpu no cambia: su
+`5%` queda pendiente de recálculo y no debe declararse 100%.
 
 ## Siguiente corte recomendado
 
