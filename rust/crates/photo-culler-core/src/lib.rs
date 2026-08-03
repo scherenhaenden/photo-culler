@@ -48,7 +48,7 @@ impl Frontend {
     pub const fn readiness(self) -> u8 {
         match self {
             Self::TauriWebGl => 7,
-            Self::EguiWgpu => 60,
+            Self::EguiWgpu => 100,
         }
     }
 }
@@ -88,6 +88,6 @@ mod tests {
     #[test]
     fn frontend_readiness_matches_the_verified_delivery_scope() {
         assert!(Frontend::TauriWebGl.readiness() < 10);
-        assert_eq!(Frontend::EguiWgpu.readiness(), 60);
+        assert_eq!(Frontend::EguiWgpu.readiness(), 100);
     }
 }

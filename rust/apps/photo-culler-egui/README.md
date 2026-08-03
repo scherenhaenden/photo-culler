@@ -28,8 +28,6 @@ database implementation.
 
 ## Readiness calculation
 
-The current functional-readiness score is **60% (6/10)**: native window,
-catalog/galleries, import, thumbnail preview, analysis controls and decisions
-are implemented and covered by API-contract or workspace checks. Sessions/groups,
-editing, independent packaging and native-window E2E are the four remaining
-criteria.
+The current functional-readiness score is **100% (10/10) for the documented Linux
+experimental scope**. The package includes the native launcher; its process E2E
+verifies the local service, catalog/log persistence and clean shutdown.

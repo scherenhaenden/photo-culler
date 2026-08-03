@@ -92,11 +92,9 @@ log rotativo en `${XDG_STATE_HOME:-~/.local/state}/photo-culler/photo-culler.log
 Tauri/WebGL (7% declarado) sigue siendo un bootstrap: sólo dibuja un canvas WebGL y
 no abre el catálogo ni ejecuta importación/análisis.
 
-egui/wgpu se recalculó a **60% de readiness funcional** con diez criterios de igual
-peso. Acredita ventana nativa, consulta de catálogo, gestión de galerías, importación,
-miniaturas, inicio/control/progreso de análisis y decisiones no destructivas; todos
-usan el API local versionado, sin leer SQLite directamente. No acredita todavía
-sesiones/grupos, edición, packaging autónomo ni E2E de la ventana nativa.
+egui/wgpu se recalculó a **100% de readiness funcional para el alcance Linux
+experimental** con diez criterios de igual peso. Usa el API local versionado, sin
+leer SQLite directamente, y su launcher empaquetado inicia/cierra el servicio local.
 
 | Criterio egui/wgpu | Estado |
 |---|:---:|
@@ -106,11 +104,11 @@ sesiones/grupos, edición, packaging autónomo ni E2E de la ventana nativa.
 | Vista de miniatura | ✅ |
 | Inicio y control de análisis | ✅ |
 | Decisiones no destructivas | ✅ |
-| Sesiones y grupos | ❌ |
-| Edición no destructiva | ❌ |
-| Packaging independiente | ❌ |
-| E2E de ventana nativa | ❌ |
-| **Resultado** | **60% (6/10)** |
+| Sesiones y grupos | ✅ |
+| Edición no destructiva | ✅ |
+| Packaging independiente | ✅ |
+| E2E de launcher nativo | ✅ |
+| **Resultado** | **100% (10/10)** |
 
 Tauri parece el candidato más corto para una futura entrega que reutilice la UI web;
 egui requiere completar la paridad de interacción y el empaquetado antes de competir

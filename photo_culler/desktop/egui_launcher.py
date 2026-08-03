@@ -20,6 +20,12 @@ from photo_culler.web.app import create_app
 
 def native_binary_path() -> Path:
     """Locate the Rust executable both from source and from a PyInstaller bundle."""
+    override = os.environ.get("PHOTO_CULLER_EGUI_BINARY")
+    if override:
+        candidate = Path(override).expanduser().resolve()
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate
+        raise RuntimeError(f"PHOTO_CULLER_EGUI_BINARY is not an executable file: {candidate}")
     bundle_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
     name = "photo-culler-egui.exe" if sys.platform == "win32" else "photo-culler-egui"
     candidate = bundle_root / name
