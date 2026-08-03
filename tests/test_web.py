@@ -111,6 +111,7 @@ def test_raw_jpeg_tandem_uses_jpeg_for_the_default_preview(web_client, tmp_path)
     library = web_client.get("/library?representation=jpeg")
     assert "frame.jpg" in library.text
     assert "JPEG" in library.text
+    assert "RAW+JPEG" in library.text
 
 
 def test_black_raw_preview_falls_back_to_its_jpeg_tandem(web_client, tmp_path):
@@ -197,6 +198,47 @@ def test_gallery_import_api_and_empty_state(web_client, tmp_path):
     assert rescanned.status_code == 202
     assert len(rescanned.json()["job_ids"]) == 1
     assert web_client.post("/api/v1/galleries/unknown/rescan").status_code == 404
+
+
+def test_native_frontend_contracts_use_application_services(web_client, tmp_path):
+    """The egui client receives catalog/decision/analysis JSON without reading SQLite."""
+    image_path = tmp_path / "native.jpg"
+    Image.new("RGB", (48, 32), color=(90, 120, 160)).save(image_path)
+    gallery_id = web_client.app.state.gallery_imports.create_gallery("Native")
+    with web_client.app.state.db_engine.session() as session:
+        photo = PhotoRepository(session).save_photo(
+            Photo(
+                "native-photo",
+                "native-frame",
+                files=[FileRecord(image_path, FileRole.JPEG, image_path.stat().st_size, image_path.stat().st_mtime)],
+            )
+        )
+        photo.gallery_id = gallery_id
+
+    catalog = web_client.get(f"/api/v1/catalog?gallery_id={gallery_id}")
+    assert catalog.status_code == 200
+    assert catalog.json()["contract_version"] == 1
+    assert catalog.json()["items"] == [
+        {
+            "id": "native-photo",
+            "name": "native-frame",
+            "decision": "UNPROCESSED",
+            "score": 0.0,
+            "quality_tier": "fair",
+            "thumbnail_url": "/thumbnails/native-photo/800",
+        }
+    ]
+
+    decision = web_client.put("/api/v1/photos/native-photo/decision", json={"decision": "keep"})
+    assert decision.status_code == 200
+    assert decision.json()["decision"] == "KEEP"
+    assert web_client.put("/api/v1/photos/native-photo/decision", json={"decision": "kepp"}).status_code == 422
+    assert web_client.put("/api/v1/photos/unknown/decision", json={"decision": "keep"}).status_code == 404
+    assert web_client.get("/api/v1/analysis/progress").status_code == 200
+    assert web_client.post("/api/v1/analysis/start", json={"profile": "missing"}).status_code == 422
+    assert web_client.post("/api/v1/analysis/unknown").status_code == 404
+    assert web_client.get("/api/v1/sessions").status_code == 200
+    assert web_client.get("/api/v1/groups").status_code == 200
 
 
 def test_import_estimate_api(web_client, tmp_path):

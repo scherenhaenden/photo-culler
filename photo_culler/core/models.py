@@ -92,6 +92,12 @@ class Photo:
             return "missing"
         return "unknown"
 
+    @property
+    def is_tandem(self) -> bool:
+        """Return True if this photo represents a tandem RAW + JPEG pair."""
+        roles = {f.role for f in self.files}
+        return FileRole.RAW in roles and FileRole.JPEG in roles
+
 
 @dataclass
 class VolumeRecord:

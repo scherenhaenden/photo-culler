@@ -27,12 +27,13 @@ A Rust port must preserve the analyzer input/output contract and pass the same v
 |---|:---:|---|---|
 | **FastAPI + HTMX web UI** | **88% — usable** | Dark responsive UI, dashboard, paginated/filterable library, inspector, decisions, keyboard navigation, background analysis progress | Fastest product/design iteration and browser-accessible reference UI |
 | **Python + pywebview desktop shell** | **82% — Linux build available** | Native window, random localhost port, session token, host validation, security headers, native bridge, clean shutdown | Current clickable desktop delivery and integration reference |
-| **Rust + Tauri + WebGL** | **7% — bootstrap** | Shared Rust boundary and WebGL2 viewport prototype compile; Tauri runtime is not wired yet | Reuse the mature web interaction model with a Rust desktop shell and GPU-accelerated canvas |
-| **Rust + egui + wgpu** | **5% — bootstrap** | Shared Rust boundary and native state shell compile; egui/wgpu runtime is not wired yet | Fully native Rust option for maximum rendering/control once workflows stabilize |
+| **Rust + Tauri + WebGL** | **7% — experimental shell** | Packaged Linux Tauri shell launches an authenticated FastAPI sidecar and has DEB startup coverage; Wayland navigation remains unreliable | Reuse the mature web interaction model with a Rust desktop shell and GPU-accelerated canvas |
+| **Rust + egui + wgpu** | **100% — Linux experimental delivery** | Native wgpu window, catalog/gallery browsing, import, thumbnail preview, analysis, decisions, sessions/groups, non-destructive editing and packaged launcher | Complete for the defined experimental Linux scope |
 
 The three frontend directions are intentionally retained. Shared behavior belongs in engines/services; frontend-specific rendering, windowing, and interaction stay in adapters. A future decision should be based on measured catalog size, thumbnail/render latency, installer size, accessibility, platform support, development velocity, and maintenance cost—not language preference alone.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for replacement boundaries and promotion gates.
+See [`docs/TECHNOLOGY_MAP.md`](docs/TECHNOLOGY_MAP.md) for the Python/Rust module map and desktop resource comparison.
 See [`docs/FUTURE_INTELLIGENT_WORKFLOW.md`](docs/FUTURE_INTELLIGENT_WORKFLOW.md) for the planned human-approved selection, auto-editing and restoration workflow.
 See [`docs/DESKTOP_READINESS.md`](docs/DESKTOP_READINESS.md) for the evidence-based comparison of the two Python desktop paths and the completed easy Linux scope.
 
@@ -98,8 +99,8 @@ Measured on Linux/Python 3.14 with statement and branch coverage enabled:
 | **CLI & Experiencia** | 79% | **88%** | Comandos Typer/Rich completos con `PhotoSelector` y subcomandos `web` y `desktop` |
 | **Interfaz Web (FastAPI + HTMX)** | 0% | **88%** | Dark UI, dashboard, biblioteca paginada/filtrable, inspector, navegación y progreso SSE |
 | **Aplicación Desktop (pywebview)** | 0% | **82%** | Puerto aleatorio protegido, bridge nativo, cierre limpio y build Linux reproducible |
-| **Desktop Rust (Tauri + WebGL)** | 0% | **7%** | Workspace, contratos y viewport WebGL2 inicial; runtime Tauri pendiente |
-| **Desktop Rust nativo (egui + wgpu)** | 0% | **5%** | Workspace y estado nativo inicial; runtime egui/wgpu pendiente |
+| **Desktop Rust (Tauri + WebGL)** | 0% | **7%** | Shell experimental con sidecar FastAPI, empaquetado DEB y prueba de arranque; navegación Wayland aún no fiable |
+| **Desktop Rust nativo (egui + wgpu)** | 0% | **100%** | Entrega Linux experimental: cliente wgpu, API local, catálogo, importación, análisis, decisiones, sesiones/grupos, edición, paquete y E2E del launcher |
 | **Validación Fotográfica Real** | 38% | **70%** | Infraestructura de corpus (`BenchmarkEvaluator`) con F1-score, FRR y FAR |
 | **Integración Continua (CI & Testing)** | 70% | **94%** | 72 pruebas Python (incluye Importar → miniatura → Analizar en Chrome real), 2 pruebas Rust y CI Python 3.14 |
 | **Readiness para Uso Experimental Real** | 62% | **85%** | Listo para escanear, analizar y clasificar visualmente mediante CLI, Web o Desktop |
@@ -150,7 +151,7 @@ process restart performs a fresh idempotent scan of the persisted source,
 full hashes still run only through explicit identity tools rather than a
 background tier. The current white-balance transform is an initial deterministic
 preview approximation, not a color-managed RAW pipeline. Export, PostgreSQL
-operations, Tauri, egui, advanced color management and local masks remain
+operations, Tauri, advanced color management and local masks remain
 planned or prototype-only.
 The percentages above must only be updated from measured test and coverage
 output.
@@ -174,11 +175,13 @@ photo-culler desktop
 ```bash
 uv venv --python 3.14
 uv pip install -e '.[linux,build]'
-./scripts/build_linux.sh
+./scripts/build.sh --linux
 ./builds/linux/photo-culler
 ```
 
 The generated `builds/linux/photo-culler` is a single executable containing the Python application, templates, and static assets. All PyInstaller output, including temporary work files, stays under `builds/`. Double-clicking it opens an isolated Google Chrome/Chromium app window; closing that window also stops the protected local server. The replaceable build directory never stores the user's catalog: on Linux the desktop catalog lives at `${XDG_DATA_HOME:-~/.local/share}/photo-culler/catalog.db`.
+
+`scripts/build.sh` is the unified local build command. It builds the Linux desktop application by default; choose targets explicitly with `--linux`, `--rust-cli`, `--rust-egui`, or `--rust-tauri`. `--all` builds them all, and exclusions such as `--no-rust-tauri` let you omit one: `./scripts/build.sh --all --no-rust-tauri`. Use `--output /ruta/a/builds` to place final artifacts elsewhere.
 
 ### 4. Rust workspace, CLI, and frontend bootstraps
 
@@ -190,7 +193,7 @@ cargo run -p photo-culler-cli -- backends
 cargo run -p photo-culler-cli -- frontends
 ```
 
-The Rust workspace intentionally starts with dependency-light, compile-safe contracts. The Tauri/WebGL and egui/wgpu directories are bootstraps, not finished GUIs; their READMEs name the next integration step.
+The Rust workspace keeps Tauri/WebGL as a bootstrap. The egui/wgpu client is a functional native alpha that connects to the local application API; its README documents the supported workflow and remaining parity gaps.
 
 ### ⌨️ Atajos de Teclado en el Visor
 - `1`: Marcar como **BEST** (Verde)

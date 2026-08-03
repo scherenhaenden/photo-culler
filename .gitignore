@@ -27,6 +27,7 @@ builds/
 dist/
 *.spec
 target/
+rust/apps/photo-culler-tauri/gen/
 *.egg-info/
 .eggs/
 
