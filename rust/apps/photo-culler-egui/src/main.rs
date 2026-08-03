@@ -86,6 +86,8 @@ struct NativeApp {
     import_recursive: bool,
     analysis_profile: String,
     analysis: Option<AnalysisProgress>,
+    sessions_count: usize,
+    groups_count: usize,
     exposure: f32,
     status: String,
     last_progress_poll: Instant,
@@ -107,6 +109,8 @@ impl Default for NativeApp {
             import_recursive: true,
             analysis_profile: "fast".into(),
             analysis: None,
+            sessions_count: 0,
+            groups_count: 0,
             exposure: 0.0,
             status: "Conecta con el servicio local para cargar el catálogo.".into(),
             last_progress_poll: Instant::now() - Duration::from_secs(2),
@@ -164,6 +168,16 @@ impl NativeApp {
                     self.active_gallery = self.galleries.first().map(|gallery| gallery.id.clone());
                 }
                 self.refresh_catalog();
+                self.sessions_count = self
+                    .get_json::<serde_json::Value>("/api/v1/sessions")
+                    .ok()
+                    .and_then(|value| value["items"].as_array().map(Vec::len))
+                    .unwrap_or(0);
+                self.groups_count = self
+                    .get_json::<serde_json::Value>("/api/v1/groups")
+                    .ok()
+                    .and_then(|value| value["items"].as_array().map(Vec::len))
+                    .unwrap_or(0);
                 self.status = "Catálogo actualizado.".into();
             }
             Err(error) => self.status = format!("No se pudo conectar: {error}"),
@@ -359,6 +373,10 @@ impl eframe::App for NativeApp {
             .resizable(true)
             .show(ctx, |ui| {
                 ui.heading("Galerías");
+                ui.label(format!(
+                    "Sesiones: {} · Grupos similares: {}",
+                    self.sessions_count, self.groups_count
+                ));
                 for gallery in self.galleries.clone() {
                     let selected = self.active_gallery.as_deref() == Some(gallery.id.as_str());
                     if ui

@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
 from photo_culler.importing import CancelResult, GalleryImportService, PauseResult, ResumeResult
+from photo_culler.sessions import SessionManagementService
 from photo_culler.web.services.decision_service import DecisionService
 
 router = APIRouter(prefix="/api")
@@ -181,6 +182,43 @@ def native_control_analysis(action: str, request: Request) -> dict[str, object]:
     if not operation():
         raise HTTPException(status_code=409, detail=f"Analysis cannot be {action}d")
     return request.app.state.analysis_jobs.snapshot()
+
+
+@router.get("/v1/sessions")
+def list_sessions_for_native_clients(request: Request) -> dict[str, object]:
+    """Expose persisted sessions through the same service boundary as the web UI."""
+    with request.app.state.db_engine.session() as session:
+        sessions = SessionManagementService(session).list_sessions()
+        return {
+            "contract_version": 1,
+            "items": [
+                {"id": item.session_id, "name": item.name, "photo_count": item.photo_count}
+                for item in sessions
+            ],
+        }
+
+
+@router.get("/v1/groups")
+def list_similarity_groups_for_native_clients(request: Request) -> dict[str, object]:
+    """List compact similarity-group DTOs for native review surfaces."""
+    with request.app.state.db_engine.session() as session:
+        repo = PhotoRepository(session)
+        group_ids = repo.list_burst_ids("similar-", offset=0, limit=100)
+        photos = repo.list_by_burst_ids(group_ids)
+    groups = {
+        group_id: sorted(
+            (photo for photo in photos if photo.burst_id == group_id), key=lambda photo: (-photo.score, photo.stem_name)
+        )
+        for group_id in group_ids
+    }
+    return {
+        "contract_version": 1,
+        "items": [
+            {"id": group_id, "photo_count": len(members), "recommended_photo_id": members[0].photo_id}
+            for group_id, members in groups.items()
+            if members
+        ],
+    }
 
 
 @router.get("/v1/galleries")
