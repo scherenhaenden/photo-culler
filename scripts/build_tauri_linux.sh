@@ -2,7 +2,7 @@
 set -euo pipefail
 
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-output_dir="${PHOTO_CULLER_TAURI_BUILD_DIR:-/home/edward/Development/photo-culler/builds/linux/tauri-webgl}"
+output_dir="${PHOTO_CULLER_TAURI_BUILD_DIR:-${project_root}/builds/linux/tauri-webgl}"
 python_bin="${PHOTO_CULLER_PYTHON:-${project_root}/.venv/bin/python}"
 target_triple="$(rustc -vV | awk '/host:/{print $2}')"
 sidecar_name="photo-culler-backend-${target_triple}"

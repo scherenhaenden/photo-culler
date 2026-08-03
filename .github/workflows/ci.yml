@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
@@ -92,6 +94,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
@@ -104,4 +108,7 @@ jobs:
       - run: sudo apt-get install -y libwebkit2gtk-4.1-dev libsoup-3.0-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev xvfb
       - run: python -m pip install -e '.[build,test]'
       - run: PHOTO_CULLER_TAURI_BUILD_DIR="$GITHUB_WORKSPACE/builds/linux/tauri-webgl" ./scripts/build_tauri_linux.sh
-      - run: PHOTO_CULLER_TAURI_DEB="$GITHUB_WORKSPACE/builds/linux/tauri-webgl/Photo Culler_0.1.0_amd64.deb" xvfb-run -a pytest -m e2e tests/e2e/test_tauri_desktop_package.py
+      - run: |
+          deb="$(find "$GITHUB_WORKSPACE/builds/linux/tauri-webgl" -maxdepth 1 -type f -name '*.deb' -print -quit)"
+          test -n "$deb"
+          PHOTO_CULLER_TAURI_DEB="$deb" xvfb-run -a pytest -m e2e tests/e2e/test_tauri_desktop_package.py

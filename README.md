@@ -27,7 +27,7 @@ A Rust port must preserve the analyzer input/output contract and pass the same v
 |---|:---:|---|---|
 | **FastAPI + HTMX web UI** | **88% — usable** | Dark responsive UI, dashboard, paginated/filterable library, inspector, decisions, keyboard navigation, background analysis progress | Fastest product/design iteration and browser-accessible reference UI |
 | **Python + pywebview desktop shell** | **82% — Linux build available** | Native window, random localhost port, session token, host validation, security headers, native bridge, clean shutdown | Current clickable desktop delivery and integration reference |
-| **Rust + Tauri + WebGL** | **7% — bootstrap** | Shared Rust boundary and WebGL2 viewport prototype compile; Tauri runtime is not wired yet | Reuse the mature web interaction model with a Rust desktop shell and GPU-accelerated canvas |
+| **Rust + Tauri + WebGL** | **7% — experimental shell** | Packaged Linux Tauri shell launches an authenticated FastAPI sidecar and has DEB startup coverage; Wayland navigation remains unreliable | Reuse the mature web interaction model with a Rust desktop shell and GPU-accelerated canvas |
 | **Rust + egui + wgpu** | **5% — bootstrap** | Shared Rust boundary and native state shell compile; egui/wgpu runtime is not wired yet | Fully native Rust option for maximum rendering/control once workflows stabilize |
 
 The three frontend directions are intentionally retained. Shared behavior belongs in engines/services; frontend-specific rendering, windowing, and interaction stay in adapters. A future decision should be based on measured catalog size, thumbnail/render latency, installer size, accessibility, platform support, development velocity, and maintenance cost—not language preference alone.
@@ -99,7 +99,7 @@ Measured on Linux/Python 3.14 with statement and branch coverage enabled:
 | **CLI & Experiencia** | 79% | **88%** | Comandos Typer/Rich completos con `PhotoSelector` y subcomandos `web` y `desktop` |
 | **Interfaz Web (FastAPI + HTMX)** | 0% | **88%** | Dark UI, dashboard, biblioteca paginada/filtrable, inspector, navegación y progreso SSE |
 | **Aplicación Desktop (pywebview)** | 0% | **82%** | Puerto aleatorio protegido, bridge nativo, cierre limpio y build Linux reproducible |
-| **Desktop Rust (Tauri + WebGL)** | 0% | **7%** | Workspace, contratos y viewport WebGL2 inicial; runtime Tauri pendiente |
+| **Desktop Rust (Tauri + WebGL)** | 0% | **7%** | Shell experimental con sidecar FastAPI, empaquetado DEB y prueba de arranque; navegación Wayland aún no fiable |
 | **Desktop Rust nativo (egui + wgpu)** | 0% | **5%** | Workspace y estado nativo inicial; runtime egui/wgpu pendiente |
 | **Validación Fotográfica Real** | 38% | **70%** | Infraestructura de corpus (`BenchmarkEvaluator`) con F1-score, FRR y FAR |
 | **Integración Continua (CI & Testing)** | 70% | **94%** | 72 pruebas Python (incluye Importar → miniatura → Analizar en Chrome real), 2 pruebas Rust y CI Python 3.14 |

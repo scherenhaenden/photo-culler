@@ -6,6 +6,7 @@
 //! Python process.
 
 use std::{
+    fs::OpenOptions,
     io::{Read, Write},
     net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream},
     sync::Mutex,
@@ -14,11 +15,15 @@ use std::{
 };
 
 use tauri::{AppHandle, Manager, RunEvent};
-use tauri_plugin_shell::{ShellExt, process::CommandChild};
+use tauri_plugin_shell::{
+    ShellExt,
+    process::{CommandChild, CommandEvent},
+};
 
 const BACKEND_NAME: &str = "photo-culler-backend";
+const BACKEND_TOKEN_ENV: &str = "PHOTO_CULLER_TAURI_TOKEN";
 
-struct Backend(Mutex<Option<CommandChild>>);
+struct Backend(Mutex<Option<(CommandChild, tauri::async_runtime::Receiver<CommandEvent>)>>);
 
 fn available_port() -> Result<u16, String> {
     let listener = TcpListener::bind("127.0.0.1:0").map_err(|error| error.to_string())?;
@@ -37,15 +42,38 @@ fn backend_url(port: u16, token: &str) -> Result<url::Url, String> {
         .map_err(|error| error.to_string())
 }
 
-fn wait_for_backend(port: u16, token: &str) -> Result<(), String> {
+fn wait_for_backend(app: &AppHandle, port: u16, token: &str) -> Result<(), String> {
     let deadline = Instant::now() + Duration::from_secs(10);
     while Instant::now() < deadline {
+        let state = app.state::<Backend>();
+        let mut backend = state.0.lock().map_err(|_| "backend state lock poisoned")?;
+        let (_, events) = backend
+            .as_mut()
+            .ok_or_else(|| "the local backend was not running".to_owned())?;
+        while let Ok(event) = events.try_recv() {
+            match event {
+                CommandEvent::Terminated(status) => {
+                    return Err(format!(
+                        "the local backend exited before becoming ready (code {:?}, signal {:?})",
+                        status.code, status.signal
+                    ));
+                }
+                CommandEvent::Error(error) => {
+                    return Err(format!(
+                        "the local backend failed before becoming ready: {error}"
+                    ));
+                }
+                CommandEvent::Stdout(_) | CommandEvent::Stderr(_) => {}
+                _ => {}
+            }
+        }
+        drop(backend);
         if let Ok(mut stream) = TcpStream::connect_timeout(
             &SocketAddr::from((Ipv4Addr::LOCALHOST, port)),
             Duration::from_millis(250),
         ) {
             let request = format!(
-                "GET /api/health?token={token} HTTP/1.1\\r\\nHost: 127.0.0.1:{port}\\r\\nConnection: close\\r\\n\\r\\n"
+                "GET /api/health?token={token} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n"
             );
             if stream.write_all(request.as_bytes()).is_ok() {
                 let mut response = String::new();
@@ -64,7 +92,7 @@ fn wait_for_backend(port: u16, token: &str) -> Result<(), String> {
 fn stop_backend(app: &AppHandle) {
     if let Some(state) = app.try_state::<Backend>() {
         if let Ok(mut child) = state.0.lock() {
-            if let Some(child) = child.take() {
+            if let Some((child, _events)) = child.take() {
                 let _ = child.kill();
             }
         }
@@ -78,23 +106,17 @@ fn start(app: &AppHandle) -> Result<(), String> {
         .shell()
         .sidecar(BACKEND_NAME)
         .map_err(|error| format!("could not locate packaged backend: {error}"))?
-        .args([
-            "--host",
-            "127.0.0.1",
-            "--port",
-            &port.to_string(),
-            "--token",
-            &token,
-        ]);
-    let (_events, child) = command
+        .args(["--host", "127.0.0.1", "--port", &port.to_string()])
+        .env(BACKEND_TOKEN_ENV, &token);
+    let (events, child) = command
         .spawn()
         .map_err(|error| format!("could not start local backend: {error}"))?;
     *app.state::<Backend>()
         .0
         .lock()
-        .map_err(|_| "backend state lock poisoned")? = Some(child);
+        .map_err(|_| "backend state lock poisoned")? = Some((child, events));
 
-    if let Err(error) = wait_for_backend(port, &token) {
+    if let Err(error) = wait_for_backend(app, port, &token) {
         stop_backend(app);
         return Err(error);
     }
@@ -110,11 +132,25 @@ fn start(app: &AppHandle) -> Result<(), String> {
                 })
             });
         if let Err(error) = result {
-            eprintln!("Photo Culler navigation failed: {error}");
+            report_startup_error(&handle, &format!("Photo Culler navigation failed: {error}"));
         }
     })
     .map_err(|error| format!("could not schedule native window navigation: {error}"))?;
     Ok(())
+}
+
+fn report_startup_error(app: &AppHandle, message: &str) {
+    eprintln!("{message}");
+    let log_path = std::env::temp_dir().join("photo-culler-tauri.log");
+    if let Ok(mut log) = OpenOptions::new().create(true).append(true).open(&log_path) {
+        let _ = writeln!(log, "{message}");
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_title(&format!(
+            "Photo Culler — startup failed; see {}",
+            log_path.display()
+        ));
+    }
 }
 
 fn main() {
@@ -127,9 +163,9 @@ fn main() {
             // setup can leave KWin with an unpresented window, so keep the static
             // startup page visible and initialize the sidecar just after setup.
             let handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
+            tauri::async_runtime::spawn_blocking(move || {
                 if let Err(error) = start(&handle) {
-                    eprintln!("Photo Culler startup failed: {error}");
+                    report_startup_error(&handle, &format!("Photo Culler startup failed: {error}"));
                 }
             });
             Ok(())
@@ -157,6 +193,6 @@ mod tests {
 
     #[test]
     fn selected_port_is_available_for_the_loopback_backend() {
-        assert!(available_port().expect("port selection").is_positive());
+        assert!(available_port().expect("port selection") > 0);
     }
 }

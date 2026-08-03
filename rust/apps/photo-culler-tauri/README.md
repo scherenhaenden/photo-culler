@@ -18,7 +18,8 @@ Build packages with:
 ```
 
 The script writes the Linux `.deb` output to
-`/home/edward/Development/photo-culler/builds/linux/tauri-webgl/`. Linux build
+`builds/linux/tauri-webgl/` below the repository root. Override that location
+with `PHOTO_CULLER_TAURI_BUILD_DIR=/ruta/de/salida` when needed. Linux build
 dependencies are `libwebkit2gtk-4.1-dev`, `libsoup-3.0-dev`, `libgtk-3-dev`,
 `libayatana-appindicator3-dev` and `librsvg2-dev`; Node is used only to run the
 pinned Tauri CLI. The source-sidecar placeholder deliberately exits with an error:
