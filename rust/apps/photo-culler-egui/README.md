@@ -25,3 +25,11 @@ The service URL is editable in the app and defaults to `http://127.0.0.1:8765`.
 The Python application service remains the owner of the catalog and analysis
 pipeline; the native client is deliberately a delivery adapter, not a second
 database implementation.
+
+## Readiness calculation
+
+The current functional-readiness score is **60% (6/10)**: native window,
+catalog/galleries, import, thumbnail preview, analysis controls and decisions
+are implemented and covered by API-contract or workspace checks. Sessions/groups,
+editing, independent packaging and native-window E2E are the four remaining
+criteria.

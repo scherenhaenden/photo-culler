@@ -28,7 +28,7 @@ A Rust port must preserve the analyzer input/output contract and pass the same v
 | **FastAPI + HTMX web UI** | **88% — usable** | Dark responsive UI, dashboard, paginated/filterable library, inspector, decisions, keyboard navigation, background analysis progress | Fastest product/design iteration and browser-accessible reference UI |
 | **Python + pywebview desktop shell** | **82% — Linux build available** | Native window, random localhost port, session token, host validation, security headers, native bridge, clean shutdown | Current clickable desktop delivery and integration reference |
 | **Rust + Tauri + WebGL** | **7% — bootstrap** | Shared Rust boundary and WebGL2 viewport prototype compile; Tauri runtime is not wired yet | Reuse the mature web interaction model with a Rust desktop shell and GPU-accelerated canvas |
-| **Rust + egui + wgpu** | **5% — bootstrap** | Shared Rust boundary and native state shell compile; egui/wgpu runtime is not wired yet | Fully native Rust option for maximum rendering/control once workflows stabilize |
+| **Rust + egui + wgpu** | **60% — functional alpha** | Native wgpu window, catalog/gallery browsing, import, thumbnail preview, analysis controls and non-destructive decisions via the local application API | Native delivery adapter; packaging, window E2E, editing and sessions/groups remain |
 
 The three frontend directions are intentionally retained. Shared behavior belongs in engines/services; frontend-specific rendering, windowing, and interaction stay in adapters. A future decision should be based on measured catalog size, thumbnail/render latency, installer size, accessibility, platform support, development velocity, and maintenance cost—not language preference alone.
 
@@ -99,7 +99,7 @@ Measured on Linux/Python 3.14 with statement and branch coverage enabled:
 | **Interfaz Web (FastAPI + HTMX)** | 0% | **88%** | Dark UI, dashboard, biblioteca paginada/filtrable, inspector, navegación y progreso SSE |
 | **Aplicación Desktop (pywebview)** | 0% | **82%** | Puerto aleatorio protegido, bridge nativo, cierre limpio y build Linux reproducible |
 | **Desktop Rust (Tauri + WebGL)** | 0% | **7%** | Workspace, contratos y viewport WebGL2 inicial; runtime Tauri pendiente |
-| **Desktop Rust nativo (egui + wgpu)** | 0% | **5%** | Workspace y estado nativo inicial; runtime egui/wgpu pendiente |
+| **Desktop Rust nativo (egui + wgpu)** | 0% | **60%** | Ventana nativa wgpu conectada al API local: catálogo, importación, miniaturas, análisis y decisiones; faltan packaging, E2E y paridad total |
 | **Validación Fotográfica Real** | 38% | **70%** | Infraestructura de corpus (`BenchmarkEvaluator`) con F1-score, FRR y FAR |
 | **Integración Continua (CI & Testing)** | 70% | **94%** | 72 pruebas Python (incluye Importar → miniatura → Analizar en Chrome real), 2 pruebas Rust y CI Python 3.14 |
 | **Readiness para Uso Experimental Real** | 62% | **85%** | Listo para escanear, analizar y clasificar visualmente mediante CLI, Web o Desktop |
@@ -190,7 +190,7 @@ cargo run -p photo-culler-cli -- backends
 cargo run -p photo-culler-cli -- frontends
 ```
 
-The Rust workspace intentionally starts with dependency-light, compile-safe contracts. The Tauri/WebGL and egui/wgpu directories are bootstraps, not finished GUIs; their READMEs name the next integration step.
+The Rust workspace keeps Tauri/WebGL as a bootstrap. The egui/wgpu client is a functional native alpha that connects to the local application API; its README documents the supported workflow and remaining parity gaps.
 
 ### ⌨️ Atajos de Teclado en el Visor
 - `1`: Marcar como **BEST** (Verde)

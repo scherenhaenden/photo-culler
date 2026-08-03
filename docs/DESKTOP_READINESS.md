@@ -87,14 +87,34 @@ log rotativo en `${XDG_STATE_HOME:-~/.local/state}/photo-culler/photo-culler.log
 5. Decidir si el coste de Qt/WebKit mejora realmente la experiencia frente al build
    Linux fácil ya terminado.
 
-## Los dos prototipos Rust no son versiones terminadas
+## Estado de los caminos Rust
 
-Tauri/WebGL (7% declarado) y egui/wgpu (5% declarado) siguen siendo bootstraps: el
-primero sólo dibuja un canvas WebGL y el segundo sólo imprime estado. Ninguno abre el
-catálogo ni ejecuta el flujo de importación/análisis. No se incrementan esos números
-en esta entrega porque hacerlo sin funcionalidad ni pruebas de aceptación sería
-engañoso. Tauri parece el candidato más corto para una futura tercera entrega porque
-puede reutilizar la UI y API actuales; egui exigiría reconstruir toda la interacción.
+Tauri/WebGL (7% declarado) sigue siendo un bootstrap: sólo dibuja un canvas WebGL y
+no abre el catálogo ni ejecuta importación/análisis.
+
+egui/wgpu se recalculó a **60% de readiness funcional** con diez criterios de igual
+peso. Acredita ventana nativa, consulta de catálogo, gestión de galerías, importación,
+miniaturas, inicio/control/progreso de análisis y decisiones no destructivas; todos
+usan el API local versionado, sin leer SQLite directamente. No acredita todavía
+sesiones/grupos, edición, packaging autónomo ni E2E de la ventana nativa.
+
+| Criterio egui/wgpu | Estado |
+|---|:---:|
+| Ventana nativa con backend wgpu | ✅ |
+| Consulta de catálogo y galerías | ✅ |
+| Importación persistente | ✅ |
+| Vista de miniatura | ✅ |
+| Inicio y control de análisis | ✅ |
+| Decisiones no destructivas | ✅ |
+| Sesiones y grupos | ❌ |
+| Edición no destructiva | ❌ |
+| Packaging independiente | ❌ |
+| E2E de ventana nativa | ❌ |
+| **Resultado** | **60% (6/10)** |
+
+Tauri parece el candidato más corto para una futura entrega que reutilice la UI web;
+egui requiere completar la paridad de interacción y el empaquetado antes de competir
+como entrega de escritorio.
 
 ## Siguiente corte recomendado
 
