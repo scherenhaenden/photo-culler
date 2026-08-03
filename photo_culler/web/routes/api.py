@@ -418,3 +418,46 @@ def get_system_usage(request: Request) -> dict[str, object]:
         "gpu_system": round(gpu_sys, 1),
         "gpu_name": gpu_name,
     }
+
+
+@router.get("/v1/summary")
+def get_catalog_summary_api(request: Request) -> dict[str, object]:
+    """Return high-level catalog statistics and summary metrics."""
+    from photo_culler.web.services.library_service import LibraryService
+    return LibraryService(request.app.state.db_engine).get_summary()
+
+
+@router.get("/v1/photos/{photo_id}")
+def get_photo_detail_api(photo_id: str, request: Request) -> dict[str, object]:
+    """Return full JSON details for a single photo including metadata and analysis summary."""
+    with request.app.state.db_engine.session() as session:
+        repo = PhotoRepository(session)
+        photo = repo.get_by_id(photo_id)
+        if not photo:
+            raise HTTPException(status_code=404, detail="Photo not found")
+
+        analysis_summary = repo.get_analysis_summary(photo_id)
+
+        metadata = None
+        if photo.metadata_record:
+            m = photo.metadata_record
+            metadata = {
+                "camera_model": m.camera_model,
+                "lens": m.lens,
+                "iso": m.iso,
+                "aperture": m.aperture,
+                "shutter_speed": m.shutter_speed,
+                "focal_length": m.focal_length,
+                "capture_time": m.capture_time.strftime('%Y-%m-%d %H:%M:%S') if m.capture_time else None,
+            }
+
+        return {
+            "contract_version": 1,
+            "id": photo.photo_id,
+            "name": photo.stem_name,
+            "decision": photo.decision.value if hasattr(photo.decision, "value") else str(photo.decision),
+            "score": photo.score,
+            "quality_tier": photo.quality_tier.value if hasattr(photo.quality_tier, "value") else str(photo.quality_tier),
+            "analysis_summary": analysis_summary,
+            "metadata": metadata,
+        }
