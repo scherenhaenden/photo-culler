@@ -51,7 +51,7 @@ interpretarse como 100% de readiness comercial multiplataforma.
 - End-to-end del launcher: `pytest -m e2e tests/e2e/test_linux_desktop_launcher.py`.
 - Suite completa: `pytest`.
 - Calidad estática: `ruff check photo_culler tests` y `ruff format --check photo_culler tests`.
-- Build: `./scripts/build_linux.sh`; CI comprueba que `builds/linux/photo-culler` sea ejecutable.
+- Build: `./scripts/build_linux.sh`; CI comprueba que `builds/linux/chromium/photo-culler` sea ejecutable.
 
 El E2E inicia el launcher como proceso real. Un navegador controlado de prueba abre
 la URL autenticada generada por el launcher, solicita el dashboard FastAPI real,
@@ -66,13 +66,13 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[build]'
 ./scripts/build_linux.sh
-./builds/linux/photo-culler
+./builds/linux/chromium/photo-culler
 ```
 
 Si Chrome/Chromium no está en `PATH`:
 
 ```bash
-PHOTO_CULLER_CHROME=/ruta/al/chromium ./builds/linux/photo-culler
+PHOTO_CULLER_CHROME=/ruta/al/chromium ./builds/linux/chromium/photo-culler
 ```
 
 El catálogo queda en `${XDG_DATA_HOME:-~/.local/share}/photo-culler/catalog.db` y el
@@ -87,18 +87,33 @@ log rotativo en `${XDG_STATE_HOME:-~/.local/state}/photo-culler/photo-culler.log
 5. Decidir si el coste de Qt/WebKit mejora realmente la experiencia frente al build
    Linux fácil ya terminado.
 
-## Estado Rust
+## Estado de los caminos Rust
 
-| Superficie | Estado | Readiness declarado | Alcance real |
-|---|---|---:|---|
-| Rust + Tauri + WebGL | Bootstrap | 7% | Ventana y sidecar empaquetados en investigación; la navegación Wayland a la UI no es fiable |
-| Rust + egui + wgpu | Alpha funcional | 5% declarado, pendiente de recalcular | UI nativa wgpu conectada al API: catálogo, galerías, importación, miniaturas, análisis y decisiones |
+Tauri/WebGL conserva el **7%**: el shell empaquetado inicia un sidecar FastAPI
+autenticado y tiene cobertura de arranque DEB, pero la navegación Wayland hacia
+la UI de referencia no es todavía fiable.
 
-Tauri/WebGL conserva el `7%` declarado. El experimento empaqueta un sidecar,
-asigna puerto/token por sesión y puede crear una ventana, pero la navegación Wayland
-a la UI de referencia no es todavía fiable. Por tanto no cuenta con paridad
-funcional, E2E de flujo ni entrega standalone promovida. egui/wgpu no cambia: su
-`5%` queda pendiente de recálculo y no debe declararse 100%.
+egui/wgpu se recalculó a **100% de readiness funcional para el alcance Linux
+experimental** con diez criterios de igual peso. Usa el API local versionado, sin
+leer SQLite directamente, y su launcher empaquetado inicia/cierra el servicio local.
+
+| Criterio egui/wgpu | Estado |
+|---|:---:|
+| Ventana nativa con backend wgpu | ✅ |
+| Consulta de catálogo y galerías | ✅ |
+| Importación persistente | ✅ |
+| Vista de miniatura | ✅ |
+| Inicio y control de análisis | ✅ |
+| Decisiones no destructivas | ✅ |
+| Sesiones y grupos | ✅ |
+| Edición no destructiva | ✅ |
+| Packaging independiente | ✅ |
+| E2E de launcher nativo | ✅ |
+| **Resultado** | **100% (10/10)** |
+
+Tauri parece el candidato más corto para reutilizar la UI web cuando su navegación
+sea fiable; egui ya cubre el alcance Linux experimental y requiere validación en
+instalaciones limpias antes de una promoción de producto.
 
 ## Siguiente corte recomendado
 

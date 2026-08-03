@@ -45,10 +45,15 @@ pub enum Frontend {
 }
 
 impl Frontend {
+    /// Return readiness against each frontend's documented delivery scope.
+    ///
+    /// A score of 100 for egui/wgpu means its ten Linux experimental-scope
+    /// criteria are complete; it is not a claim of cross-platform production
+    /// readiness. See `docs/DESKTOP_READINESS.md` for those criteria.
     pub const fn readiness(self) -> u8 {
         match self {
             Self::TauriWebGl => 7,
-            Self::EguiWgpu => 5,
+            Self::EguiWgpu => 100,
         }
     }
 }
@@ -86,8 +91,8 @@ mod tests {
     }
 
     #[test]
-    fn frontend_readiness_reflects_the_experimental_tauri_shell() {
+    fn frontend_readiness_reflects_the_verified_delivery_scope() {
         assert_eq!(Frontend::TauriWebGl.readiness(), 7);
-        assert!(Frontend::EguiWgpu.readiness() < 10);
+        assert_eq!(Frontend::EguiWgpu.readiness(), 100);
     }
 }

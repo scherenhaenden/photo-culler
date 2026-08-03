@@ -173,7 +173,14 @@ class AnalysisProfileStore:
             return profiles
         try:
             payload = json.loads(self.path.read_text(encoding="utf-8"))
-            for item in payload.get("profiles", []):
+            if not isinstance(payload, dict):
+                raise ValueError("El archivo de perfiles debe contener un objeto JSON.")
+            profile_items = payload.get("profiles", [])
+            if not isinstance(profile_items, list):
+                raise ValueError("Los perfiles deben ser una lista JSON.")
+            for item in profile_items:
+                if not isinstance(item, dict):
+                    raise ValueError("Cada perfil debe ser un objeto JSON.")
                 profile = self._validate(item)
                 profiles[profile["id"]] = profile
         except OSError, ValueError, TypeError, json.JSONDecodeError:

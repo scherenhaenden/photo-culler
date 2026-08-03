@@ -15,7 +15,10 @@ class NoiseAnalyzer(Analyzer):
     category = "technical"
 
     def analyze(self, context: AnalysisContext) -> AnalysisResult:
-        arr = context.get_numpy_array().astype(np.float32)
+        # Keep noise on the same normalized buffer used by histogram,
+        # exposure, clipping, and sharpness.  Python remains the reference
+        # implementation while the Rust engine is evaluated in shadow mode.
+        arr = context.get_analysis_array(max_dim=1920).astype(np.float32)
 
         # 1. Chroma Noise: Standard deviation of (R-G) and (B-G) color differences
         r_g = arr[:, :, 0] - arr[:, :, 1]
