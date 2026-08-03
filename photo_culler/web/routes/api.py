@@ -2,13 +2,15 @@
 
 import threading
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, field_validator
 
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
 from photo_culler.importing import CancelResult, GalleryImportService, PauseResult, ResumeResult
+from photo_culler.sessions import SessionManagementService
+from photo_culler.web.services.decision_service import DecisionService
 
 router = APIRouter(prefix="/api")
 
@@ -48,6 +50,19 @@ class GalleryImportEstimateRequest(BaseModel):
     exclude_patterns: list[str] = Field(default_factory=list, max_length=50)
 
 
+class NativeDecisionRequest(BaseModel):
+    """Decision mutation used by native delivery adapters."""
+
+    decision: Literal["best", "keep", "alternate", "review", "reject", "recover"]
+
+
+class NativeAnalysisStartRequest(BaseModel):
+    """JSON equivalent of the analysis form used by native delivery adapters."""
+
+    profile: str = Field(default="fast", min_length=1, max_length=128)
+    scope: str = Field(default="remaining", pattern="^(remaining|all)$")
+
+
 @router.get("/health")
 def health_check():
     """Health check endpoint."""
@@ -72,6 +87,135 @@ def list_photos_api(request: Request):
         }
         for p in photos
     ]
+
+
+@router.get("/v1/catalog")
+def list_catalog_for_native_clients(
+    request: Request,
+    gallery_id: str | None = None,
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=200),
+) -> dict[str, object]:
+    """Return a paginated catalog DTO without exposing database records.
+
+    Native frontends use the same application service boundary as the web UI;
+    they never need direct SQLite access.
+    """
+    filters = {"gallery_id": gallery_id} if gallery_id else {}
+    with request.app.state.db_engine.session() as session:
+        repo = PhotoRepository(session)
+        photos = repo.list_page(offset=offset, limit=limit, sort=None, filters=filters)
+        total = repo.count_filtered(filters)
+    return {
+        "contract_version": 1,
+        "items": [
+            {
+                "id": photo.photo_id,
+                "name": photo.stem_name,
+                "decision": photo.decision.value if hasattr(photo.decision, "value") else str(photo.decision),
+                "score": photo.score,
+                "quality_tier": (
+                    photo.quality_tier.value if hasattr(photo.quality_tier, "value") else str(photo.quality_tier)
+                ),
+                "thumbnail_url": f"/thumbnails/{photo.photo_id}/800",
+            }
+            for photo in photos
+        ],
+        "offset": offset,
+        "limit": limit,
+        "total": total,
+    }
+
+
+@router.put("/v1/photos/{photo_id}/decision")
+def set_photo_decision_for_native_clients(
+    photo_id: str, request: Request, payload: NativeDecisionRequest
+) -> dict[str, object]:
+    """Persist a selection decision and return the normalized catalog value."""
+    photo = DecisionService(request.app.state.db_engine).set_decision(photo_id, payload.decision)
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    return {
+        "contract_version": 1,
+        "id": photo.photo_id,
+        "decision": photo.decision.value if hasattr(photo.decision, "value") else str(photo.decision),
+    }
+
+
+@router.get("/v1/analysis/progress")
+def native_analysis_progress(request: Request) -> dict[str, object]:
+    """Expose a polling-friendly analysis snapshot for native applications."""
+    return cast(dict[str, object], request.app.state.analysis_jobs.snapshot())
+
+
+@router.post("/v1/analysis/start")
+def native_start_analysis(request: Request, payload: NativeAnalysisStartRequest) -> dict[str, object]:
+    """Start analysis using the same profile and worker manager as the web UI."""
+    profile = request.app.state.analysis_profiles.get(payload.profile)
+    if profile is None:
+        raise HTTPException(status_code=422, detail="Unknown analysis profile")
+    started = request.app.state.analysis_jobs.start_analysis(
+        request.app.state.db_engine,
+        profile=profile,
+        import_service=request.app.state.gallery_imports,
+        remaining_only=payload.scope == "remaining",
+        legacy_cache_namespaces=[
+            request.app.state.analysis_profiles.fingerprint(item) for item in request.app.state.analysis_profiles.list()
+        ],
+    )
+    if not started:
+        raise HTTPException(status_code=409, detail="Analysis already running")
+    return cast(dict[str, object], request.app.state.analysis_jobs.snapshot())
+
+
+@router.post("/v1/analysis/{action}")
+def native_control_analysis(action: str, request: Request) -> dict[str, object]:
+    """Pause, resume, or cancel the shared analysis job from a native UI."""
+    operations = {
+        "pause": request.app.state.analysis_jobs.pause,
+        "resume": request.app.state.analysis_jobs.resume,
+        "cancel": request.app.state.analysis_jobs.cancel,
+    }
+    operation = operations.get(action)
+    if operation is None:
+        raise HTTPException(status_code=404, detail="Unknown analysis action")
+    if not operation():
+        raise HTTPException(status_code=409, detail=f"Analysis cannot be {action}d")
+    return cast(dict[str, object], request.app.state.analysis_jobs.snapshot())
+
+
+@router.get("/v1/sessions")
+def list_sessions_for_native_clients(request: Request) -> dict[str, object]:
+    """Expose persisted sessions through the same service boundary as the web UI."""
+    with request.app.state.db_engine.session() as session:
+        sessions = SessionManagementService(session).list_sessions()
+        return {
+            "contract_version": 1,
+            "items": [{"id": item.session_id, "name": item.name, "photo_count": item.photo_count} for item in sessions],
+        }
+
+
+@router.get("/v1/groups")
+def list_similarity_groups_for_native_clients(request: Request) -> dict[str, object]:
+    """List compact similarity-group DTOs for native review surfaces."""
+    with request.app.state.db_engine.session() as session:
+        repo = PhotoRepository(session)
+        group_ids = repo.list_burst_ids("similar-", offset=0, limit=100)
+        photos = repo.list_by_burst_ids(group_ids)
+    groups = {
+        group_id: sorted(
+            (photo for photo in photos if photo.burst_id == group_id), key=lambda photo: (-photo.score, photo.stem_name)
+        )
+        for group_id in group_ids
+    }
+    return {
+        "contract_version": 1,
+        "items": [
+            {"id": group_id, "photo_count": len(members), "recommended_photo_id": members[0].photo_id}
+            for group_id, members in groups.items()
+            if members
+        ],
+    }
 
 
 @router.get("/v1/galleries")

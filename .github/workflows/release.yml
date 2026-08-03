@@ -22,11 +22,11 @@ jobs:
           cache: pip
       - run: python -m pip install -e '.[build]'
       - run: ./scripts/build_linux.sh
-      - run: tar -C builds/linux -czf photo-culler-linux-x86_64.tar.gz photo-culler README.txt
+      - run: tar -C builds/linux/chromium -czf photo-culler-linux-chromium-x86_64.tar.gz photo-culler README.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: photo-culler-linux-x86_64
-          path: photo-culler-linux-x86_64.tar.gz
+          name: photo-culler-linux-chromium-x86_64
+          path: photo-culler-linux-chromium-x86_64.tar.gz
           if-no-files-found: error
 
   github-release:
@@ -38,8 +38,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: photo-culler-linux-x86_64
+          name: photo-culler-linux-chromium-x86_64
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: photo-culler-linux-x86_64.tar.gz
+          files: photo-culler-linux-chromium-x86_64.tar.gz
