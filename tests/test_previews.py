@@ -1,5 +1,9 @@
 """Unit tests for thumbnail preview generator."""
 
+import sys
+from types import SimpleNamespace
+
+import numpy as np
 from PIL import Image
 
 from photo_culler.previews.generator import PreviewGenerator
@@ -20,3 +24,26 @@ def test_preview_generator(tmp_path):
     assert "large" in results
     assert "full" in results
     assert results["small"].exists()
+
+
+def test_preview_generator_decodes_camera_raw_with_rawpy(tmp_path, monkeypatch):
+    class FakeRaw:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def postprocess(self, **kwargs):
+            assert kwargs == {"use_camera_wb": True, "output_bps": 8}
+            return np.full((12, 18, 3), (100, 150, 200), dtype=np.uint8)
+
+    raw_path = tmp_path / "camera.nef"
+    raw_path.write_bytes(b"camera raw data")
+    monkeypatch.setitem(sys.modules, "rawpy", SimpleNamespace(imread=lambda path: FakeRaw()))
+
+    results = PreviewGenerator(cache_dir=tmp_path / "cache").generate_thumbnails("raw-photo", raw_path)
+
+    assert results["small"].exists()
+    with Image.open(results["small"]) as preview:
+        assert preview.size == (18, 12)

@@ -324,10 +324,10 @@ document.querySelectorAll('.import-job-action').forEach((button) => {
     </div>
 
     <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-      <label for="representation-select" style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600;">Archivo mostrado por tándem RAW + JPEG</label>
+      <label for="representation-select" style="font-size: 0.75rem; color: var(--text-secondary); font-weight: 600;">Representación preferida para tándems RAW + JPEG</label>
       <select id="representation-select" name="representation" onchange="this.form.submit()">
-        <option value="jpeg" {% if representation == 'jpeg' %}selected{% endif %}>JPEG (recomendado; se indica si falta)</option>
-        <option value="raw" {% if representation == 'raw' %}selected{% endif %}>RAW (JPEG si el RAW no tiene preview)</option>
+        <option value="jpeg" {% if representation == 'jpeg' %}selected{% endif %}>JPEG (los RAW sin JPEG también se muestran)</option>
+        <option value="raw" {% if representation == 'raw' %}selected{% endif %}>RAW (JPEG solo como respaldo si no se puede renderizar el RAW)</option>
       </select>
     </div>
     {% endif %}

@@ -24,26 +24,37 @@ class PreviewGenerator:
         """Generate and save thumbnails for photo_id. Returns dict of size -> output_path."""
         results = {}
         try:
-            with Image.open(image_path) as img:
-                if img.mode != "RGB":
-                    img = img.convert("RGB")
+            img = self._load_image(image_path)
 
-                for size_name, max_dim in THUMBNAIL_SIZES.items():
-                    out_path = self.cache_dir / f"{photo_id}_{size_name}.jpg"
-                    if out_path.exists():
-                        results[size_name] = out_path
-                        continue
-
-                    # Create copy and resize while maintaining aspect ratio
-                    thumb = img.copy()
-                    thumb.thumbnail((max_dim, max_dim), Image.Resampling.BILINEAR)
-                    thumb.save(out_path, format="JPEG", quality=85)
+            for size_name, max_dim in THUMBNAIL_SIZES.items():
+                out_path = self.cache_dir / f"{photo_id}_{size_name}.jpg"
+                if out_path.exists():
                     results[size_name] = out_path
+                    continue
+
+                # Create copy and resize while maintaining aspect ratio
+                thumb = img.copy()
+                thumb.thumbnail((max_dim, max_dim), Image.Resampling.BILINEAR)
+                thumb.save(out_path, format="JPEG", quality=85)
+                results[size_name] = out_path
 
         except Exception:
             pass
 
         return results
+
+    @staticmethod
+    def _load_image(image_path: Path) -> Image.Image:
+        """Load standard images with Pillow and camera RAW files with rawpy."""
+        try:
+            with Image.open(image_path) as image:
+                return image.convert("RGB")
+        except (OSError, ValueError):
+            import rawpy
+
+            with rawpy.imread(str(image_path)) as raw:
+                pixels = raw.postprocess(use_camera_wb=True, output_bps=8)
+            return Image.fromarray(pixels).convert("RGB")
 
     @staticmethod
     def has_visible_content(image_path: Path) -> bool:
