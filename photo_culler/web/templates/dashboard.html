@@ -17,15 +17,35 @@
 
 <div class="dashboard-layout-grid">
   <section class="dashboard-panel">
-    <div class="dashboard-panel-header"><div class="panel-title">Análisis en segundo plano</div><span class="panel-badge">{{ analysis.status }}</span></div>
+    <div class="dashboard-panel-header"><div class="panel-title">Análisis en segundo plano</div><span class="panel-badge" id="analysis-status">{{ analysis.status }}</span></div>
     <div style="padding:1rem;">
-      <strong>{{ analysis.profile_name }}</strong>
-      <p style="color:var(--text-secondary);">{{ analysis.message }}</p>
-      <div class="bento-progress-bar"><div class="bento-progress-fill" style="width:{{ analysis.progress }}%;"></div></div>
-      <small style="color:var(--text-secondary);">{{ analysis.processed }} / {{ analysis.total }} fotos · {{ analysis.progress }}%</small>
+      <strong id="analysis-profile-name">{{ analysis.profile_name }}</strong>
+      <p style="color:var(--text-secondary);" id="analysis-message">{{ analysis.message }}</p>
+      <div class="bento-progress-bar"><div class="bento-progress-fill" id="analysis-progress-fill" style="width:{{ analysis.progress }}%;"></div></div>
+      <small style="color:var(--text-secondary);" id="analysis-progress-text">{{ analysis.processed }} / {{ analysis.total }} fotos · {{ analysis.progress }}%</small>
       <p style="margin-top:1rem;"><a class="btn btn-secondary" href="/analysis">Ver y controlar análisis</a></p>
     </div>
   </section>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const eventSource = new EventSource("/analysis/progress");
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        const statusBadge = document.getElementById("analysis-status");
+        const profileName = document.getElementById("analysis-profile-name");
+        const message = document.getElementById("analysis-message");
+        const progressFill = document.getElementById("analysis-progress-fill");
+        const progressText = document.getElementById("analysis-progress-text");
+
+        if (statusBadge) statusBadge.textContent = data.status;
+        if (profileName) profileName.textContent = data.profile_name || data.profile;
+        if (message) message.textContent = data.message;
+        if (progressFill) progressFill.style.width = data.progress + "%";
+        if (progressText) progressText.textContent = `${data.processed} / ${data.total} fotos · ${data.progress}%`;
+      };
+    });
+  </script>
   <section class="dashboard-panel">
     <div class="dashboard-panel-header"><div class="panel-title">Importaciones recientes</div><span class="panel-badge">{{ import_jobs|length }}</span></div>
     <div style="padding:1rem;display:grid;gap:.75rem;">
