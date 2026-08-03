@@ -11,7 +11,7 @@
     <button class="btn btn-secondary" id="rescan-gallery" data-gallery-id="{{ active_gallery.id }}" type="button">Reescanear</button>
     {% endif %}
     <button class="btn btn-secondary" id="toggle-import-panel" type="button" style="margin-left: 0.5rem;"
-      data-show-label="Importar / Nueva Galería" data-hide-label="Ocultar Importador">
+            data-label-show="Importar / Nueva Galería" data-label-hide="Ocultar Importador">
       {% if total_photos > 0 %}Importar / Nueva Galería{% else %}Ocultar Importador{% endif %}
     </button>
   </div>
@@ -20,7 +20,7 @@
   </div>
 </div>
 
-<section id="import-panel" class="gallery-import-panel"{% if total_photos > 0 %} hidden{% endif %}>
+<section id="import-panel" class="gallery-import-panel" {% if total_photos > 0 %}hidden{% endif %}>
   <h2>
     {% if not galleries %}Crea tu primera galería fotográfica
     {% elif total_photos == 0 %}Esta galería todavía está vacía
@@ -82,15 +82,17 @@
 <script>
 // Toggle Import Panel
 const toggleBtn = document.getElementById('toggle-import-panel');
-if (toggleBtn) {
-  const panel = document.getElementById('import-panel');
-  const setImportPanelVisibility = (visible) => {
-    panel.hidden = !visible;
-    toggleBtn.textContent = visible ? toggleBtn.dataset.hideLabel : toggleBtn.dataset.showLabel;
-  };
-
+const panel = document.getElementById('import-panel');
+if (toggleBtn && panel) {
   toggleBtn.addEventListener('click', () => {
-    setImportPanelVisibility(panel.hidden);
+    const isHidden = panel.hasAttribute('hidden');
+    if (isHidden) {
+      panel.removeAttribute('hidden');
+      toggleBtn.textContent = toggleBtn.getAttribute('data-label-hide');
+    } else {
+      panel.setAttribute('hidden', '');
+      toggleBtn.textContent = toggleBtn.getAttribute('data-label-show');
+    }
   });
 }
 
@@ -119,29 +121,32 @@ document.getElementById('gallery-import-form').addEventListener('submit', async 
   const form = new FormData(event.currentTarget);
   const output = document.getElementById('gallery-import-status');
   const submitButton = document.getElementById('submit-gallery-import');
-  const previousButtonText = submitButton.textContent;
   const exclusions = String(form.get('exclude_patterns') || '').split(',').map((pattern) => pattern.trim()).filter(Boolean);
+
   submitButton.disabled = true;
   submitButton.textContent = 'Importando…';
   output.textContent = 'Iniciando importación…';
-  let importStarted = false;
 
   try {
     let galleryId = form.get('gallery_id');
 
     if (!galleryId || galleryId === 'new') {
-      const galleryName = String(form.get('name') || '').trim();
-      if (!galleryName) {
-        output.textContent = 'Indica un nombre para la nueva galería.';
+      const name = String(form.get('name') || '').trim();
+      if (!name) {
+        output.textContent = 'El nombre de la galería no puede estar vacío.';
+        submitButton.disabled = false;
+        submitButton.textContent = 'Importar galería';
         return;
       }
       const gallery = await fetch('/api/v1/galleries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: galleryName })
+        body: JSON.stringify({ name: name })
       });
       if (!gallery.ok) {
         output.textContent = 'No se pudo crear la galería.';
+        submitButton.disabled = false;
+        submitButton.textContent = 'Importar galería';
         return;
       }
       galleryId = (await gallery.json()).id;
@@ -157,10 +162,11 @@ document.getElementById('gallery-import-form').addEventListener('submit', async 
     });
     if (!queued.ok) {
       output.textContent = 'La carpeta no es válida o no está disponible.';
+      submitButton.disabled = false;
+      submitButton.textContent = 'Importar galería';
       return;
     }
     const job = await queued.json();
-    importStarted = true;
     const controls = document.getElementById('gallery-import-controls');
     const pauseButton = document.getElementById('pause-import');
     const resumeButton = document.getElementById('resume-import');
@@ -170,12 +176,19 @@ document.getElementById('gallery-import-form').addEventListener('submit', async 
     const control = async (action) => {
       try {
         const response = await fetch(`/api/v1/import-jobs/${job.job_id}/${action}`, {method:'POST'});
-        if (!response.ok) throw new Error(`Unable to ${action} import`);
-      } catch (error) {
-        console.error('Error controlling gallery import', error);
-        output.textContent = `No se pudo ${action === 'pause' ? 'pausar' : action === 'resume' ? 'reanudar' : 'cancelar'} la importación.`;
+        if (!response.ok) {
+          output.textContent = `No se pudo ${action === 'pause' ? 'pausar' : action === 'resume' ? 'reanudar' : 'cancelar'} la importación.`;
+        }
+      } catch (err) {
+        output.textContent = `Error de red al intentar ${action === 'pause' ? 'pausar' : action === 'resume' ? 'reanudar' : 'cancelar'} la importación.`;
       }
     };
+
+    // Clean up existing event listeners before binding to prevent duplicate triggers
+    pauseButton.onclick = null;
+    resumeButton.onclick = null;
+    cancelButton.onclick = null;
+
     pauseButton.addEventListener('click', () => control('pause'));
     resumeButton.addEventListener('click', () => control('resume'));
     cancelButton.addEventListener('click', () => control('cancel'));
@@ -183,7 +196,7 @@ document.getElementById('gallery-import-form').addEventListener('submit', async 
     const poll = async () => {
       try {
         const response = await fetch(`/api/v1/import-jobs/${job.job_id}`);
-        if (!response.ok) throw new Error('Unable to retrieve import progress');
+        if (!response.ok) return;
         const progress = await response.json();
         output.textContent = `Estado: ${progress.state}. Descubiertas: ${progress.discovered}. Importadas: ${progress.imported}.`;
         const paused = progress.state === 'paused';
@@ -192,28 +205,22 @@ document.getElementById('gallery-import-form').addEventListener('submit', async 
         if (['completed', 'failed', 'cancelled'].includes(progress.state)) {
           controls.hidden = true;
           submitButton.disabled = false;
-          submitButton.textContent = previousButtonText;
+          submitButton.textContent = 'Importar galería';
           if (progress.state === 'completed') setTimeout(() => location.reload(), 500);
           return;
         }
         setTimeout(poll, 250);
-      } catch (error) {
-        console.error('Error polling gallery import', error);
-        controls.hidden = true;
-        output.textContent = 'No se pudo consultar el estado de la importación. Inténtalo de nuevo.';
+      } catch (err) {
+        output.textContent = 'Error de red al consultar el progreso de la importación.';
         submitButton.disabled = false;
-        submitButton.textContent = previousButtonText;
+        submitButton.textContent = 'Importar galería';
       }
     };
     poll();
-  } catch (error) {
-    console.error('Error during gallery import', error);
-    output.textContent = 'No se pudo completar la importación. Verifica tu conexión e inténtalo de nuevo.';
-  } finally {
-    if (!importStarted) {
-      submitButton.disabled = false;
-      submitButton.textContent = previousButtonText;
-    }
+  } catch (err) {
+    output.textContent = 'Ocurrió un error inesperado al procesar la importación.';
+    submitButton.disabled = false;
+    submitButton.textContent = 'Importar galería';
   }
 });
 </script>
