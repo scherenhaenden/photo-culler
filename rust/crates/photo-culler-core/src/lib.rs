@@ -86,8 +86,8 @@ mod tests {
     }
 
     #[test]
-    fn frontends_are_explicitly_experimental() {
-        assert!(Frontend::TauriWebGl.readiness() < 10);
+    fn frontend_readiness_reflects_the_experimental_tauri_shell() {
+        assert_eq!(Frontend::TauriWebGl.readiness(), 7);
         assert!(Frontend::EguiWgpu.readiness() < 10);
     }
 }

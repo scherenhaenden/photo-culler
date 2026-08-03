@@ -1,0 +1,5 @@
+#!/bin/sh
+# Development placeholder. scripts/build_tauri_linux.sh replaces this file with
+# the PyInstaller sidecar before creating a distributable package.
+echo "Photo Culler backend is only available in a packaged Tauri build." >&2
+exit 127
