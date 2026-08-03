@@ -6,10 +6,15 @@
 
 use std::time::{Duration, Instant};
 
-use eframe::egui::{self, ColorImage, TextureHandle, TextureOptions};
+use eframe::egui::{self, Color32, ColorImage, RichText, TextureHandle, TextureOptions};
 use serde::{Deserialize, Serialize};
 
 const DEFAULT_SERVER: &str = "http://127.0.0.1:8765";
+const PANEL: Color32 = Color32::from_rgb(25, 28, 33);
+const PANEL_RAISED: Color32 = Color32::from_rgb(34, 38, 45);
+const CANVAS: Color32 = Color32::from_rgb(17, 19, 23);
+const ACCENT: Color32 = Color32::from_rgb(87, 196, 184);
+const MUTED: Color32 = Color32::from_rgb(154, 164, 178);
 
 #[derive(Clone, Debug, Deserialize)]
 struct Gallery {
@@ -357,60 +362,145 @@ impl NativeApp {
 impl eframe::App for NativeApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_analysis();
-        egui::TopBottomPanel::top("top").show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.heading("Photo Culler Native");
-                ui.label("Servicio:");
-                ui.text_edit_singleline(&mut self.server_url);
-                if ui.button("Conectar / actualizar").clicked() {
-                    self.refresh();
-                }
+        egui::TopBottomPanel::top("top")
+            .frame(
+                egui::Frame::new()
+                    .fill(PANEL)
+                    .inner_margin(egui::Margin::symmetric(20, 14)),
+            )
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new("PHOTO CULLER")
+                            .size(21.0)
+                            .strong()
+                            .color(ACCENT),
+                    );
+                    ui.label(RichText::new("NATIVE").size(12.0).color(MUTED));
+                    ui.add_space(20.0);
+                    ui.label(RichText::new(&self.status).size(14.0).color(MUTED));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button(RichText::new("↻  Actualizar").strong()).clicked() {
+                            self.refresh();
+                        }
+                        ui.add_sized(
+                            [230.0, 26.0],
+                            egui::TextEdit::singleline(&mut self.server_url)
+                                .hint_text("Servicio local"),
+                        );
+                    });
+                });
             });
-            ui.label(&self.status);
-        });
 
         egui::SidePanel::left("galleries")
-            .resizable(true)
+            .default_width(275.0)
+            .min_width(235.0)
+            .max_width(380.0)
+            .frame(
+                egui::Frame::new()
+                    .fill(PANEL)
+                    .inner_margin(egui::Margin::same(16)),
+            )
             .show(ctx, |ui| {
+                ui.label(RichText::new("BIBLIOTECA").size(12.0).strong().color(MUTED));
+                ui.add_space(6.0);
                 ui.heading("Galerías");
-                ui.label(format!(
-                    "Sesiones: {} · Grupos similares: {}",
-                    self.sessions_count, self.groups_count
-                ));
-                for gallery in self.galleries.clone() {
-                    let selected = self.active_gallery.as_deref() == Some(gallery.id.as_str());
-                    if ui
-                        .selectable_label(
-                            selected,
-                            format!("{} ({})", gallery.name, gallery.photo_count),
-                        )
-                        .clicked()
-                    {
-                        self.active_gallery = Some(gallery.id);
-                        self.refresh_catalog();
-                    }
-                }
+                ui.add_space(4.0);
+                ui.label(
+                    RichText::new(format!(
+                        "{} sesiones  ·  {} grupos similares",
+                        self.sessions_count, self.groups_count
+                    ))
+                    .size(13.0)
+                    .color(MUTED),
+                );
+                ui.add_space(14.0);
+                egui::ScrollArea::vertical()
+                    .max_height(230.0)
+                    .show(ui, |ui| {
+                        for gallery in self.galleries.clone() {
+                            let selected =
+                                self.active_gallery.as_deref() == Some(gallery.id.as_str());
+                            let text = format!("{}\n{} fotos", gallery.name, gallery.photo_count);
+                            if ui
+                                .add_sized(
+                                    [ui.available_width(), 46.0],
+                                    egui::Button::new(RichText::new(text).size(15.0))
+                                        .selected(selected),
+                                )
+                                .clicked()
+                            {
+                                self.active_gallery = Some(gallery.id);
+                                self.refresh_catalog();
+                            }
+                            ui.add_space(3.0);
+                        }
+                    });
                 ui.separator();
-                ui.checkbox(&mut self.create_new_gallery, "Crear una galería nueva");
-                ui.label("Nombre de la nueva galería");
-                ui.text_edit_singleline(&mut self.new_gallery_name);
-                ui.label("Carpeta local");
-                ui.text_edit_singleline(&mut self.import_path);
+                ui.add_space(8.0);
+                ui.label(
+                    RichText::new("IMPORTAR FOTOS")
+                        .size(12.0)
+                        .strong()
+                        .color(MUTED),
+                );
+                ui.add_space(6.0);
+                ui.checkbox(&mut self.create_new_gallery, "Crear galería nueva");
+                if self.create_new_gallery {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.new_gallery_name)
+                            .hint_text("Nombre de la galería"),
+                    );
+                    ui.add_space(4.0);
+                }
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.import_path)
+                        .hint_text("Carpeta local de fotos"),
+                );
                 ui.checkbox(&mut self.import_recursive, "Incluir subdirectorios");
-                if ui.button("Importar carpeta").clicked() {
+                ui.add_space(6.0);
+                if ui
+                    .add_sized(
+                        [ui.available_width(), 32.0],
+                        egui::Button::new(RichText::new("Importar carpeta").strong()).fill(ACCENT),
+                    )
+                    .clicked()
+                {
                     self.import_gallery();
                 }
             });
 
         egui::SidePanel::right("analysis")
-            .resizable(true)
+            .default_width(285.0)
+            .min_width(245.0)
+            .max_width(360.0)
+            .frame(
+                egui::Frame::new()
+                    .fill(PANEL)
+                    .inner_margin(egui::Margin::same(16)),
+            )
             .show(ctx, |ui| {
+                ui.label(
+                    RichText::new("HERRAMIENTAS")
+                        .size(12.0)
+                        .strong()
+                        .color(MUTED),
+                );
+                ui.add_space(6.0);
                 ui.heading("Análisis");
                 ui.horizontal(|ui| {
-                    ui.label("Perfil");
-                    ui.text_edit_singleline(&mut self.analysis_profile);
+                    ui.label(RichText::new("Perfil").color(MUTED));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.analysis_profile).desired_width(100.0),
+                    );
                 });
-                if ui.button("Analizar pendientes").clicked() {
+                if ui
+                    .add_sized(
+                        [ui.available_width(), 32.0],
+                        egui::Button::new("Analizar pendientes"),
+                    )
+                    .clicked()
+                {
                     self.start_analysis();
                 }
                 ui.horizontal(|ui| {
@@ -427,26 +517,55 @@ impl eframe::App for NativeApp {
                 if let Some(progress) = &self.analysis {
                     ui.separator();
                     ui.label(format!("{} — {}", progress.profile_name, progress.status));
-                    ui.add(egui::ProgressBar::new(f32::from(progress.progress) / 100.0));
+                    ui.add(
+                        egui::ProgressBar::new(f32::from(progress.progress) / 100.0).fill(ACCENT),
+                    );
                     ui.label(format!("{}/{} fotos", progress.processed, progress.total));
                     ui.label(&progress.message);
                 }
                 ui.separator();
                 ui.heading("Decisión");
-                for (label, value) in [
-                    ("Best", "best"),
-                    ("Keep", "keep"),
-                    ("Review", "review"),
-                    ("Reject", "reject"),
-                ] {
-                    if ui.button(label).clicked() {
-                        self.set_decision(value);
-                    }
-                }
+                ui.label(
+                    RichText::new("Clasifica la foto seleccionada")
+                        .size(13.0)
+                        .color(MUTED),
+                );
+                egui::Grid::new("decision-grid")
+                    .num_columns(2)
+                    .spacing([6.0, 6.0])
+                    .show(ui, |ui| {
+                        for (label, value) in [
+                            ("★ Best", "best"),
+                            ("Keep", "keep"),
+                            ("Review", "review"),
+                            ("Reject", "reject"),
+                        ] {
+                            if ui
+                                .add_sized([120.0, 30.0], egui::Button::new(label))
+                                .clicked()
+                            {
+                                self.set_decision(value);
+                            }
+                            if value == "keep" {
+                                ui.end_row();
+                            }
+                        }
+                    });
                 ui.separator();
                 ui.heading("Edición no destructiva");
+                ui.label(
+                    RichText::new("La receta conserva el original intacto.")
+                        .size(13.0)
+                        .color(MUTED),
+                );
                 ui.add(egui::Slider::new(&mut self.exposure, -5.0..=5.0).text("Exposición"));
-                if ui.button("Guardar receta").clicked() {
+                if ui
+                    .add_sized(
+                        [ui.available_width(), 30.0],
+                        egui::Button::new("Guardar receta"),
+                    )
+                    .clicked()
+                {
                     self.update_edit();
                 }
                 ui.horizontal(|ui| {
@@ -460,49 +579,126 @@ impl eframe::App for NativeApp {
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Catálogo");
-            ui.columns(2, |columns| {
-                egui::ScrollArea::vertical().show(&mut columns[0], |ui| {
-                    for photo in self.photos.clone() {
-                        let selected = self.selected_photo.as_deref() == Some(photo.id.as_str());
-                        let score = photo
-                            .score
-                            .map_or_else(|| "—".to_owned(), |score| format!("{score:.2}"));
-                        if ui
-                            .selectable_label(
-                                selected,
-                                format!(
-                                    "{} · {} · {} · {}",
-                                    photo.name, photo.decision, photo.quality_tier, score
-                                ),
-                            )
-                            .clicked()
-                        {
-                            self.select_photo(ctx, &photo);
-                        }
+            egui::Frame::new()
+                .fill(CANVAS)
+                .inner_margin(egui::Margin::same(22))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.heading("Catálogo");
+                        ui.label(
+                            RichText::new(format!("{} fotos", self.photos.len())).color(MUTED),
+                        );
+                    });
+                    ui.add_space(12.0);
+                    if self.photos.is_empty() {
+                        ui.vertical_centered(|ui| {
+                            ui.add_space(ui.available_height() * 0.28);
+                            ui.label(RichText::new("◫").size(52.0).color(ACCENT));
+                            ui.add_space(10.0);
+                            ui.label(
+                                RichText::new("Tu catálogo aparecerá aquí")
+                                    .size(24.0)
+                                    .strong(),
+                            );
+                            ui.label(
+                                RichText::new(
+                                    "Elige una galería o importa una carpeta para empezar.",
+                                )
+                                .size(15.0)
+                                .color(MUTED),
+                            );
+                        });
+                    } else {
+                        ui.columns(2, |columns| {
+                            egui::ScrollArea::vertical().show(&mut columns[0], |ui| {
+                                for photo in self.photos.clone() {
+                                    let selected =
+                                        self.selected_photo.as_deref() == Some(photo.id.as_str());
+                                    let score = photo.score.map_or_else(
+                                        || "—".to_owned(),
+                                        |score| format!("{score:.2}"),
+                                    );
+                                    if ui
+                                        .add_sized(
+                                            [ui.available_width(), 52.0],
+                                            egui::Button::new(
+                                                RichText::new(format!(
+                                                    "{}\n{}  ·  {}  ·  puntuación {}",
+                                                    photo.name,
+                                                    photo.decision,
+                                                    photo.quality_tier,
+                                                    score
+                                                ))
+                                                .size(15.0),
+                                            )
+                                            .selected(selected),
+                                        )
+                                        .clicked()
+                                    {
+                                        self.select_photo(ctx, &photo);
+                                    }
+                                    ui.add_space(5.0);
+                                }
+                            });
+                            if let Some(texture) = &self.selected_texture {
+                                let available = columns[1].available_size();
+                                let original = texture.size_vec2();
+                                let scale = (available.x / original.x)
+                                    .min(available.y / original.y)
+                                    .min(1.0);
+                                columns[1].image((texture.id(), original * scale));
+                            } else {
+                                columns[1].vertical_centered(|ui| {
+                                    ui.add_space(100.0);
+                                    ui.label(
+                                        RichText::new("Selecciona una foto").size(20.0).strong(),
+                                    );
+                                    ui.label(
+                                        RichText::new("Su previsualización aparecerá aquí.")
+                                            .color(MUTED),
+                                    );
+                                });
+                            }
+                        });
                     }
                 });
-                if let Some(texture) = &self.selected_texture {
-                    let available = columns[1].available_size();
-                    let original = texture.size_vec2();
-                    let scale = (available.x / original.x)
-                        .min(available.y / original.y)
-                        .min(1.0);
-                    columns[1].image((texture.id(), original * scale));
-                } else {
-                    columns[1].label("Selecciona una foto para ver su miniatura.");
-                }
-            });
         });
         ctx.request_repaint_after(Duration::from_millis(250));
     }
 }
 
 fn main() -> eframe::Result<()> {
-    let options = eframe::NativeOptions::default();
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([1440.0, 900.0])
+            .with_min_inner_size([1100.0, 700.0]),
+        ..Default::default()
+    };
     eframe::run_native(
         "Photo Culler Native",
         options,
-        Box::new(|_| Ok(Box::<NativeApp>::default())),
+        Box::new(|cc| {
+            let mut style = (*cc.egui_ctx.style()).clone();
+            style
+                .text_styles
+                .insert(egui::TextStyle::Body, egui::FontId::proportional(16.0));
+            style
+                .text_styles
+                .insert(egui::TextStyle::Button, egui::FontId::proportional(15.0));
+            style
+                .text_styles
+                .insert(egui::TextStyle::Heading, egui::FontId::proportional(23.0));
+            style.spacing.item_spacing = egui::vec2(8.0, 8.0);
+            cc.egui_ctx.set_style(style);
+            let mut visuals = egui::Visuals::dark();
+            visuals.panel_fill = PANEL;
+            visuals.window_fill = CANVAS;
+            visuals.extreme_bg_color = Color32::from_rgb(12, 14, 17);
+            visuals.widgets.active.bg_fill = ACCENT;
+            visuals.widgets.hovered.bg_fill = PANEL_RAISED;
+            visuals.selection.bg_fill = Color32::from_rgb(39, 102, 103);
+            cc.egui_ctx.set_visuals(visuals);
+            Ok(Box::<NativeApp>::default())
+        }),
     )
 }
