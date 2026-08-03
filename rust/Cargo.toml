@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/photo-culler-core",
+    "crates/photo-culler-image-engine",
     "apps/photo-culler-cli",
     "apps/photo-culler-egui",
     "apps/photo-culler-tauri",
@@ -13,4 +14,8 @@ edition = "2024"
 license = "MIT"
 
 [workspace.dependencies]
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "tiff"] }
 photo-culler-core = { path = "crates/photo-culler-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rustfft = "6"
