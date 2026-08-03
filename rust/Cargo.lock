@@ -3321,7 +3321,7 @@ dependencies = [
 
 [[package]]
 name = "photo-culler-cli"
-version = "0.1.0"
+version = "2026.8.3"
 dependencies = [
  "photo-culler-core",
  "photo-culler-image-engine",
@@ -3330,11 +3330,11 @@ dependencies = [
 
 [[package]]
 name = "photo-culler-core"
-version = "0.1.0"
+version = "2026.8.3"
 
 [[package]]
 name = "photo-culler-egui"
-version = "0.1.0"
+version = "2026.8.3"
 dependencies = [
  "eframe",
  "image",
@@ -3357,7 +3357,7 @@ dependencies = [
 
 [[package]]
 name = "photo-culler-tauri"
-version = "0.1.0"
+version = "2026.8.3"
 dependencies = [
  "photo-culler-core",
  "tauri",
