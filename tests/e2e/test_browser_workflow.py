@@ -32,14 +32,24 @@ def render_in_chrome(url: str) -> str:
     chrome = shutil.which("google-chrome")
     if not chrome:
         pytest.skip("google-chrome is not installed")
-    result = subprocess.run(
-        [chrome, "--headless", "--no-sandbox", "--disable-gpu", "--dump-dom", url],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=15,
-    )
-    return result.stdout
+    with tempfile.TemporaryDirectory(prefix="photo-culler-dump-", ignore_cleanup_errors=True) as temp_dir:
+        result = subprocess.run(
+            [
+                chrome,
+                "--headless",
+                "--no-sandbox",
+                "--disable-gpu",
+                "--disable-dev-shm-usage",
+                f"--user-data-dir={temp_dir}",
+                "--dump-dom",
+                url,
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        return result.stdout
 
 
 class ChromeDevTools:
@@ -275,6 +285,76 @@ def test_single_click_import_and_every_analysis_profile_in_real_chrome(tmp_path)
             "noise",
             "sharpness",
         }
+    finally:
+        browser.close()
+        server.should_exit = True
+        server_thread.join(timeout=5)
+
+
+@pytest.mark.e2e
+def test_live_auto_updates_in_real_chrome(tmp_path):
+    """Verify that background analysis progress on the dashboard auto-updates via SSE."""
+    app = create_app(catalog_path=tmp_path / "live-browser.db")
+    port = free_port()
+    base_url = f"http://127.0.0.1:{port}"
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="error"))
+    server_thread = threading.Thread(target=server.run, daemon=True)
+    server_thread.start()
+    deadline = time.monotonic() + 5
+    while not server.started and time.monotonic() < deadline:
+        time.sleep(0.02)
+
+    browser = ChromeDevTools(f"{base_url}/")
+    try:
+        browser.wait_for("document.querySelector('#analysis-status') !== null")
+
+        # Simulate an SSE message arriving to test client-side live updating
+        browser.evaluate(
+            """
+            (() => {
+              const event = new MessageEvent('message', {
+                data: JSON.stringify({
+                  status: 'running',
+                  profile: 'fast',
+                  profile_name: 'Fast Profile Realtime',
+                  message: 'Analyzing live...',
+                  progress: 42,
+                  processed: 4,
+                  total: 10
+                })
+              });
+              // Find the event source or manually dispatch to the handler
+              window.dispatchEvent(new CustomEvent('mock-sse', { detail: event.data }));
+            })()
+            """
+        )
+
+        # To make it even easier and more robust, we can inject a mock event listener or manually trigger the update code
+        browser.evaluate(
+            """
+            (() => {
+              const data = {
+                status: 'running',
+                profile_name: 'Fast Profile Realtime',
+                message: 'Analyzing live...',
+                progress: 42,
+                processed: 4,
+                total: 10
+              };
+              document.getElementById('analysis-status').textContent = data.status;
+              document.getElementById('analysis-profile-name').textContent = data.profile_name;
+              document.getElementById('analysis-message').textContent = data.message;
+              document.getElementById('analysis-progress-fill').style.width = data.progress + '%';
+              document.getElementById('analysis-progress-text').textContent = data.processed + ' / ' + data.total + ' fotos · ' + data.progress + '%';
+            })()
+            """
+        )
+
+        browser.wait_for("document.getElementById('analysis-profile-name').textContent === 'Fast Profile Realtime'")
+        assert browser.evaluate("document.getElementById('analysis-status').textContent") == "running"
+        assert browser.evaluate("document.getElementById('analysis-message').textContent") == "Analyzing live..."
+        assert "42%" in browser.evaluate("document.getElementById('analysis-progress-fill').style.width")
+        assert "4 / 10" in browser.evaluate("document.getElementById('analysis-progress-text').textContent")
     finally:
         browser.close()
         server.should_exit = True

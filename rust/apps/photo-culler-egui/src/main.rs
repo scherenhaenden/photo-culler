@@ -196,6 +196,8 @@ struct NativeApp {
     raw_only: bool,
     system_usage: Option<SystemUsage>,
     last_system_poll: Instant,
+    last_import_poll: Instant,
+    import_job_active: bool,
 }
 
 impl Default for NativeApp {
@@ -235,6 +237,8 @@ impl Default for NativeApp {
             raw_only: false,
             system_usage: None,
             last_system_poll: Instant::now() - Duration::from_secs(5),
+            last_import_poll: Instant::now() - Duration::from_secs(5),
+            import_job_active: false,
         }
     }
 }
@@ -479,7 +483,41 @@ impl NativeApp {
         }
         self.last_progress_poll = Instant::now();
         if let Ok(progress) = self.get_json::<AnalysisProgress>("/api/v1/analysis/progress") {
+            let transitioned = if let Some(old) = &self.analysis {
+                let old_active = old.status == "running" || old.status == "paused";
+                let new_active = progress.status == "running" || progress.status == "paused";
+                old_active && !new_active
+            } else {
+                false
+            };
             self.analysis = Some(progress);
+            if transitioned {
+                self.refresh();
+            }
+        }
+    }
+
+    fn poll_import_jobs(&mut self) {
+        let interval = if self.import_job_active {
+            Duration::from_millis(1500)
+        } else {
+            Duration::from_secs(5)
+        };
+        if self.last_import_poll.elapsed() < interval {
+            return;
+        }
+        self.last_import_poll = Instant::now();
+        if let Ok(jobs_val) = self.get_json::<serde_json::Value>("/api/v1/import-jobs") {
+            if let Some(items) = jobs_val["items"].as_array() {
+                let any_active = items.iter().any(|job| {
+                    let state = job["state"].as_str().unwrap_or("");
+                    state == "queued" || state == "discovering" || state == "previewing" || state == "analyzing"
+                });
+                if self.import_job_active && !any_active {
+                    self.refresh();
+                }
+                self.import_job_active = any_active;
+            }
         }
     }
 
@@ -498,6 +536,7 @@ impl NativeApp {
 impl eframe::App for NativeApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_analysis();
+        self.poll_import_jobs();
         self.poll_system_usage();
 
         // ----------------- TOP PANEL (HEADER) -----------------
