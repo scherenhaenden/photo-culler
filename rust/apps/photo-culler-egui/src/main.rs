@@ -86,6 +86,7 @@ struct NativeApp {
     import_recursive: bool,
     analysis_profile: String,
     analysis: Option<AnalysisProgress>,
+    exposure: f32,
     status: String,
     last_progress_poll: Instant,
 }
@@ -106,6 +107,7 @@ impl Default for NativeApp {
             import_recursive: true,
             analysis_profile: "fast".into(),
             analysis: None,
+            exposure: 0.0,
             status: "Conecta con el servicio local para cargar el catálogo.".into(),
             last_progress_poll: Instant::now() - Duration::from_secs(2),
         }
@@ -137,6 +139,7 @@ impl NativeApp {
         let response = match method {
             "POST" => ureq::post(&url).send_json(&body),
             "PUT" => ureq::put(&url).send_json(&body),
+            "PATCH" => ureq::patch(&url).send_json(&body),
             unsupported => return Err(format!("unsupported HTTP method: {unsupported}")),
         }
         .map_err(|error| error.to_string())?;
@@ -296,6 +299,36 @@ impl NativeApp {
         }
     }
 
+    fn update_edit(&mut self) {
+        let Some(photo_id) = self.selected_photo.clone() else {
+            self.status = "Selecciona una foto para editar.".into();
+            return;
+        };
+        match self.send_json::<serde_json::Value, _>(
+            "PATCH",
+            &format!("/api/v1/photos/{photo_id}/edit"),
+            serde_json::json!({"exposure": self.exposure}),
+        ) {
+            Ok(_) => self.status = "Receta no destructiva guardada.".into(),
+            Err(error) => self.status = format!("No se pudo guardar la edición: {error}"),
+        }
+    }
+
+    fn edit_history(&mut self, action: &str) {
+        let Some(photo_id) = self.selected_photo.clone() else {
+            self.status = "Selecciona una foto para editar.".into();
+            return;
+        };
+        match self.send_json::<serde_json::Value, _>(
+            "POST",
+            &format!("/api/v1/photos/{photo_id}/edit/{action}"),
+            (),
+        ) {
+            Ok(_) => self.status = format!("Edición: {action}."),
+            Err(error) => self.status = format!("No se pudo {action}: {error}"),
+        }
+    }
+
     fn poll_analysis(&mut self) {
         if self.last_progress_poll.elapsed() < Duration::from_millis(500) {
             return;
@@ -392,6 +425,20 @@ impl eframe::App for NativeApp {
                         self.set_decision(value);
                     }
                 }
+                ui.separator();
+                ui.heading("Edición no destructiva");
+                ui.add(egui::Slider::new(&mut self.exposure, -5.0..=5.0).text("Exposición"));
+                if ui.button("Guardar receta").clicked() {
+                    self.update_edit();
+                }
+                ui.horizontal(|ui| {
+                    if ui.button("Deshacer").clicked() {
+                        self.edit_history("undo");
+                    }
+                    if ui.button("Rehacer").clicked() {
+                        self.edit_history("redo");
+                    }
+                });
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
