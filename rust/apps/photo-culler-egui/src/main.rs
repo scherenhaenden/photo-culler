@@ -12,25 +12,90 @@ use serde::{Deserialize, Serialize};
 const DEFAULT_SERVER: &str = "http://127.0.0.1:8765";
 
 // NEW High-Fidelity Chromium Design Theme Colors
-const BG_MAIN: Color32 = Color32::from_rgb(15, 16, 18);       // #0F1012
-const BG_CARD: Color32 = Color32::from_rgb(17, 17, 17);       // #111111
+const BG_MAIN: Color32 = Color32::from_rgb(15, 16, 18); // #0F1012
+const BG_CARD: Color32 = Color32::from_rgb(17, 17, 17); // #111111
 const BG_CARD_HOVER: Color32 = Color32::from_rgb(28, 29, 33); // #1C1D21
-const BG_SIDEBAR: Color32 = Color32::from_rgb(5, 5, 5);       // #050505
-const BORDER_COLOR: Color32 = Color32::from_rgb(25, 25, 25);  // #191919 (matches white/10 visually on #050505)
+const BG_SIDEBAR: Color32 = Color32::from_rgb(5, 5, 5); // #050505
+const BORDER_COLOR: Color32 = Color32::from_rgb(25, 25, 25); // #191919 (matches white/10 visually on #050505)
 
-const TEXT_PRIMARY: Color32 = Color32::from_rgb(227, 226, 228);   // #e3e2e4
+const TEXT_PRIMARY: Color32 = Color32::from_rgb(227, 226, 228); // #e3e2e4
 const TEXT_SECONDARY: Color32 = Color32::from_rgb(150, 150, 150); // rgba(255, 255, 255, 0.4)
-const TEXT_MUTED: Color32 = Color32::from_rgb(80, 80, 80);        // rgba(255, 255, 255, 0.25)
+const TEXT_MUTED: Color32 = Color32::from_rgb(80, 80, 80); // rgba(255, 255, 255, 0.25)
 
-const ACCENT_ORANGE: Color32 = Color32::from_rgb(255, 107, 53);  // #FF6B35 (Active/Orange)
-const ACCENT_TEAL: Color32 = Color32::from_rgb(37, 161, 142);    // #25A18E (Kept/Teal)
+const ACCENT_ORANGE: Color32 = Color32::from_rgb(255, 107, 53); // #FF6B35 (Active/Orange)
+const ACCENT_TEAL: Color32 = Color32::from_rgb(37, 161, 142); // #25A18E (Kept/Teal)
 const ACCENT_YELLOW: Color32 = Color32::from_rgb(247, 197, 159); // #F7C59F (Alt/Yellow)
-const ACCENT_RED: Color32 = Color32::from_rgb(255, 107, 53);     // #FF6B35 (Rejected/Red)
+const ACCENT_RED: Color32 = Color32::from_rgb(230, 57, 70); // #E63946 (Rejected/Red)
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum ViewMode {
     Library,
     Dashboard,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum DecisionCategory {
+    Kept,
+    Alternate,
+    Rejected,
+    Unrated,
+}
+
+impl DecisionCategory {
+    fn from_decision(decision: &str) -> Self {
+        match decision.to_uppercase().as_str() {
+            "BEST" | "KEEP" => Self::Kept,
+            "ALTERNATE" | "REVIEW" => Self::Alternate,
+            decision if decision.starts_with("REJECT") => Self::Rejected,
+            _ => Self::Unrated,
+        }
+    }
+
+    fn color(self) -> Color32 {
+        match self {
+            Self::Kept => ACCENT_TEAL,
+            Self::Alternate => ACCENT_YELLOW,
+            Self::Rejected => ACCENT_RED,
+            Self::Unrated => TEXT_MUTED,
+        }
+    }
+
+    fn matches_filter(self, filter: &str) -> bool {
+        match filter {
+            "keep" => self == Self::Kept,
+            "alt" => self == Self::Alternate,
+            "reject" => self == Self::Rejected,
+            "unrated" => self == Self::Unrated,
+            _ => true,
+        }
+    }
+}
+
+#[derive(Default)]
+struct SelectionStats {
+    kept: usize,
+    alternate: usize,
+    rejected: usize,
+    unrated: usize,
+}
+
+impl SelectionStats {
+    fn add(&mut self, category: DecisionCategory) {
+        match category {
+            DecisionCategory::Kept => self.kept += 1,
+            DecisionCategory::Alternate => self.alternate += 1,
+            DecisionCategory::Rejected => self.rejected += 1,
+            DecisionCategory::Unrated => self.unrated += 1,
+        }
+    }
+}
+
+fn card_frame(fill: Color32, corner_radius: u8, inner_margin: egui::Margin) -> egui::Frame {
+    egui::Frame::new()
+        .fill(fill)
+        .stroke(egui::Stroke::new(1.0, BORDER_COLOR))
+        .corner_radius(corner_radius)
+        .inner_margin(inner_margin)
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -75,7 +140,6 @@ struct AnalysisProgress {
 #[derive(Clone, Debug, Deserialize)]
 struct SystemUsage {
     cpu_system: f32,
-    cpu_app: f32,
     cpu_app_capacity: f32,
     gpu_system: f32,
     gpu_name: String,
@@ -294,9 +358,9 @@ impl NativeApp {
         }
     }
 
-    fn select_photo(&mut self, ctx: &egui::Context, photo: &Photo) {
-        self.selected_photo = Some(photo.id.clone());
-        match ureq::get(&self.endpoint(&photo.thumbnail_url)).call() {
+    fn select_photo(&mut self, ctx: &egui::Context, photo_id: String, thumbnail_url: String) {
+        self.selected_photo = Some(photo_id);
+        match ureq::get(&self.endpoint(&thumbnail_url)).call() {
             Ok(response) => match response.into_body().read_to_vec() {
                 Ok(bytes) => match image::load_from_memory(&bytes) {
                     Ok(image) => {
@@ -483,8 +547,10 @@ impl eframe::App for NativeApp {
 
                     ui.add_space(20.0);
                     let separator_stroke = egui::Stroke::new(1.0, BORDER_COLOR);
-                    let (rect, _) = ui.allocate_exact_size(egui::vec2(1.0, 20.0), egui::Sense::hover());
-                    ui.painter().line_segment([rect.left_top(), rect.left_bottom()], separator_stroke);
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(1.0, 20.0), egui::Sense::hover());
+                    ui.painter()
+                        .line_segment([rect.left_top(), rect.left_bottom()], separator_stroke);
                     ui.add_space(20.0);
 
                     // View Switcher Buttons (Library, Dashboard)
@@ -492,14 +558,20 @@ impl eframe::App for NativeApp {
                     let dash_selected = self.view_mode == ViewMode::Dashboard;
 
                     if ui
-                        .selectable_label(lib_selected, RichText::new("LIBRARY").size(11.0).strong())
+                        .selectable_label(
+                            lib_selected,
+                            RichText::new("LIBRARY").size(11.0).strong(),
+                        )
                         .clicked()
                     {
                         self.view_mode = ViewMode::Library;
                     }
                     ui.add_space(8.0);
                     if ui
-                        .selectable_label(dash_selected, RichText::new("DASHBOARD").size(11.0).strong())
+                        .selectable_label(
+                            dash_selected,
+                            RichText::new("DASHBOARD").size(11.0).strong(),
+                        )
                         .clicked()
                     {
                         self.view_mode = ViewMode::Dashboard;
@@ -534,8 +606,18 @@ impl eframe::App for NativeApp {
                 ui.horizontal(|ui| {
                     if let Some(usage) = &self.system_usage {
                         // CPU Sistema
-                        ui.label(RichText::new("CPU SISTEMA:").size(9.0).strong().color(TEXT_SECONDARY));
-                        ui.label(RichText::new(format!("{:.1}%", usage.cpu_system)).size(10.0).strong().color(TEXT_PRIMARY));
+                        ui.label(
+                            RichText::new("CPU SISTEMA:")
+                                .size(9.0)
+                                .strong()
+                                .color(TEXT_SECONDARY),
+                        );
+                        ui.label(
+                            RichText::new(format!("{:.1}%", usage.cpu_system))
+                                .size(10.0)
+                                .strong()
+                                .color(TEXT_PRIMARY),
+                        );
                         ui.add(
                             egui::ProgressBar::new(usage.cpu_system / 100.0)
                                 .fill(Color32::from_rgb(56, 139, 253))
@@ -545,8 +627,18 @@ impl eframe::App for NativeApp {
                         ui.add_space(15.0);
 
                         // CPU App
-                        ui.label(RichText::new("CPU APP:").size(9.0).strong().color(TEXT_SECONDARY));
-                        ui.label(RichText::new(format!("{:.1}%", usage.cpu_app)).size(10.0).strong().color(TEXT_PRIMARY));
+                        ui.label(
+                            RichText::new("CPU APP (CAP.):")
+                                .size(9.0)
+                                .strong()
+                                .color(TEXT_SECONDARY),
+                        );
+                        ui.label(
+                            RichText::new(format!("{:.1}%", usage.cpu_app_capacity))
+                                .size(10.0)
+                                .strong()
+                                .color(TEXT_PRIMARY),
+                        );
                         ui.add(
                             egui::ProgressBar::new(usage.cpu_app_capacity / 100.0)
                                 .fill(ACCENT_TEAL)
@@ -556,8 +648,18 @@ impl eframe::App for NativeApp {
                         ui.add_space(15.0);
 
                         // GPU Usage
-                        ui.label(RichText::new("GPU:").size(9.0).strong().color(TEXT_SECONDARY));
-                        ui.label(RichText::new(format!("{:.1}%", usage.gpu_system)).size(10.0).strong().color(TEXT_PRIMARY));
+                        ui.label(
+                            RichText::new("GPU:")
+                                .size(9.0)
+                                .strong()
+                                .color(TEXT_SECONDARY),
+                        );
+                        ui.label(
+                            RichText::new(format!("{:.1}%", usage.gpu_system))
+                                .size(10.0)
+                                .strong()
+                                .color(TEXT_PRIMARY),
+                        );
                         ui.add(
                             egui::ProgressBar::new(usage.gpu_system / 100.0)
                                 .fill(ACCENT_ORANGE)
@@ -566,14 +668,26 @@ impl eframe::App for NativeApp {
 
                         if !usage.gpu_name.is_empty() && usage.gpu_name != "N/A" {
                             ui.add_space(5.0);
-                            ui.label(RichText::new(format!("({})", usage.gpu_name)).size(9.0).color(TEXT_MUTED));
+                            ui.label(
+                                RichText::new(format!("({})", usage.gpu_name))
+                                    .size(9.0)
+                                    .color(TEXT_MUTED),
+                            );
                         }
                     } else {
-                        ui.label(RichText::new("CARGANDO TELEMETRIA...").size(9.0).color(TEXT_SECONDARY));
+                        ui.label(
+                            RichText::new("CARGANDO TELEMETRIA...")
+                                .size(9.0)
+                                .color(TEXT_SECONDARY),
+                        );
                     }
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(RichText::new("PHOTO CULLER V0.1.0").size(9.0).color(TEXT_SECONDARY));
+                        ui.label(
+                            RichText::new("PHOTO CULLER V0.1.0")
+                                .size(9.0)
+                                .color(TEXT_SECONDARY),
+                        );
                     });
                 });
             });
@@ -592,7 +706,8 @@ impl eframe::App for NativeApp {
             .show(ctx, |ui| {
                 // Catalog / Archive Branding Block
                 ui.horizontal(|ui| {
-                    let (rect, _) = ui.allocate_exact_size(egui::vec2(28.0, 28.0), egui::Sense::hover());
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(28.0, 28.0), egui::Sense::hover());
                     ui.painter().rect_filled(rect, 6, BG_CARD);
                     ui.painter().text(
                         rect.center(),
@@ -603,8 +718,19 @@ impl eframe::App for NativeApp {
                     );
 
                     ui.vertical(|ui| {
-                        ui.label(RichText::new("CATALOG_01").size(11.0).strong().italics().color(Color32::WHITE));
-                        ui.label(RichText::new("Local Archive").size(8.0).strong().color(TEXT_SECONDARY));
+                        ui.label(
+                            RichText::new("CATALOG_01")
+                                .size(11.0)
+                                .strong()
+                                .italics()
+                                .color(Color32::WHITE),
+                        );
+                        ui.label(
+                            RichText::new("Local Archive")
+                                .size(8.0)
+                                .strong()
+                                .color(TEXT_SECONDARY),
+                        );
                     });
                 });
 
@@ -613,14 +739,20 @@ impl eframe::App for NativeApp {
                 ui.add_space(10.0);
 
                 // Galleries header
-                ui.label(RichText::new("GALERÍAS").size(9.0).strong().color(TEXT_SECONDARY));
+                ui.label(
+                    RichText::new("GALERÍAS")
+                        .size(9.0)
+                        .strong()
+                        .color(TEXT_SECONDARY),
+                );
                 ui.add_space(6.0);
 
                 // Scroll area for galleries
                 egui::ScrollArea::vertical()
                     .max_height(140.0)
                     .show(ui, |ui| {
-                        for gallery in self.galleries.clone() {
+                        let mut selected_gallery_id = None;
+                        for gallery in &self.galleries {
                             let selected =
                                 self.active_gallery.as_deref() == Some(gallery.id.as_str());
 
@@ -629,10 +761,13 @@ impl eframe::App for NativeApp {
                                 .selectable_label(selected, RichText::new(text).size(13.0))
                                 .clicked()
                             {
-                                self.active_gallery = Some(gallery.id);
-                                self.refresh_catalog();
+                                selected_gallery_id = Some(gallery.id.clone());
                             }
                             ui.add_space(4.0);
+                        }
+                        if let Some(gallery_id) = selected_gallery_id {
+                            self.active_gallery = Some(gallery_id);
+                            self.refresh_catalog();
                         }
                     });
 
@@ -642,7 +777,12 @@ impl eframe::App for NativeApp {
 
                 // Filters panel (visible if Library View is selected)
                 if self.view_mode == ViewMode::Library {
-                    ui.label(RichText::new("Filtros locales").size(9.0).strong().color(TEXT_SECONDARY));
+                    ui.label(
+                        RichText::new("Filtros locales")
+                            .size(9.0)
+                            .strong()
+                            .color(TEXT_SECONDARY),
+                    );
                     ui.add_space(6.0);
 
                     // Search box
@@ -662,11 +802,31 @@ impl eframe::App for NativeApp {
                         .selected_text(self.filter_decision.to_uppercase())
                         .width(ui.available_width())
                         .show_ui(ui, |ui| {
-                            ui.selectable_value(&mut self.filter_decision, "all".to_string(), "TODOS");
-                            ui.selectable_value(&mut self.filter_decision, "keep".to_string(), "KEPT (BEST/KEEP)");
-                            ui.selectable_value(&mut self.filter_decision, "alt".to_string(), "ALT (REVIEW/ALT)");
-                            ui.selectable_value(&mut self.filter_decision, "reject".to_string(), "REJECTED");
-                            ui.selectable_value(&mut self.filter_decision, "unrated".to_string(), "UNRATED");
+                            ui.selectable_value(
+                                &mut self.filter_decision,
+                                "all".to_string(),
+                                "TODOS",
+                            );
+                            ui.selectable_value(
+                                &mut self.filter_decision,
+                                "keep".to_string(),
+                                "KEPT (BEST/KEEP)",
+                            );
+                            ui.selectable_value(
+                                &mut self.filter_decision,
+                                "alt".to_string(),
+                                "ALT (REVIEW/ALT)",
+                            );
+                            ui.selectable_value(
+                                &mut self.filter_decision,
+                                "reject".to_string(),
+                                "REJECTED",
+                            );
+                            ui.selectable_value(
+                                &mut self.filter_decision,
+                                "unrated".to_string(),
+                                "UNRATED",
+                            );
                         });
                     ui.add_space(6.0);
 
@@ -679,67 +839,105 @@ impl eframe::App for NativeApp {
                 }
 
                 // Selection Stats Block
-                ui.label(RichText::new("SELECTION STATS").size(9.0).strong().color(TEXT_MUTED));
+                ui.label(
+                    RichText::new("SELECTION STATS")
+                        .size(9.0)
+                        .strong()
+                        .color(TEXT_MUTED),
+                );
                 ui.add_space(6.0);
 
                 // Calculate current catalog stats
-                let mut keep_count = 0;
-                let mut alt_count = 0;
-                let mut reject_count = 0;
-                let mut unrated_count = 0;
+                let mut selection_stats = SelectionStats::default();
                 for p in &self.photos {
-                    let d = p.decision.to_uppercase();
-                    if d == "BEST" || d == "KEEP" {
-                        keep_count += 1;
-                    } else if d == "ALTERNATE" || d == "REVIEW" {
-                        alt_count += 1;
-                    } else if d.starts_with("REJECT") {
-                        reject_count += 1;
-                    } else {
-                        unrated_count += 1;
-                    }
+                    selection_stats.add(DecisionCategory::from_decision(&p.decision));
                 }
 
                 // Kept Row
                 ui.horizontal(|ui| {
-                    let (rect, _) = ui.allocate_exact_size(egui::vec2(6.0, 6.0), egui::Sense::hover());
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(6.0, 6.0), egui::Sense::hover());
                     ui.painter().circle_filled(rect.center(), 3.0, ACCENT_TEAL);
-                    ui.label(RichText::new("KEPT").size(11.0).strong().color(TEXT_SECONDARY));
+                    ui.label(
+                        RichText::new("KEPT")
+                            .size(11.0)
+                            .strong()
+                            .color(TEXT_SECONDARY),
+                    );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(RichText::new(keep_count.to_string()).size(11.0).strong().color(ACCENT_TEAL));
+                        ui.label(
+                            RichText::new(selection_stats.kept.to_string())
+                                .size(11.0)
+                                .strong()
+                                .color(ACCENT_TEAL),
+                        );
                     });
                 });
                 ui.add_space(4.0);
 
                 // Alt Row
                 ui.horizontal(|ui| {
-                    let (rect, _) = ui.allocate_exact_size(egui::vec2(6.0, 6.0), egui::Sense::hover());
-                    ui.painter().circle_filled(rect.center(), 3.0, ACCENT_YELLOW);
-                    ui.label(RichText::new("ALT (PICK)").size(11.0).strong().color(TEXT_SECONDARY));
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(6.0, 6.0), egui::Sense::hover());
+                    ui.painter()
+                        .circle_filled(rect.center(), 3.0, ACCENT_YELLOW);
+                    ui.label(
+                        RichText::new("ALT (PICK)")
+                            .size(11.0)
+                            .strong()
+                            .color(TEXT_SECONDARY),
+                    );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(RichText::new(alt_count.to_string()).size(11.0).strong().color(ACCENT_YELLOW));
+                        ui.label(
+                            RichText::new(selection_stats.alternate.to_string())
+                                .size(11.0)
+                                .strong()
+                                .color(ACCENT_YELLOW),
+                        );
                     });
                 });
                 ui.add_space(4.0);
 
                 // Rejected Row
                 ui.horizontal(|ui| {
-                    let (rect, _) = ui.allocate_exact_size(egui::vec2(6.0, 6.0), egui::Sense::hover());
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(6.0, 6.0), egui::Sense::hover());
                     ui.painter().circle_filled(rect.center(), 3.0, ACCENT_RED);
-                    ui.label(RichText::new("REJECTED").size(11.0).strong().color(TEXT_SECONDARY));
+                    ui.label(
+                        RichText::new("REJECTED")
+                            .size(11.0)
+                            .strong()
+                            .color(TEXT_SECONDARY),
+                    );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(RichText::new(reject_count.to_string()).size(11.0).strong().color(ACCENT_RED));
+                        ui.label(
+                            RichText::new(selection_stats.rejected.to_string())
+                                .size(11.0)
+                                .strong()
+                                .color(ACCENT_RED),
+                        );
                     });
                 });
                 ui.add_space(4.0);
 
                 // Unrated Row
                 ui.horizontal(|ui| {
-                    let (rect, _) = ui.allocate_exact_size(egui::vec2(6.0, 6.0), egui::Sense::hover());
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(6.0, 6.0), egui::Sense::hover());
                     ui.painter().circle_filled(rect.center(), 3.0, TEXT_MUTED);
-                    ui.label(RichText::new("UNRATED").size(11.0).strong().color(TEXT_SECONDARY));
+                    ui.label(
+                        RichText::new("UNRATED")
+                            .size(11.0)
+                            .strong()
+                            .color(TEXT_SECONDARY),
+                    );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(RichText::new(unrated_count.to_string()).size(11.0).strong().color(TEXT_PRIMARY));
+                        ui.label(
+                            RichText::new(selection_stats.unrated.to_string())
+                                .size(11.0)
+                                .strong()
+                                .color(TEXT_PRIMARY),
+                        );
                     });
                 });
 
@@ -747,9 +945,14 @@ impl eframe::App for NativeApp {
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
                     ui.horizontal(|ui| {
                         // Round Operator Avatar Frame
-                        let (rect, _) = ui.allocate_exact_size(egui::vec2(28.0, 28.0), egui::Sense::hover());
+                        let (rect, _) =
+                            ui.allocate_exact_size(egui::vec2(28.0, 28.0), egui::Sense::hover());
                         ui.painter().circle_filled(rect.center(), 14.0, BG_CARD);
-                        ui.painter().circle_stroke(rect.center(), 14.0, egui::Stroke::new(1.0, BORDER_COLOR));
+                        ui.painter().circle_stroke(
+                            rect.center(),
+                            14.0,
+                            egui::Stroke::new(1.0, BORDER_COLOR),
+                        );
                         ui.painter().text(
                             rect.center(),
                             egui::Align2::CENTER_CENTER,
@@ -759,11 +962,26 @@ impl eframe::App for NativeApp {
                         );
 
                         ui.vertical(|ui| {
-                            ui.label(RichText::new("OPERATOR_01").size(11.0).strong().italics().color(Color32::WHITE));
+                            ui.label(
+                                RichText::new("OPERATOR_01")
+                                    .size(11.0)
+                                    .strong()
+                                    .italics()
+                                    .color(Color32::WHITE),
+                            );
                             ui.horizontal(|ui| {
-                                let (dot_rect, _) = ui.allocate_exact_size(egui::vec2(6.0, 6.0), egui::Sense::hover());
-                                ui.painter().circle_filled(dot_rect.center(), 3.0, ACCENT_TEAL);
-                                ui.label(RichText::new("ACTIVE SESSION").size(8.0).strong().color(ACCENT_TEAL));
+                                let (dot_rect, _) = ui.allocate_exact_size(
+                                    egui::vec2(6.0, 6.0),
+                                    egui::Sense::hover(),
+                                );
+                                ui.painter()
+                                    .circle_filled(dot_rect.center(), 3.0, ACCENT_TEAL);
+                                ui.label(
+                                    RichText::new("ACTIVE SESSION")
+                                        .size(8.0)
+                                        .strong()
+                                        .color(ACCENT_TEAL),
+                                );
                             });
                         });
                     });
@@ -782,7 +1000,12 @@ impl eframe::App for NativeApp {
                     .stroke(egui::Stroke::new(1.0, BORDER_COLOR)),
             )
             .show(ctx, |ui| {
-                ui.label(RichText::new("HERRAMIENTAS").size(10.0).strong().color(TEXT_MUTED));
+                ui.label(
+                    RichText::new("HERRAMIENTAS")
+                        .size(10.0)
+                        .strong()
+                        .color(TEXT_MUTED),
+                );
                 ui.add_space(6.0);
                 ui.heading("Análisis");
                 ui.add_space(4.0);
@@ -822,12 +1045,25 @@ impl eframe::App for NativeApp {
                     ui.add_space(10.0);
                     ui.separator();
                     ui.add_space(6.0);
-                    ui.label(RichText::new(format!("{} — {}", progress.profile_name, progress.status)).strong().color(ACCENT_ORANGE));
-                    ui.add(
-                        egui::ProgressBar::new(f32::from(progress.progress) / 100.0).fill(ACCENT_TEAL),
+                    ui.label(
+                        RichText::new(format!("{} — {}", progress.profile_name, progress.status))
+                            .strong()
+                            .color(ACCENT_ORANGE),
                     );
-                    ui.label(RichText::new(format!("{}/{} fotos", progress.processed, progress.total)).size(11.0).color(TEXT_SECONDARY));
-                    ui.label(RichText::new(&progress.message).size(10.0).color(TEXT_MUTED));
+                    ui.add(
+                        egui::ProgressBar::new(f32::from(progress.progress) / 100.0)
+                            .fill(ACCENT_TEAL),
+                    );
+                    ui.label(
+                        RichText::new(format!("{}/{} fotos", progress.processed, progress.total))
+                            .size(11.0)
+                            .color(TEXT_SECONDARY),
+                    );
+                    ui.label(
+                        RichText::new(&progress.message)
+                            .size(10.0)
+                            .color(TEXT_MUTED),
+                    );
                 }
 
                 ui.add_space(10.0);
@@ -836,7 +1072,11 @@ impl eframe::App for NativeApp {
 
                 // --- Decision Grid ---
                 ui.heading("Decisión");
-                ui.label(RichText::new("Clasifica la foto seleccionada").size(12.0).color(TEXT_SECONDARY));
+                ui.label(
+                    RichText::new("Clasifica la foto seleccionada")
+                        .size(12.0)
+                        .color(TEXT_SECONDARY),
+                );
                 ui.add_space(8.0);
 
                 egui::Grid::new("decision-grid")
@@ -845,14 +1085,24 @@ impl eframe::App for NativeApp {
                     .show(ui, |ui| {
                         // Best Button (Teal Border/Text)
                         if ui
-                            .add_sized([120.0, 32.0], egui::Button::new(RichText::new("★ Best").strong().color(ACCENT_TEAL)))
+                            .add_sized(
+                                [120.0, 32.0],
+                                egui::Button::new(
+                                    RichText::new("★ Best").strong().color(ACCENT_TEAL),
+                                ),
+                            )
                             .clicked()
                         {
                             self.set_decision("best");
                         }
                         // Keep Button (Teal Border/Text)
                         if ui
-                            .add_sized([120.0, 32.0], egui::Button::new(RichText::new("✔ Keep").strong().color(ACCENT_TEAL)))
+                            .add_sized(
+                                [120.0, 32.0],
+                                egui::Button::new(
+                                    RichText::new("✔ Keep").strong().color(ACCENT_TEAL),
+                                ),
+                            )
                             .clicked()
                         {
                             self.set_decision("keep");
@@ -861,14 +1111,24 @@ impl eframe::App for NativeApp {
 
                         // Review Button (Yellow Border/Text)
                         if ui
-                            .add_sized([120.0, 32.0], egui::Button::new(RichText::new("👁 Review").strong().color(ACCENT_YELLOW)))
+                            .add_sized(
+                                [120.0, 32.0],
+                                egui::Button::new(
+                                    RichText::new("👁 Review").strong().color(ACCENT_YELLOW),
+                                ),
+                            )
                             .clicked()
                         {
                             self.set_decision("review");
                         }
                         // Reject Button (Red Border/Text)
                         if ui
-                            .add_sized([120.0, 32.0], egui::Button::new(RichText::new("✖ Reject").strong().color(ACCENT_RED)))
+                            .add_sized(
+                                [120.0, 32.0],
+                                egui::Button::new(
+                                    RichText::new("✖ Reject").strong().color(ACCENT_RED),
+                                ),
+                            )
                             .clicked()
                         {
                             self.set_decision("reject");
@@ -882,7 +1142,11 @@ impl eframe::App for NativeApp {
 
                 // --- Non-destructive recipe editor ---
                 ui.heading("Edición no destructiva");
-                ui.label(RichText::new("Conserva el archivo original intacto.").size(12.0).color(TEXT_SECONDARY));
+                ui.label(
+                    RichText::new("Conserva el archivo original intacto.")
+                        .size(12.0)
+                        .color(TEXT_SECONDARY),
+                );
                 ui.add_space(8.0);
 
                 ui.add(egui::Slider::new(&mut self.exposure, -5.0..=5.0).text("Exposición"));
@@ -891,7 +1155,8 @@ impl eframe::App for NativeApp {
                 if ui
                     .add_sized(
                         [ui.available_width(), 32.0],
-                        egui::Button::new(RichText::new("Guardar receta").strong()).fill(ACCENT_ORANGE),
+                        egui::Button::new(RichText::new("Guardar receta").strong())
+                            .fill(ACCENT_ORANGE),
                     )
                     .clicked()
                 {
@@ -913,7 +1178,12 @@ impl eframe::App for NativeApp {
                 ui.add_space(10.0);
 
                 // --- Import Block ---
-                ui.label(RichText::new("IMPORTAR DESDE CARPETA").size(9.0).strong().color(TEXT_MUTED));
+                ui.label(
+                    RichText::new("IMPORTAR DESDE CARPETA")
+                        .size(9.0)
+                        .strong()
+                        .color(TEXT_MUTED),
+                );
                 ui.add_space(6.0);
                 ui.checkbox(&mut self.create_new_gallery, "Crear galería nueva");
                 if self.create_new_gallery {
@@ -932,7 +1202,8 @@ impl eframe::App for NativeApp {
                 if ui
                     .add_sized(
                         [ui.available_width(), 32.0],
-                        egui::Button::new(RichText::new("Importar carpeta").strong()).fill(ACCENT_ORANGE),
+                        egui::Button::new(RichText::new("Importar carpeta").strong())
+                            .fill(ACCENT_ORANGE),
                     )
                     .clicked()
                 {
@@ -956,21 +1227,33 @@ impl eframe::App for NativeApp {
                                 // Responsive Bento-Grid layout using vertical & horizontal stacks
                                 ui.horizontal(|ui| {
                                     // Card 1: Total Photos
-                                    let frame_1 = egui::Frame::new()
-                                        .fill(BG_CARD)
-                                        .stroke(egui::Stroke::new(1.0, BORDER_COLOR))
-                                        .corner_radius(12)
-                                        .inner_margin(egui::Margin::symmetric(18, 14));
+                                    let frame_1 =
+                                        card_frame(BG_CARD, 12, egui::Margin::symmetric(18, 14));
                                     frame_1.show(ui, |ui| {
                                         ui.allocate_ui(egui::vec2(160.0, 100.0), |ui| {
                                             ui.vertical(|ui| {
-                                                ui.label(RichText::new("TOTAL FOTOS").size(9.0).strong().color(TEXT_SECONDARY));
+                                                ui.label(
+                                                    RichText::new("TOTAL FOTOS")
+                                                        .size(9.0)
+                                                        .strong()
+                                                        .color(TEXT_SECONDARY),
+                                                );
                                                 ui.add_space(4.0);
-                                                ui.label(RichText::new(self.photos.len().to_string()).size(28.0).strong().color(Color32::WHITE));
+                                                ui.label(
+                                                    RichText::new(self.photos.len().to_string())
+                                                        .size(28.0)
+                                                        .strong()
+                                                        .color(Color32::WHITE),
+                                                );
                                                 ui.add_space(8.0);
                                                 ui.separator();
                                                 ui.add_space(4.0);
-                                                ui.label(RichText::new("CATALOGADAS").size(9.0).color(ACCENT_ORANGE).strong());
+                                                ui.label(
+                                                    RichText::new("CATALOGADAS")
+                                                        .size(9.0)
+                                                        .color(ACCENT_ORANGE)
+                                                        .strong(),
+                                                );
                                             });
                                         });
                                     });
@@ -978,21 +1261,33 @@ impl eframe::App for NativeApp {
                                     ui.add_space(12.0);
 
                                     // Card 2: Sessions Count
-                                    let frame_2 = egui::Frame::new()
-                                        .fill(BG_CARD)
-                                        .stroke(egui::Stroke::new(1.0, BORDER_COLOR))
-                                        .corner_radius(12)
-                                        .inner_margin(egui::Margin::symmetric(18, 14));
+                                    let frame_2 =
+                                        card_frame(BG_CARD, 12, egui::Margin::symmetric(18, 14));
                                     frame_2.show(ui, |ui| {
                                         ui.allocate_ui(egui::vec2(160.0, 100.0), |ui| {
                                             ui.vertical(|ui| {
-                                                ui.label(RichText::new("SESIONES").size(9.0).strong().color(TEXT_SECONDARY));
+                                                ui.label(
+                                                    RichText::new("SESIONES")
+                                                        .size(9.0)
+                                                        .strong()
+                                                        .color(TEXT_SECONDARY),
+                                                );
                                                 ui.add_space(4.0);
-                                                ui.label(RichText::new(self.sessions_count.to_string()).size(28.0).strong().color(Color32::WHITE));
+                                                ui.label(
+                                                    RichText::new(self.sessions_count.to_string())
+                                                        .size(28.0)
+                                                        .strong()
+                                                        .color(Color32::WHITE),
+                                                );
                                                 ui.add_space(8.0);
                                                 ui.separator();
                                                 ui.add_space(4.0);
-                                                ui.label(RichText::new("FISICAS").size(9.0).color(ACCENT_TEAL).strong());
+                                                ui.label(
+                                                    RichText::new("FISICAS")
+                                                        .size(9.0)
+                                                        .color(ACCENT_TEAL)
+                                                        .strong(),
+                                                );
                                             });
                                         });
                                     });
@@ -1000,21 +1295,33 @@ impl eframe::App for NativeApp {
                                     ui.add_space(12.0);
 
                                     // Card 3: Similar Groups
-                                    let frame_3 = egui::Frame::new()
-                                        .fill(BG_CARD)
-                                        .stroke(egui::Stroke::new(1.0, BORDER_COLOR))
-                                        .corner_radius(12)
-                                        .inner_margin(egui::Margin::symmetric(18, 14));
+                                    let frame_3 =
+                                        card_frame(BG_CARD, 12, egui::Margin::symmetric(18, 14));
                                     frame_3.show(ui, |ui| {
                                         ui.allocate_ui(egui::vec2(160.0, 100.0), |ui| {
                                             ui.vertical(|ui| {
-                                                ui.label(RichText::new("GRUPOS SIMILARES").size(9.0).strong().color(TEXT_SECONDARY));
+                                                ui.label(
+                                                    RichText::new("GRUPOS SIMILARES")
+                                                        .size(9.0)
+                                                        .strong()
+                                                        .color(TEXT_SECONDARY),
+                                                );
                                                 ui.add_space(4.0);
-                                                ui.label(RichText::new(self.groups_count.to_string()).size(28.0).strong().color(Color32::WHITE));
+                                                ui.label(
+                                                    RichText::new(self.groups_count.to_string())
+                                                        .size(28.0)
+                                                        .strong()
+                                                        .color(Color32::WHITE),
+                                                );
                                                 ui.add_space(8.0);
                                                 ui.separator();
                                                 ui.add_space(4.0);
-                                                ui.label(RichText::new("CLUSTERS").size(9.0).color(ACCENT_YELLOW).strong());
+                                                ui.label(
+                                                    RichText::new("CLUSTERS")
+                                                        .size(9.0)
+                                                        .color(ACCENT_YELLOW)
+                                                        .strong(),
+                                                );
                                             });
                                         });
                                     });
@@ -1026,40 +1333,90 @@ impl eframe::App for NativeApp {
                                 ui.heading("System Performance");
                                 ui.add_space(10.0);
 
-                                let usage_frame = egui::Frame::new()
-                                    .fill(BG_CARD)
-                                    .stroke(egui::Stroke::new(1.0, BORDER_COLOR))
-                                    .corner_radius(12)
-                                    .inner_margin(egui::Margin::same(16));
+                                let usage_frame = card_frame(BG_CARD, 12, egui::Margin::same(16));
 
                                 usage_frame.show(ui, |ui| {
                                     if let Some(usage) = &self.system_usage {
                                         ui.columns(3, |cols| {
                                             // Column 1: CPU System Info
                                             cols[0].vertical(|ui| {
-                                                ui.label(RichText::new("CPU SISTEMA").size(10.0).strong().color(TEXT_SECONDARY));
+                                                ui.label(
+                                                    RichText::new("CPU SISTEMA")
+                                                        .size(10.0)
+                                                        .strong()
+                                                        .color(TEXT_SECONDARY),
+                                                );
                                                 ui.add_space(6.0);
-                                                ui.label(RichText::new(format!("{:.1}%", usage.cpu_system)).size(24.0).strong().color(Color32::WHITE));
+                                                ui.label(
+                                                    RichText::new(format!(
+                                                        "{:.1}%",
+                                                        usage.cpu_system
+                                                    ))
+                                                    .size(24.0)
+                                                    .strong()
+                                                    .color(Color32::WHITE),
+                                                );
                                                 ui.add_space(8.0);
-                                                ui.add(egui::ProgressBar::new(usage.cpu_system / 100.0).fill(Color32::from_rgb(56, 139, 253)));
+                                                ui.add(
+                                                    egui::ProgressBar::new(
+                                                        usage.cpu_system / 100.0,
+                                                    )
+                                                    .fill(Color32::from_rgb(56, 139, 253)),
+                                                );
                                             });
 
                                             // Column 2: CPU App Info
                                             cols[1].vertical(|ui| {
-                                                ui.label(RichText::new("CPU APLICACION").size(10.0).strong().color(TEXT_SECONDARY));
+                                                ui.label(
+                                                    RichText::new("CPU APLICACIÓN (CAP.)")
+                                                        .size(10.0)
+                                                        .strong()
+                                                        .color(TEXT_SECONDARY),
+                                                );
                                                 ui.add_space(6.0);
-                                                ui.label(RichText::new(format!("{:.1}%", usage.cpu_app)).size(24.0).strong().color(Color32::WHITE));
+                                                ui.label(
+                                                    RichText::new(format!(
+                                                        "{:.1}%",
+                                                        usage.cpu_app_capacity
+                                                    ))
+                                                    .size(24.0)
+                                                    .strong()
+                                                    .color(Color32::WHITE),
+                                                );
                                                 ui.add_space(8.0);
-                                                ui.add(egui::ProgressBar::new(usage.cpu_app_capacity / 100.0).fill(ACCENT_TEAL));
+                                                ui.add(
+                                                    egui::ProgressBar::new(
+                                                        usage.cpu_app_capacity / 100.0,
+                                                    )
+                                                    .fill(ACCENT_TEAL),
+                                                );
                                             });
 
                                             // Column 3: GPU Info
                                             cols[2].vertical(|ui| {
-                                                ui.label(RichText::new("GPU").size(10.0).strong().color(TEXT_SECONDARY));
+                                                ui.label(
+                                                    RichText::new("GPU")
+                                                        .size(10.0)
+                                                        .strong()
+                                                        .color(TEXT_SECONDARY),
+                                                );
                                                 ui.add_space(6.0);
-                                                ui.label(RichText::new(format!("{:.1}%", usage.gpu_system)).size(24.0).strong().color(Color32::WHITE));
+                                                ui.label(
+                                                    RichText::new(format!(
+                                                        "{:.1}%",
+                                                        usage.gpu_system
+                                                    ))
+                                                    .size(24.0)
+                                                    .strong()
+                                                    .color(Color32::WHITE),
+                                                );
                                                 ui.add_space(8.0);
-                                                ui.add(egui::ProgressBar::new(usage.gpu_system / 100.0).fill(ACCENT_ORANGE));
+                                                ui.add(
+                                                    egui::ProgressBar::new(
+                                                        usage.gpu_system / 100.0,
+                                                    )
+                                                    .fill(ACCENT_ORANGE),
+                                                );
                                             });
                                         });
                                     } else {
@@ -1100,49 +1457,28 @@ impl eframe::App for NativeApp {
                                     );
                                 });
                             } else {
-                                // Apply filter algorithms locally on catalog
-                                let filtered_photos: Vec<Photo> = self.photos
+                                // Apply filters by reference; the catalog remains owned by self.
+                                let search_query = self.search_query.to_lowercase();
+                                let filtered_photos: Vec<&Photo> = self
+                                    .photos
                                     .iter()
                                     .filter(|photo| {
                                         // 1. Search Query
-                                        if !self.search_query.is_empty() {
-                                            let q = self.search_query.to_lowercase();
-                                            if !photo.name.to_lowercase().contains(&q)
-                                                && !photo.quality_tier.to_lowercase().contains(&q)
-                                            {
-                                                return false;
-                                            }
+                                        if !search_query.is_empty()
+                                            && !photo.name.to_lowercase().contains(&search_query)
+                                            && !photo
+                                                .quality_tier
+                                                .to_lowercase()
+                                                .contains(&search_query)
+                                        {
+                                            return false;
                                         }
 
                                         // 2. Decision State Filter
-                                        let d = photo.decision.to_uppercase();
-                                        match self.filter_decision.as_str() {
-                                            "keep" => {
-                                                if d != "BEST" && d != "KEEP" {
-                                                    return false;
-                                                }
-                                            }
-                                            "alt" => {
-                                                if d != "ALTERNATE" && d != "REVIEW" {
-                                                    return false;
-                                                }
-                                            }
-                                            "reject" => {
-                                                if !d.starts_with("REJECT") {
-                                                    return false;
-                                                }
-                                            }
-                                            "unrated" => {
-                                                if d == "BEST"
-                                                    || d == "KEEP"
-                                                    || d == "ALTERNATE"
-                                                    || d == "REVIEW"
-                                                    || d.starts_with("REJECT")
-                                                {
-                                                    return false;
-                                                }
-                                            }
-                                            _ => {}
+                                        if !DecisionCategory::from_decision(&photo.decision)
+                                            .matches_filter(&self.filter_decision)
+                                        {
+                                            return false;
                                         }
 
                                         // 3. RAW only check
@@ -1161,9 +1497,9 @@ impl eframe::App for NativeApp {
 
                                         true
                                     })
-                                    .cloned()
                                     .collect();
 
+                                let mut photo_to_select = None;
                                 ui.columns(2, |columns| {
                                     // Left Column: Scrollable Photo Cards
                                     egui::ScrollArea::vertical().show(&mut columns[0], |ui| {
@@ -1172,28 +1508,29 @@ impl eframe::App for NativeApp {
                                                 == Some(photo.id.as_str());
 
                                             // Styling cards based on selection and decision state
-                                            let card_bg = if selected { BG_CARD_HOVER } else { BG_CARD };
+                                            let card_bg =
+                                                if selected { BG_CARD_HOVER } else { BG_CARD };
                                             let card_stroke = if selected {
                                                 egui::Stroke::new(1.5, ACCENT_ORANGE)
                                             } else {
                                                 egui::Stroke::new(1.0, BORDER_COLOR)
                                             };
 
-                                            let frame = egui::Frame::new()
-                                                .fill(card_bg)
-                                                .stroke(card_stroke)
-                                                .corner_radius(8)
-                                                .inner_margin(egui::Margin::symmetric(12, 10));
+                                            let frame = card_frame(
+                                                card_bg,
+                                                8,
+                                                egui::Margin::symmetric(12, 10),
+                                            )
+                                            .stroke(card_stroke);
 
-                                            let response = frame.show(ui, |ui| {
+                                            let frame_response = frame.show(ui, |ui| {
                                                 ui.horizontal(|ui| {
                                                     // Left part: Decision colored dot and filename
-                                                    let dot_color = match photo.decision.to_uppercase().as_str() {
-                                                        "BEST" | "KEEP" => ACCENT_TEAL,
-                                                        "ALTERNATE" | "REVIEW" => ACCENT_YELLOW,
-                                                        d if d.starts_with("REJECT") => ACCENT_RED,
-                                                        _ => TEXT_MUTED,
-                                                    };
+                                                    let dot_color =
+                                                        DecisionCategory::from_decision(
+                                                            &photo.decision,
+                                                        )
+                                                        .color();
 
                                                     // Draw small dot
                                                     let (dot_rect, _) = ui.allocate_exact_size(
@@ -1217,7 +1554,9 @@ impl eframe::App for NativeApp {
                                                         ui.horizontal(|ui| {
                                                             ui.label(
                                                                 RichText::new(
-                                                                    &photo.quality_tier.to_uppercase(),
+                                                                    photo
+                                                                        .quality_tier
+                                                                        .to_uppercase(),
                                                                 )
                                                                 .size(9.0)
                                                                 .color(TEXT_SECONDARY),
@@ -1227,10 +1566,11 @@ impl eframe::App for NativeApp {
                                                                     .size(9.0)
                                                                     .color(TEXT_MUTED),
                                                             );
-                                                            let score_str = photo.score.map_or(
-                                                                "—".to_string(),
-                                                                |s| format!("{:.2}", s),
-                                                            );
+                                                            let score_str = photo
+                                                                .score
+                                                                .map_or("—".to_string(), |s| {
+                                                                    format!("{:.2}", s)
+                                                                });
                                                             ui.label(
                                                                 RichText::new(format!(
                                                                     "SCORE: {}",
@@ -1245,14 +1585,16 @@ impl eframe::App for NativeApp {
                                                 });
                                             });
 
-                                            // Handle clicking on the card
-                                            let card_rect = response.response.rect;
-                                            let click_response = ui.allocate_rect(
-                                                card_rect,
-                                                egui::Sense::click(),
-                                            );
-                                            if click_response.clicked() {
-                                                self.select_photo(ctx, &photo);
+                                            // Reuse the frame response's input region for card clicks.
+                                            if frame_response
+                                                .response
+                                                .interact(egui::Sense::click())
+                                                .clicked()
+                                            {
+                                                photo_to_select = Some((
+                                                    photo.id.clone(),
+                                                    photo.thumbnail_url.clone(),
+                                                ));
                                             }
                                             ui.add_space(6.0);
                                         }
@@ -1284,6 +1626,9 @@ impl eframe::App for NativeApp {
                                         });
                                     }
                                 });
+                                if let Some((photo_id, thumbnail_url)) = photo_to_select {
+                                    self.select_photo(ctx, photo_id, thumbnail_url);
+                                }
                             }
                         }
                     }
@@ -1345,4 +1690,33 @@ fn main() -> eframe::Result<()> {
             Ok(Box::<NativeApp>::default())
         }),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DecisionCategory;
+
+    #[test]
+    fn decision_categories_stay_consistent_with_filters() {
+        assert_eq!(
+            DecisionCategory::from_decision("best"),
+            DecisionCategory::Kept
+        );
+        assert_eq!(
+            DecisionCategory::from_decision("review"),
+            DecisionCategory::Alternate
+        );
+        assert_eq!(
+            DecisionCategory::from_decision("reject_technical"),
+            DecisionCategory::Rejected
+        );
+        assert_eq!(
+            DecisionCategory::from_decision("unprocessed"),
+            DecisionCategory::Unrated
+        );
+
+        assert!(DecisionCategory::Kept.matches_filter("keep"));
+        assert!(!DecisionCategory::Kept.matches_filter("reject"));
+        assert!(DecisionCategory::Unrated.matches_filter("unrated"));
+    }
 }
