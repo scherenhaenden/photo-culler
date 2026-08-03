@@ -56,7 +56,7 @@ class PreviewGenerator:
             import rawpy
 
             with rawpy.imread(str(image_path)) as raw:
-                pixels = raw.postprocess(use_camera_wb=True, output_bps=8)
+                pixels = raw.postprocess(use_camera_wb=True, output_bps=8, half_size=True)
             return Image.fromarray(pixels).convert("RGB")
 
     @staticmethod

@@ -201,7 +201,12 @@ importForm.addEventListener('submit', async (event) => {
     const poll = async () => {
       try {
         const response = await fetch(`/api/v1/import-jobs/${job.job_id}`);
-        if (!response.ok) return;
+        if (!response.ok) {
+          output.textContent = 'Error de red al consultar el progreso de la importación.';
+          submitButton.disabled = false;
+          submitButton.textContent = 'Importar galería';
+          return;
+        }
         const progress = await response.json();
         output.textContent = `Estado: ${progress.state}. Descubiertas: ${progress.discovered}. Importadas: ${progress.imported}.`;
         const paused = progress.state === 'paused';

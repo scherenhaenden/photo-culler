@@ -35,7 +35,7 @@ def test_preview_generator_decodes_camera_raw_with_rawpy(tmp_path, monkeypatch):
             return False
 
         def postprocess(self, **kwargs):
-            assert kwargs == {"use_camera_wb": True, "output_bps": 8}
+            assert kwargs == {"use_camera_wb": True, "output_bps": 8, "half_size": True}
             return np.full((12, 18, 3), (100, 150, 200), dtype=np.uint8)
 
     raw_path = tmp_path / "camera.nef"
