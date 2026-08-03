@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "photo-culler"
-version = "0.2.0"
+version = "2026.8.3"
 description = "High performance automated photo culling and modular analysis framework"
 authors = [{ name = "Edward Flores" }]
 readme = "README.md"

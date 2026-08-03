@@ -2184,25 +2184,25 @@ dependencies = [
 
 [[package]]
 name = "photo-culler-cli"
-version = "0.2.0"
+version = "2026.8.3"
 dependencies = [
  "photo-culler-core",
 ]
 
 [[package]]
 name = "photo-culler-core"
-version = "0.2.0"
+version = "2026.8.3"
 
 [[package]]
 name = "photo-culler-egui"
-version = "0.2.0"
+version = "2026.8.3"
 dependencies = [
  "photo-culler-core",
 ]
 
 [[package]]
 name = "photo-culler-tauri"
-version = "0.2.0"
+version = "2026.8.3"
 dependencies = [
  "photo-culler-core",
  "tauri",
