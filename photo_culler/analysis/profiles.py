@@ -60,6 +60,18 @@ ANALYZER_CATALOG: tuple[dict[str, str], ...] = (
         "description": "Estima el ruido visible en zonas con poco detalle y su impacto técnico.",
         "cost": "Alto",
     },
+    {
+        "id": "horizon",
+        "name": "Horizonte y nivel",
+        "description": "Estima una rotación pequeña a partir de líneas horizontales fiables.",
+        "cost": "Medio",
+    },
+    {
+        "id": "visual_balance",
+        "name": "Balance visual",
+        "description": "Propone un recorte leve si el peso visual está claramente descentrado.",
+        "cost": "Medio",
+    },
 )
 
 ANALYZER_IDS = {item["id"] for item in ANALYZER_CATALOG}
@@ -183,7 +195,7 @@ class AnalysisProfileStore:
                     raise ValueError("Cada perfil debe ser un objeto JSON.")
                 profile = self._validate(item)
                 profiles[profile["id"]] = profile
-        except OSError, ValueError, TypeError, json.JSONDecodeError:
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
             # A damaged preferences file must not prevent the application starting.
             return profiles
         return profiles
