@@ -700,7 +700,13 @@ def test_group_similar_endpoint_persists_detected_groups(web_client, tmp_path):
 
     result = web_client.post("/analysis/group-similar")
     assert result.status_code == 200
-    assert result.json()["groups"] == 1
+    assert result.json()["status"] == "ok"
+    deadline = time.monotonic() + 3
+    manager = web_client.app.state.similarity_grouping_jobs
+    while manager.is_running and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert manager.snapshot()["status"] == "completed"
+    assert manager.snapshot()["groups"] == 1
     page = web_client.get("/groups")
     assert "similar-one" in page.text
     with web_client.app.state.db_engine.session() as session:
@@ -712,6 +718,36 @@ def test_group_similar_endpoint_persists_detected_groups(web_client, tmp_path):
     assert "similar-two" in comparison.text
     assert "/previews/similar-one" in comparison.text
     assert web_client.get("/previews/similar-one").status_code == 200
+
+
+def test_similarity_grouping_progress_and_photo_inspector_context(web_client, tmp_path):
+    image = tmp_path / "group-progress.jpg"
+    Image.new("RGB", (80, 60), (40, 100, 180)).save(image)
+    stat = image.stat()
+    captured = datetime(2026, 7, 31, 12, 0, 0)
+    with web_client.app.state.db_engine.session() as session:
+        repository = PhotoRepository(session)
+        for index in range(2):
+            repository.save_photo(
+                Photo(
+                    f"progress-{index}", f"progress-{index}",
+                    files=[FileRecord(image, FileRole.JPEG, stat.st_size, stat.st_mtime)],
+                    metadata=MetadataRecord(capture_time=captured + timedelta(seconds=index)), score=0.4 + index,
+                )
+            )
+
+    assert web_client.post("/analysis/group-similar").status_code == 200
+    deadline = time.monotonic() + 3
+    manager = web_client.app.state.similarity_grouping_jobs
+    while manager.is_running and time.monotonic() < deadline:
+        time.sleep(0.01)
+    snapshot = manager.snapshot()
+    assert snapshot["status"] == "completed"
+    assert snapshot["progress"] == 100
+    inspector = web_client.get("/photos/progress-0")
+    assert inspector.status_code == 200
+    assert "Grupo de fotos parecidas" in inspector.text
+    assert "progress-1" in inspector.text
 
 
 def test_profiles_run_distinct_analyzer_sets_and_report_cache_usage(web_client, tmp_path):

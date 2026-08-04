@@ -27,6 +27,10 @@ def inspect_photo(photo_id: str, request: Request, group: str | None = Query(def
             raise HTTPException(status_code=404, detail="Photo not found")
         display_file = photo.display_file("jpeg")
         analysis_summary = repo.get_analysis_summary(photo_id)
+        similarity_group_id = photo.burst_id if (photo.burst_id or "").startswith("similar-") else None
+        similarity_group_photos = repo.list_by_burst_ids([similarity_group_id]) if similarity_group_id else []
+        similarity_group_photos.sort(key=lambda item: (-item.score, item.stem_name.lower()))
+        recommended_group_photo = similarity_group_photos[0] if similarity_group_photos else None
 
         # Query only adjacent records. Loading and converting the entire catalog made
         # opening an inspector page increasingly slow as the catalog grew.
@@ -75,6 +79,9 @@ def inspect_photo(photo_id: str, request: Request, group: str | None = Query(def
             "next_photo_id": next_photo_id,
             "prefetch_ids": prefetch_ids,
             "active_group_id": active_group_id,
+            "similarity_group_id": similarity_group_id,
+            "similarity_group_photos": similarity_group_photos,
+            "recommended_group_photo": recommended_group_photo,
         },
     )
 

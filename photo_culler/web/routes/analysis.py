@@ -14,6 +14,8 @@ from fastapi import APIRouter, Body, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 
 import photo_culler.analysis.analyzers.technical  # noqa: F401
+import photo_culler.analysis.analyzers.composition  # noqa: F401
+import photo_culler.analysis.analyzers.geometry  # noqa: F401
 from photo_culler.analysis.profiles import ANALYZER_CATALOG, DEFAULT_PROFILES
 
 logger = logging.getLogger(__name__)
@@ -395,6 +397,114 @@ class AnalysisJobManager:
                     listener.get_nowait()
                 except queue.Empty:
                     pass
+
+
+class SimilarityGroupingJobManager:
+    """Run similarity grouping in the background and expose its independent progress."""
+
+    def __init__(self) -> None:
+        self.is_running = False
+        self.status = "idle"
+        self.progress = 0
+        self.processed = 0
+        self.total = 0
+        self.groups = 0
+        self.grouped_photos = 0
+        self.skipped = 0
+        self.message = "No hay agrupaciones activas."
+        self._lock = threading.Lock()
+        self._listeners: list[queue.Queue[str]] = []
+
+    def start(self, db_engine) -> bool:
+        with self._lock:
+            if self.is_running:
+                return False
+            self.is_running = True
+            self.status = "running"
+            self.progress = self.processed = self.total = self.groups = self.grouped_photos = self.skipped = 0
+            self.message = "Preparando agrupación…"
+            threading.Thread(target=self._run, args=(db_engine,), daemon=True, name="photo-similarity-grouping").start()
+        self._notify_listeners()
+        return True
+
+    def snapshot(self) -> dict[str, object]:
+        with self._lock:
+            return {
+                "contract_version": 1, "status": self.status, "progress": self.progress,
+                "processed": self.processed, "total": self.total, "groups": self.groups,
+                "grouped_photos": self.grouped_photos, "skipped": self.skipped, "message": self.message,
+            }
+
+    def register_listener(self) -> queue.Queue[str]:
+        listener: queue.Queue[str] = queue.Queue(maxsize=8)
+        with self._lock:
+            self._listeners.append(listener)
+        return listener
+
+    def unregister_listener(self, listener: queue.Queue[str]) -> None:
+        with self._lock:
+            if listener in self._listeners:
+                self._listeners.remove(listener)
+
+    def _run(self, db_engine) -> None:
+        try:
+            from photo_culler.catalog.repositories.photo_repository import PhotoRepository
+            from photo_culler.cli.helpers.asset_resolver import AnalysisAssetResolver
+            from photo_culler.grouping import SimilarityGrouper
+
+            with db_engine.session() as session:
+                repository = PhotoRepository(session)
+                photos = repository.list_all()
+                with self._lock:
+                    self.total = max(1, len(photos) * 2)
+                    self.message = "Calculando similitud visual…"
+                self._notify_listeners()
+                resolver = AnalysisAssetResolver()
+
+                def report(completed: int, total: int, name: str) -> None:
+                    with self._lock:
+                        self.processed, self.total = completed, total
+                        self.progress = int(completed * 100 / total)
+                        self.message = f"Agrupando {name} ({completed}/{total})"
+                    self._notify_listeners()
+
+                groups, skipped = SimilarityGrouper().group(
+                    photos, lambda item: resolver.resolve(item, prefer_jpeg=True), on_progress=report
+                )
+                # Persist hashes and group ids in the same transaction: a completed job
+                # is immediately visible in both the group list and the inspector.
+                for photo in photos:
+                    repository.save_photo(photo)
+            with self._lock:
+                self.status = "completed"
+                self.progress = 100
+                self.groups = len(groups)
+                self.grouped_photos = sum(len(group.photos) for group in groups)
+                self.skipped = skipped
+                self.message = f"{self.groups} grupos guardados · {self.grouped_photos} fotos agrupadas."
+        except Exception as exc:
+            logger.exception("Similarity grouping failed")
+            with self._lock:
+                self.status = "failed"
+                self.message = f"La agrupación falló: {type(exc).__name__}: {exc}"
+        finally:
+            with self._lock:
+                self.is_running = False
+            self._notify_listeners()
+
+    def _notify_listeners(self) -> None:
+        payload = json.dumps(self.snapshot())
+        with self._lock:
+            listeners = tuple(self._listeners)
+        for listener in listeners:
+            try:
+                listener.put_nowait(payload)
+            except queue.Full:
+                try:
+                    listener.get_nowait()
+                    listener.put_nowait(payload)
+                except queue.Empty:
+                    pass
                 try:
                     listener.put_nowait(payload)
                 except queue.Full:
@@ -406,6 +516,10 @@ router = APIRouter()
 
 def _manager(request: Request) -> AnalysisJobManager:
     return cast(AnalysisJobManager, request.app.state.analysis_jobs)
+
+
+def _grouping_manager(request: Request) -> SimilarityGroupingJobManager:
+    return cast(SimilarityGroupingJobManager, request.app.state.similarity_grouping_jobs)
 
 
 @router.get("/analysis", response_class=HTMLResponse)
@@ -457,29 +571,36 @@ def set_analysis_workers(request: Request, workers: int = Form(...)) -> dict[str
 
 @router.post("/analysis/group-similar")
 def group_similar_photos(request: Request) -> dict[str, object]:
-    """Group visually similar nearby photos without changing their keep/reject decision."""
-    from photo_culler.catalog.repositories.photo_repository import PhotoRepository
-    from photo_culler.cli.helpers.asset_resolver import AnalysisAssetResolver
-    from photo_culler.grouping import SimilarityGrouper
+    """Start non-blocking similarity grouping, so the browser can show real progress."""
+    manager = _grouping_manager(request)
+    if not manager.start(request.app.state.db_engine):
+        raise HTTPException(status_code=409, detail="Ya hay una agrupación en ejecución.")
+    return {"status": "ok", "message": "Agrupación iniciada."}
 
-    try:
-        with request.app.state.db_engine.session() as session:
-            repository = PhotoRepository(session)
-            photos = repository.list_all()
-            asset_resolver = AnalysisAssetResolver()
-            groups, skipped = SimilarityGrouper().group(
-                photos, lambda item: asset_resolver.resolve(item, prefer_jpeg=True)
-            )
-            for photo in photos:
-                repository.save_photo(photo)
-    except Exception as exc:
-        logger.exception("Similarity grouping failed")
-        raise HTTPException(status_code=500, detail="No se pudieron agrupar las fotos. Revisa el log local.") from exc
-    return {
-        "groups": len(groups),
-        "grouped_photos": sum(len(group.photos) for group in groups),
-        "skipped": skipped,
-    }
+
+@router.get("/analysis/group-similar/progress")
+async def similarity_grouping_progress_events(request: Request):
+    manager = _grouping_manager(request)
+    listener = manager.register_listener()
+
+    async def event_generator():
+        try:
+            yield f"data: {json.dumps(manager.snapshot())}\n\n"
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    data = await asyncio.get_running_loop().run_in_executor(None, lambda: listener.get(timeout=0.5))
+                    yield f"data: {data}\n\n"
+                    if json.loads(data).get("status") in {"completed", "failed"}:
+                        break
+                except queue.Empty:
+                    if not manager.is_running:
+                        break
+        finally:
+            manager.unregister_listener(listener)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.get("/analysis/profiles")

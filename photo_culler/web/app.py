@@ -121,6 +121,7 @@ def create_app(
     app.state.db_engine = db_engine
     app.state.gallery_imports = GalleryImportService(db_engine)
     app.state.analysis_jobs = analysis.AnalysisJobManager()
+    app.state.similarity_grouping_jobs = analysis.SimilarityGroupingJobManager()
     app.state.analysis_profiles = AnalysisProfileStore(str(db_engine.db_path) + ".analysis-profiles.json")
     app.state.edit_service = EditService(db_engine)
 

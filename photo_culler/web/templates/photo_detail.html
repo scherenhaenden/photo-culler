@@ -36,6 +36,13 @@
     <!-- Inspector Sidebar Panel -->
     <div class="inspector-panel">
       <!-- Technical Evaluation -->
+      {% if similarity_group_id %}
+      <div class="inspector-section">
+        <h3>Grupo de fotos parecidas</h3>
+        <p class="score-explanation-intro">{{ similarity_group_photos|length }} tomas relacionadas. La recomendada es <strong>{{ recommended_group_photo.stem_name }}</strong> ({{ (recommended_group_photo.score * 100)|round|int }}/100).</p>
+        <a class="btn btn-secondary" href="/groups/{{ similarity_group_id }}">Ver y comparar el grupo →</a>
+      </div>
+      {% endif %}
       <div class="inspector-section">
         <h3>Evaluación Técnica</h3>
         <div class="inspector-score-card">

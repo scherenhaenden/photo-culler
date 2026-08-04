@@ -18,17 +18,26 @@ class SimilarityGrouper:
         self.max_distance = max_distance
         self.max_gap = timedelta(minutes=max_gap_minutes)
 
-    def group(self, photos: list[Photo], resolve_asset: Callable[[Photo], Path | None]) -> tuple[list[BurstGroup], int]:
+    def group(
+        self,
+        photos: list[Photo],
+        resolve_asset: Callable[[Photo], Path | None],
+        on_progress: Callable[[int, int, str], None] | None = None,
+    ) -> tuple[list[BurstGroup], int]:
         """Assign stable group ids and return groups plus photos without a readable asset."""
         skipped = 0
+        total_steps = max(1, len(photos) * 2)
+        completed_steps = 0
         for photo in photos:
-            if photo.perceptual_hash:
-                continue
-            asset = resolve_asset(photo)
-            if asset is None or not asset.exists():
-                skipped += 1
-                continue
-            photo.perceptual_hash = compute_dhash(asset)
+            if not photo.perceptual_hash:
+                asset = resolve_asset(photo)
+                if asset is None or not asset.exists():
+                    skipped += 1
+                else:
+                    photo.perceptual_hash = compute_dhash(asset)
+            completed_steps += 1
+            if on_progress:
+                on_progress(completed_steps, total_steps, photo.stem_name)
 
         candidates = [photo for photo in photos if is_valid_perceptual_hash(photo.perceptual_hash)]
         candidates.sort(
@@ -74,6 +83,9 @@ class SimilarityGrouper:
             for chunk_position, chunk in enumerate(self._hash_chunks(photo_hash)):
                 chunk_index.setdefault((chunk_position, chunk), []).append(index)
             exact_representatives[exact_key] = index
+            completed_steps += 1
+            if on_progress:
+                on_progress(completed_steps, total_steps, photo.stem_name)
 
         clusters: dict[int, list[Photo]] = {}
         for index, photo in enumerate(candidates):
