@@ -168,6 +168,46 @@ struct AnalysisStart<'a> {
     scope: &'a str,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+struct ComponentSummary {
+    label: String,
+    score_percent: f64,
+    weight_percent: f64,
+    contribution_points: f64,
+    measurement: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct AnalysisSummary {
+    profile_name: String,
+    confidence_percent: f64,
+    final_score_percent: f64,
+    formula: String,
+    components: Option<Vec<ComponentSummary>>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct CameraMetadata {
+    camera_model: Option<String>,
+    lens: Option<String>,
+    iso: Option<i32>,
+    aperture: Option<f64>,
+    shutter_speed: Option<String>,
+    focal_length: Option<f64>,
+    capture_time: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct PhotoDetail {
+    id: String,
+    name: String,
+    decision: String,
+    score: Option<f64>,
+    quality_tier: String,
+    analysis_summary: Option<AnalysisSummary>,
+    metadata: Option<CameraMetadata>,
+}
+
 struct NativeApp {
     server_url: String,
     server_token: Option<String>,
@@ -198,6 +238,17 @@ struct NativeApp {
     last_system_poll: Instant,
     last_import_poll: Instant,
     import_job_active: bool,
+
+    // NEW Auto-refresh, high-fidelity integration, and dashboard stats
+    first_refresh: bool,
+    total_photos: usize,
+    total_files: usize,
+    selected_count: usize,
+    pending_count: usize,
+    temperature: i32,
+    tint: f32,
+    showing_original: bool,
+    selected_photo_detail: Option<PhotoDetail>,
 }
 
 impl Default for NativeApp {
@@ -239,6 +290,17 @@ impl Default for NativeApp {
             last_system_poll: Instant::now() - Duration::from_secs(5),
             last_import_poll: Instant::now() - Duration::from_secs(5),
             import_job_active: false,
+
+            // NEW Extended state
+            first_refresh: true,
+            total_photos: 0,
+            total_files: 0,
+            selected_count: 0,
+            pending_count: 0,
+            temperature: 6500,
+            tint: 0.0,
+            showing_original: false,
+            selected_photo_detail: None,
         }
     }
 }
@@ -312,6 +374,14 @@ impl NativeApp {
                     .ok()
                     .and_then(|value| value["items"].as_array().map(Vec::len))
                     .unwrap_or(0);
+
+                if let Ok(summary) = self.get_json::<serde_json::Value>("/api/v1/summary") {
+                    self.total_photos = summary["total_photos"].as_u64().unwrap_or(0) as usize;
+                    self.total_files = summary["total_files"].as_u64().unwrap_or(0) as usize;
+                    self.selected_count = summary["selected_count"].as_u64().unwrap_or(0) as usize;
+                    self.pending_count = summary["pending_count"].as_u64().unwrap_or(0) as usize;
+                }
+
                 self.status = "Catálogo actualizado.".into();
             }
             Err(error) => self.status = format!("No se pudo conectar: {error}"),
@@ -327,6 +397,7 @@ impl NativeApp {
         match self.get_json::<CatalogPage>(&format!("/api/v1/catalog{suffix}")) {
             Ok(page) => {
                 self.photos = page.items;
+                self.total_photos = page.total;
                 self.status = format!("{} fotos cargadas.", page.total);
             }
             Err(error) => self.status = format!("No se pudo cargar el catálogo: {error}"),
@@ -377,28 +448,67 @@ impl NativeApp {
         }
     }
 
-    fn select_photo(&mut self, ctx: &egui::Context, photo_id: String, thumbnail_url: String) {
-        self.selected_photo = Some(photo_id);
-        match self.http.get(&self.endpoint(&thumbnail_url)).call() {
+    fn load_preview_texture(&mut self, ctx: &egui::Context) {
+        let Some(photo_id) = self.selected_photo.clone() else { return };
+        let url = if self.showing_original {
+            format!("/thumbnails/{photo_id}/800")
+        } else {
+            format!("/api/v1/photos/{photo_id}/edit-preview?max_size=800")
+        };
+
+        match self.http.get(&self.endpoint(&url)).call() {
             Ok(response) => match response.into_body().read_to_vec() {
                 Ok(bytes) => match image::load_from_memory(&bytes) {
                     Ok(image) => {
                         let image = image.to_rgb8();
                         let size = [image.width() as usize, image.height() as usize];
                         self.selected_texture = Some(ctx.load_texture(
-                            "selected-photo-thumbnail",
+                            "selected-photo-preview",
                             ColorImage::from_rgb(size, image.as_raw()),
                             TextureOptions::LINEAR,
                         ));
                     }
                     Err(error) => {
-                        self.status = format!("No se pudo decodificar la miniatura: {error}")
+                        self.status = format!("No se pudo decodificar la vista previa: {error}")
                     }
                 },
-                Err(error) => self.status = format!("No se pudo leer la miniatura: {error}"),
+                Err(error) => self.status = format!("No se pudo leer la vista previa: {error}"),
             },
-            Err(error) => self.status = format!("No se pudo cargar la miniatura: {error}"),
+            Err(error) => self.status = format!("No se pudo cargar la vista previa: {error}"),
         }
+    }
+
+    fn select_photo(&mut self, ctx: &egui::Context, photo_id: String, _thumbnail_url: String) {
+        self.selected_photo = Some(photo_id.clone());
+        self.selected_photo_detail = None;
+        self.showing_original = false;
+
+        // Fetch detailed photo info (score explanation, metadata, components)
+        match self.get_json::<PhotoDetail>(&format!("/api/v1/photos/{photo_id}")) {
+            Ok(detail) => {
+                self.selected_photo_detail = Some(detail);
+            }
+            Err(error) => {
+                self.status = format!("No se pudo cargar los detalles de la foto: {error}");
+            }
+        }
+
+        // Fetch edit recipe
+        match self.get_json::<serde_json::Value>(&format!("/api/v1/photos/{photo_id}/edit")) {
+            Ok(edit_doc) => {
+                if let Some(recipe) = edit_doc.get("recipe") {
+                    self.exposure = recipe.get("exposure").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                    self.temperature = recipe.get("temperature").and_then(|v| v.as_i64()).unwrap_or(6500) as i32;
+                    self.tint = recipe.get("tint").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                }
+            }
+            Err(error) => {
+                self.status = format!("No se pudo cargar la receta de edición: {error}");
+            }
+        }
+
+        // Load preview texture (with non-destructive edits applied)
+        self.load_preview_texture(ctx);
     }
 
     fn set_decision(&mut self, decision: &str) {
@@ -414,6 +524,11 @@ impl NativeApp {
             Ok(_) => {
                 self.status = format!("Decisión guardada: {decision}.");
                 self.refresh_catalog();
+
+                // Live refresh detail to immediately reflect badge change
+                if let Ok(detail) = self.get_json::<PhotoDetail>(&format!("/api/v1/photos/{photo_id}")) {
+                    self.selected_photo_detail = Some(detail);
+                }
             }
             Err(error) => self.status = format!("No se pudo guardar la decisión: {error}"),
         }
@@ -455,7 +570,11 @@ impl NativeApp {
         match self.send_json::<serde_json::Value, _>(
             "PATCH",
             &format!("/api/v1/photos/{photo_id}/edit"),
-            serde_json::json!({"exposure": self.exposure}),
+            serde_json::json!({
+                "exposure": self.exposure,
+                "temperature": self.temperature,
+                "tint": self.tint
+            }),
         ) {
             Ok(_) => self.status = "Receta no destructiva guardada.".into(),
             Err(error) => self.status = format!("No se pudo guardar la edición: {error}"),
@@ -472,7 +591,14 @@ impl NativeApp {
             &format!("/api/v1/photos/{photo_id}/edit/{action}"),
             (),
         ) {
-            Ok(_) => self.status = format!("Edición: {action}."),
+            Ok(edit_doc) => {
+                self.status = format!("Edición: {action}.");
+                if let Some(recipe) = edit_doc.get("recipe") {
+                    self.exposure = recipe.get("exposure").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                    self.temperature = recipe.get("temperature").and_then(|v| v.as_i64()).unwrap_or(6500) as i32;
+                    self.tint = recipe.get("tint").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                }
+            }
             Err(error) => self.status = format!("No se pudo {action}: {error}"),
         }
     }
@@ -535,6 +661,12 @@ impl NativeApp {
 
 impl eframe::App for NativeApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Run automatic initial load/refresh on startup
+        if self.first_refresh {
+            self.first_refresh = false;
+            self.refresh();
+        }
+
         self.poll_analysis();
         self.poll_import_jobs();
         self.poll_system_usage();
@@ -1007,7 +1139,7 @@ impl eframe::App for NativeApp {
                 });
             });
 
-        // ----------------- RIGHT PANEL (TOOLS & ANALYSIS) -----------------
+        // ----------------- RIGHT PANEL (TOOLS & ANALYSIS & PHOTO DETAILS) -----------------
         egui::SidePanel::right("right_sidebar")
             .default_width(280.0)
             .min_width(260.0)
@@ -1019,215 +1151,484 @@ impl eframe::App for NativeApp {
                     .stroke(egui::Stroke::new(1.0_f32, BORDER_COLOR)),
             )
             .show(ctx, |ui| {
-                ui.label(
-                    RichText::new("HERRAMIENTAS")
-                        .size(10.0)
-                        .strong()
-                        .color(TEXT_MUTED),
-                );
-                ui.add_space(6.0);
-                ui.heading("Análisis");
-                ui.add_space(4.0);
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    if let Some(detail) = self.selected_photo_detail.clone() {
+                        // ----------------- SELECTED PHOTO INSPECTOR -----------------
+                        // 1. EVALUACIÓN TÉCNICA
+                        ui.label(
+                            RichText::new("EVALUACIÓN TÉCNICA")
+                                .size(9.0)
+                                .strong()
+                                .color(TEXT_MUTED),
+                        );
+                        ui.add_space(4.0);
 
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new("Perfil").color(TEXT_SECONDARY));
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.analysis_profile).desired_width(120.0),
+                        let score_val = detail.score.map_or(0, |s| (s * 100.0).round() as i32);
+                        let frame = egui::Frame::new()
+                            .fill(BG_CARD)
+                            .stroke(egui::Stroke::new(1.0_f32, BORDER_COLOR))
+                            .corner_radius(8)
+                            .inner_margin(egui::Margin::symmetric(14, 10));
+
+                        frame.show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label(
+                                    RichText::new(score_val.to_string())
+                                        .size(28.0)
+                                        .strong()
+                                        .color(ACCENT_TEAL),
+                                );
+                                ui.vertical(|ui| {
+                                    ui.label(
+                                        RichText::new("PUNTUACIÓN TOTAL / 100")
+                                            .size(8.0)
+                                            .color(TEXT_SECONDARY)
+                                            .strong(),
+                                    );
+                                    ui.label(
+                                        RichText::new(detail.quality_tier.to_uppercase())
+                                            .size(10.0)
+                                            .strong()
+                                            .color(ACCENT_TEAL),
+                                    );
+                                });
+                            });
+                        });
+                        ui.add_space(8.0);
+
+                        // POR QUÉ ESTA PUNTUACIÓN (detailed components breakdown)
+                        if let Some(summary) = &detail.analysis_summary {
+                            ui.collapsing(
+                                RichText::new("POR QUÉ ESTA PUNTUACIÓN")
+                                    .size(10.0)
+                                    .strong()
+                                    .color(TEXT_SECONDARY),
+                                |ui| {
+                                    ui.label(
+                                        RichText::new(format!(
+                                            "Perfil {} · confianza {}%",
+                                            summary.profile_name,
+                                            summary.confidence_percent.round() as i32
+                                        ))
+                                        .size(10.0)
+                                        .color(TEXT_MUTED),
+                                    );
+                                    ui.label(
+                                        RichText::new(format!(
+                                            "{} = {}",
+                                            summary.final_score_percent.round() as i32,
+                                            summary.formula
+                                        ))
+                                        .size(10.0)
+                                        .color(TEXT_MUTED),
+                                    );
+                                    ui.add_space(4.0);
+
+                                    if let Some(components) = &summary.components {
+                                        for comp in components {
+                                            ui.vertical(|ui| {
+                                                ui.label(
+                                                    RichText::new(format!(
+                                                        "{}: {}/100",
+                                                        comp.label,
+                                                        comp.score_percent.round() as i32
+                                                    ))
+                                                    .size(11.0)
+                                                    .strong()
+                                                    .color(TEXT_PRIMARY),
+                                                );
+                                                ui.label(
+                                                    RichText::new(format!(
+                                                        "peso {}% · aporta {:.1} puntos",
+                                                        comp.weight_percent.round() as i32,
+                                                        comp.contribution_points
+                                                    ))
+                                                    .size(9.0)
+                                                    .color(TEXT_SECONDARY),
+                                                );
+                                                ui.label(
+                                                    RichText::new(&comp.measurement)
+                                                        .size(9.0)
+                                                        .color(TEXT_MUTED),
+                                                );
+                                                ui.add_space(4.0);
+                                            });
+                                        }
+                                    }
+                                },
+                            );
+                        } else {
+                            ui.label(
+                                RichText::new("Aún no hay mediciones guardadas para explicar esta nota.")
+                                    .size(10.0)
+                                    .color(TEXT_MUTED)
+                                    .italics(),
+                            );
+                        }
+
+                        ui.add_space(10.0);
+                        ui.separator();
+                        ui.add_space(10.0);
+
+                        // 2. EDICIÓN NO DESTRUCTIVA
+                        ui.heading("Edición no destructiva");
+                        ui.label(
+                            RichText::new("Conserva el archivo original intacto.")
+                                .size(11.0)
+                                .color(TEXT_SECONDARY),
+                        );
+                        ui.add_space(6.0);
+
+                        let exposure_val = self.exposure;
+                        let temp_val = self.temperature;
+                        let tint_val = self.tint;
+
+                        let mut changed = false;
+                        if ui
+                            .add(
+                                egui::Slider::new(&mut self.exposure, -5.0..=5.0)
+                                    .text(format!("Exposición ({:.1} EV)", exposure_val)),
+                            )
+                            .changed()
+                        {
+                            changed = true;
+                        }
+                        if ui
+                            .add(
+                                egui::Slider::new(&mut self.temperature, 2000..=12000)
+                                    .text(format!("Temperatura ({} K)", temp_val)),
+                            )
+                            .changed()
+                        {
+                            changed = true;
+                        }
+                        if ui
+                            .add(
+                                egui::Slider::new(&mut self.tint, -100.0..=100.0)
+                                    .text(format!("Tint ({:.0})", tint_val)),
+                            )
+                            .changed()
+                        {
+                            changed = true;
+                        }
+
+                        if changed {
+                            self.update_edit();
+                            self.load_preview_texture(ctx);
+                        }
+                        ui.add_space(6.0);
+
+                        ui.columns(3, |cols| {
+                            if cols[0].button("Deshacer").clicked() {
+                                self.edit_history("undo");
+                                self.load_preview_texture(ctx);
+                            }
+                            if cols[1].button("Rehacer").clicked() {
+                                self.edit_history("redo");
+                                self.load_preview_texture(ctx);
+                            }
+
+                            let before_btn_text = if self.showing_original {
+                                "Volver a edición"
+                            } else {
+                                "Ver original"
+                            };
+                            if cols[2].button(before_btn_text).clicked() {
+                                self.showing_original = !self.showing_original;
+                                self.load_preview_texture(ctx);
+                            }
+                        });
+
+                        ui.add_space(10.0);
+                        ui.separator();
+                        ui.add_space(10.0);
+
+                        // 3. CAMERA SPECIFICATIONS
+                        ui.heading("Camera Specifications");
+                        ui.add_space(6.0);
+
+                        if let Some(meta) = &detail.metadata {
+                            egui::Grid::new("camera-meta-grid")
+                                .num_columns(2)
+                                .spacing([10.0, 6.0])
+                                .show(ui, |ui| {
+                                    ui.label(RichText::new("Camera").color(TEXT_SECONDARY));
+                                    ui.label(
+                                        RichText::new(
+                                            meta.camera_model.as_deref().unwrap_or("N/A"),
+                                        )
+                                        .strong(),
+                                    );
+                                    ui.end_row();
+
+                                    ui.label(RichText::new("Lens").color(TEXT_SECONDARY));
+                                    ui.label(
+                                        RichText::new(meta.lens.as_deref().unwrap_or("N/A"))
+                                            .strong(),
+                                    );
+                                    ui.end_row();
+
+                                    ui.label(RichText::new("ISO").color(TEXT_SECONDARY));
+                                    ui.label(
+                                        RichText::new(
+                                            meta.iso
+                                                .map_or("N/A".to_string(), |i| i.to_string()),
+                                        )
+                                        .strong(),
+                                    );
+                                    ui.end_row();
+
+                                    ui.label(RichText::new("Aperture").color(TEXT_SECONDARY));
+                                    ui.label(
+                                        RichText::new(
+                                            meta.aperture.map_or("N/A".to_string(), |a| {
+                                                format!("f/{:.1}", a)
+                                            }),
+                                        )
+                                        .strong(),
+                                    );
+                                    ui.end_row();
+
+                                    ui.label(RichText::new("Exposure").color(TEXT_SECONDARY));
+                                    ui.label(
+                                        RichText::new(
+                                            meta.shutter_speed.as_deref().unwrap_or("N/A"),
+                                        )
+                                        .strong(),
+                                    );
+                                    ui.end_row();
+
+                                    ui.label(RichText::new("Focal Length").color(TEXT_SECONDARY));
+                                    ui.label(
+                                        RichText::new(
+                                            meta.focal_length.map_or("N/A".to_string(), |f| {
+                                                format!("{:.1} mm", f)
+                                            }),
+                                        )
+                                        .strong(),
+                                    );
+                                    ui.end_row();
+
+                                    ui.label(RichText::new("Captured").color(TEXT_SECONDARY));
+                                    ui.label(
+                                        RichText::new(
+                                            meta.capture_time.as_deref().unwrap_or("N/A"),
+                                        )
+                                        .strong(),
+                                    );
+                                    ui.end_row();
+                                });
+                        } else {
+                            ui.label(
+                                RichText::new("No hay especificaciones disponibles.")
+                                    .size(10.0)
+                                    .color(TEXT_MUTED)
+                                    .italics(),
+                            );
+                        }
+
+                        ui.add_space(10.0);
+                        ui.separator();
+                        ui.add_space(10.0);
+
+                        // 4. SET STATUS DECISION
+                        ui.heading("Set Status Decision");
+                        ui.add_space(4.0);
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new("Current State:").size(11.0).color(TEXT_SECONDARY));
+                            let category = DecisionCategory::from_decision(&detail.decision);
+                            ui.label(
+                                RichText::new(detail.decision.to_uppercase())
+                                    .size(11.0)
+                                    .strong()
+                                    .color(category.color()),
+                            );
+                        });
+                        ui.add_space(8.0);
+
+                        egui::Grid::new("decision-grid-inspector")
+                            .num_columns(2)
+                            .spacing([8.0, 8.0])
+                            .show(ui, |ui| {
+                                if ui
+                                    .add_sized(
+                                        [120.0, 32.0],
+                                        egui::Button::new(
+                                            RichText::new("[1] Mark as Best")
+                                                .strong()
+                                                .color(ACCENT_TEAL),
+                                        ),
+                                    )
+                                    .clicked()
+                                {
+                                    self.set_decision("best");
+                                }
+                                if ui
+                                    .add_sized(
+                                        [120.0, 32.0],
+                                        egui::Button::new(
+                                            RichText::new("[2] Mark as Keep")
+                                                .strong()
+                                                .color(ACCENT_TEAL),
+                                        ),
+                                    )
+                                    .clicked()
+                                {
+                                    self.set_decision("keep");
+                                }
+                                ui.end_row();
+                                if ui
+                                    .add_sized(
+                                        [120.0, 32.0],
+                                        egui::Button::new(
+                                            RichText::new("[4] Mark for Review")
+                                                .strong()
+                                                .color(ACCENT_YELLOW),
+                                        ),
+                                    )
+                                    .clicked()
+                                {
+                                    self.set_decision("review");
+                                }
+                                if ui
+                                    .add_sized(
+                                        [120.0, 32.0],
+                                        egui::Button::new(
+                                            RichText::new("[X] Reject Photo")
+                                                .strong()
+                                                .color(ACCENT_RED),
+                                        ),
+                                    )
+                                    .clicked()
+                                {
+                                    self.set_decision("reject");
+                                }
+                                ui.end_row();
+                            });
+
+                        ui.add_space(10.0);
+                        ui.separator();
+                        ui.add_space(10.0);
+                    } else {
+                        // Show warning that no photo is selected
+                        ui.label(
+                            RichText::new("Selecciona una foto para ver sus detalles.")
+                                .size(12.0)
+                                .color(TEXT_SECONDARY)
+                                .italics(),
+                        );
+                        ui.add_space(10.0);
+                    }
+
+                    // --- General Collapsible Tools ---
+                    ui.collapsing(
+                        RichText::new("Herramientas de Análisis")
+                            .size(12.0)
+                            .strong(),
+                        |ui| {
+                            ui.add_space(4.0);
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new("Perfil").color(TEXT_SECONDARY));
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut self.analysis_profile)
+                                        .desired_width(120.0),
+                                );
+                            });
+                            ui.add_space(4.0);
+
+                            if ui
+                                .add_sized(
+                                    [ui.available_width(), 32.0],
+                                    egui::Button::new(
+                                        RichText::new("Analizar pendientes").strong(),
+                                    ),
+                                )
+                                .clicked()
+                            {
+                                self.start_analysis();
+                            }
+                            ui.add_space(6.0);
+
+                            ui.columns(3, |cols| {
+                                if cols[0].button("Pausar").clicked() {
+                                    self.control_analysis("pause");
+                                }
+                                if cols[1].button("Reanudar").clicked() {
+                                    self.control_analysis("resume");
+                                }
+                                if cols[2].button("Cancelar").clicked() {
+                                    self.control_analysis("cancel");
+                                }
+                            });
+
+                            if let Some(progress) = &self.analysis {
+                                ui.add_space(6.0);
+                                ui.label(
+                                    RichText::new(format!(
+                                        "{} — {}",
+                                        progress.profile_name, progress.status
+                                    ))
+                                    .strong()
+                                    .color(ACCENT_ORANGE),
+                                );
+                                ui.add(
+                                    egui::ProgressBar::new(f32::from(progress.progress) / 100.0)
+                                        .fill(ACCENT_TEAL),
+                                );
+                                ui.label(
+                                    RichText::new(format!(
+                                        "{}/{} fotos",
+                                        progress.processed, progress.total
+                                    ))
+                                    .size(11.0)
+                                    .color(TEXT_SECONDARY),
+                                );
+                                ui.label(
+                                    RichText::new(&progress.message)
+                                        .size(10.0)
+                                        .color(TEXT_MUTED),
+                                );
+                            }
+                        },
                     );
-                });
-                ui.add_space(4.0);
 
-                if ui
-                    .add_sized(
-                        [ui.available_width(), 32.0],
-                        egui::Button::new(RichText::new("Analizar pendientes").strong()),
-                    )
-                    .clicked()
-                {
-                    self.start_analysis();
-                }
-                ui.add_space(6.0);
-
-                ui.columns(3, |cols| {
-                    if cols[0].button("Pausar").clicked() {
-                        self.control_analysis("pause");
-                    }
-                    if cols[1].button("Reanudar").clicked() {
-                        self.control_analysis("resume");
-                    }
-                    if cols[2].button("Cancelar").clicked() {
-                        self.control_analysis("cancel");
-                    }
-                });
-
-                if let Some(progress) = &self.analysis {
-                    ui.add_space(10.0);
-                    ui.separator();
                     ui.add_space(6.0);
-                    ui.label(
-                        RichText::new(format!("{} — {}", progress.profile_name, progress.status))
-                            .strong()
-                            .color(ACCENT_ORANGE),
+
+                    ui.collapsing(
+                        RichText::new("Importar desde Carpeta")
+                            .size(12.0)
+                            .strong(),
+                        |ui| {
+                            ui.add_space(4.0);
+                            ui.checkbox(&mut self.create_new_gallery, "Crear galería nueva");
+                            if self.create_new_gallery {
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut self.new_gallery_name)
+                                        .hint_text("Nombre de la galería"),
+                                );
+                                ui.add_space(4.0);
+                            }
+                            ui.add(
+                                egui::TextEdit::singleline(&mut self.import_path)
+                                    .hint_text("Carpeta local de fotos"),
+                            );
+                            ui.checkbox(&mut self.import_recursive, "Incluir subdirectorios");
+                            ui.add_space(6.0);
+                            if ui
+                                .add_sized(
+                                    [ui.available_width(), 32.0],
+                                    egui::Button::new(
+                                        RichText::new("Importar carpeta").strong(),
+                                    )
+                                    .fill(ACCENT_ORANGE),
+                                )
+                                .clicked()
+                            {
+                                self.import_gallery();
+                            }
+                        },
                     );
-                    ui.add(
-                        egui::ProgressBar::new(f32::from(progress.progress) / 100.0)
-                            .fill(ACCENT_TEAL),
-                    );
-                    ui.label(
-                        RichText::new(format!("{}/{} fotos", progress.processed, progress.total))
-                            .size(11.0)
-                            .color(TEXT_SECONDARY),
-                    );
-                    ui.label(
-                        RichText::new(&progress.message)
-                            .size(10.0)
-                            .color(TEXT_MUTED),
-                    );
-                }
-
-                ui.add_space(10.0);
-                ui.separator();
-                ui.add_space(10.0);
-
-                // --- Decision Grid ---
-                ui.heading("Decisión");
-                ui.label(
-                    RichText::new("Clasifica la foto seleccionada")
-                        .size(12.0)
-                        .color(TEXT_SECONDARY),
-                );
-                ui.add_space(8.0);
-
-                egui::Grid::new("decision-grid")
-                    .num_columns(2)
-                    .spacing([8.0, 8.0])
-                    .show(ui, |ui| {
-                        // Best Button (Teal Border/Text)
-                        if ui
-                            .add_sized(
-                                [120.0, 32.0],
-                                egui::Button::new(
-                                    RichText::new("★ Best").strong().color(ACCENT_TEAL),
-                                ),
-                            )
-                            .clicked()
-                        {
-                            self.set_decision("best");
-                        }
-                        // Keep Button (Teal Border/Text)
-                        if ui
-                            .add_sized(
-                                [120.0, 32.0],
-                                egui::Button::new(
-                                    RichText::new("✔ Keep").strong().color(ACCENT_TEAL),
-                                ),
-                            )
-                            .clicked()
-                        {
-                            self.set_decision("keep");
-                        }
-                        ui.end_row();
-
-                        // Review Button (Yellow Border/Text)
-                        if ui
-                            .add_sized(
-                                [120.0, 32.0],
-                                egui::Button::new(
-                                    RichText::new("👁 Review").strong().color(ACCENT_YELLOW),
-                                ),
-                            )
-                            .clicked()
-                        {
-                            self.set_decision("review");
-                        }
-                        // Reject Button (Red Border/Text)
-                        if ui
-                            .add_sized(
-                                [120.0, 32.0],
-                                egui::Button::new(
-                                    RichText::new("✖ Reject").strong().color(ACCENT_RED),
-                                ),
-                            )
-                            .clicked()
-                        {
-                            self.set_decision("reject");
-                        }
-                        ui.end_row();
-                    });
-
-                ui.add_space(10.0);
-                ui.separator();
-                ui.add_space(10.0);
-
-                // --- Non-destructive recipe editor ---
-                ui.heading("Edición no destructiva");
-                ui.label(
-                    RichText::new("Conserva el archivo original intacto.")
-                        .size(12.0)
-                        .color(TEXT_SECONDARY),
-                );
-                ui.add_space(8.0);
-
-                ui.add(egui::Slider::new(&mut self.exposure, -5.0..=5.0).text("Exposición"));
-                ui.add_space(6.0);
-
-                if ui
-                    .add_sized(
-                        [ui.available_width(), 32.0],
-                        egui::Button::new(RichText::new("Guardar receta").strong())
-                            .fill(ACCENT_ORANGE),
-                    )
-                    .clicked()
-                {
-                    self.update_edit();
-                }
-                ui.add_space(6.0);
-
-                ui.columns(2, |cols| {
-                    if cols[0].button("Deshacer").clicked() {
-                        self.edit_history("undo");
-                    }
-                    if cols[1].button("Rehacer").clicked() {
-                        self.edit_history("redo");
-                    }
                 });
-
-                ui.add_space(10.0);
-                ui.separator();
-                ui.add_space(10.0);
-
-                // --- Import Block ---
-                ui.label(
-                    RichText::new("IMPORTAR DESDE CARPETA")
-                        .size(9.0)
-                        .strong()
-                        .color(TEXT_MUTED),
-                );
-                ui.add_space(6.0);
-                ui.checkbox(&mut self.create_new_gallery, "Crear galería nueva");
-                if self.create_new_gallery {
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.new_gallery_name)
-                            .hint_text("Nombre de la galería"),
-                    );
-                    ui.add_space(4.0);
-                }
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.import_path)
-                        .hint_text("Carpeta local de fotos"),
-                );
-                ui.checkbox(&mut self.import_recursive, "Incluir subdirectorios");
-                ui.add_space(6.0);
-                if ui
-                    .add_sized(
-                        [ui.available_width(), 32.0],
-                        egui::Button::new(RichText::new("Importar carpeta").strong())
-                            .fill(ACCENT_ORANGE),
-                    )
-                    .clicked()
-                {
-                    self.import_gallery();
-                }
             });
 
         // ----------------- CENTRAL PANEL (MAIN ACTIVE VIEW) -----------------
@@ -1259,7 +1660,7 @@ impl eframe::App for NativeApp {
                                                 );
                                                 ui.add_space(4.0);
                                                 ui.label(
-                                                    RichText::new(self.photos.len().to_string())
+                                                    RichText::new(self.total_photos.to_string())
                                                         .size(28.0)
                                                         .strong()
                                                         .color(Color32::WHITE),
@@ -1268,10 +1669,13 @@ impl eframe::App for NativeApp {
                                                 ui.separator();
                                                 ui.add_space(4.0);
                                                 ui.label(
-                                                    RichText::new("CATALOGADAS")
-                                                        .size(9.0)
-                                                        .color(ACCENT_ORANGE)
-                                                        .strong(),
+                                                    RichText::new(format!(
+                                                        "{} ARCHIVOS",
+                                                        self.total_files
+                                                    ))
+                                                    .size(9.0)
+                                                    .color(ACCENT_ORANGE)
+                                                    .strong(),
                                                 );
                                             });
                                         });
@@ -1279,30 +1683,30 @@ impl eframe::App for NativeApp {
 
                                     ui.add_space(12.0);
 
-                                    // Card 2: Sessions Count
+                                    // Card 2: Selections (Best + Keep)
                                     let frame_2 =
                                         card_frame(BG_CARD, 12, egui::Margin::symmetric(18, 14));
                                     frame_2.show(ui, |ui| {
                                         ui.allocate_ui(egui::vec2(160.0, 100.0), |ui| {
                                             ui.vertical(|ui| {
                                                 ui.label(
-                                                    RichText::new("SESIONES")
+                                                    RichText::new("SELECCIONES")
                                                         .size(9.0)
                                                         .strong()
                                                         .color(TEXT_SECONDARY),
                                                 );
                                                 ui.add_space(4.0);
                                                 ui.label(
-                                                    RichText::new(self.sessions_count.to_string())
+                                                    RichText::new(self.selected_count.to_string())
                                                         .size(28.0)
                                                         .strong()
-                                                        .color(Color32::WHITE),
+                                                        .color(ACCENT_TEAL),
                                                 );
                                                 ui.add_space(8.0);
                                                 ui.separator();
                                                 ui.add_space(4.0);
                                                 ui.label(
-                                                    RichText::new("FISICAS")
+                                                    RichText::new("BEST + KEEP")
                                                         .size(9.0)
                                                         .color(ACCENT_TEAL)
                                                         .strong(),
@@ -1313,32 +1717,67 @@ impl eframe::App for NativeApp {
 
                                     ui.add_space(12.0);
 
-                                    // Card 3: Similar Groups
+                                    // Card 3: Pending (Review + Unprocessed)
                                     let frame_3 =
                                         card_frame(BG_CARD, 12, egui::Margin::symmetric(18, 14));
                                     frame_3.show(ui, |ui| {
                                         ui.allocate_ui(egui::vec2(160.0, 100.0), |ui| {
                                             ui.vertical(|ui| {
                                                 ui.label(
-                                                    RichText::new("GRUPOS SIMILARES")
+                                                    RichText::new("PENDIENTES")
                                                         .size(9.0)
                                                         .strong()
                                                         .color(TEXT_SECONDARY),
                                                 );
                                                 ui.add_space(4.0);
                                                 ui.label(
-                                                    RichText::new(self.groups_count.to_string())
+                                                    RichText::new(self.pending_count.to_string())
                                                         .size(28.0)
                                                         .strong()
-                                                        .color(Color32::WHITE),
+                                                        .color(ACCENT_YELLOW),
                                                 );
                                                 ui.add_space(8.0);
                                                 ui.separator();
                                                 ui.add_space(4.0);
                                                 ui.label(
-                                                    RichText::new("CLUSTERS")
+                                                    RichText::new("REVIEW + UNPROCESSED")
                                                         .size(9.0)
                                                         .color(ACCENT_YELLOW)
+                                                        .strong(),
+                                                );
+                                            });
+                                        });
+                                    });
+
+                                    ui.add_space(12.0);
+
+                                    // Card 4: Rejected Count
+                                    let frame_4 =
+                                        card_frame(BG_CARD, 12, egui::Margin::symmetric(18, 14));
+                                    frame_4.show(ui, |ui| {
+                                        ui.allocate_ui(egui::vec2(160.0, 100.0), |ui| {
+                                            ui.vertical(|ui| {
+                                                ui.label(
+                                                    RichText::new("RECHAZADAS")
+                                                        .size(9.0)
+                                                        .strong()
+                                                        .color(TEXT_SECONDARY),
+                                                );
+                                                ui.add_space(4.0);
+                                                let rejected_count = self.total_photos.saturating_sub(self.selected_count + self.pending_count);
+                                                ui.label(
+                                                    RichText::new(rejected_count.to_string())
+                                                        .size(28.0)
+                                                        .strong()
+                                                        .color(ACCENT_RED),
+                                                );
+                                                ui.add_space(8.0);
+                                                ui.separator();
+                                                ui.add_space(4.0);
+                                                ui.label(
+                                                    RichText::new("REJECT")
+                                                        .size(9.0)
+                                                        .color(ACCENT_RED)
                                                         .strong(),
                                                 );
                                             });
@@ -1478,7 +1917,7 @@ impl eframe::App for NativeApp {
                             } else {
                                 // Apply filters by reference; the catalog remains owned by self.
                                 let search_query = self.search_query.to_lowercase();
-                                let filtered_photos: Vec<&Photo> = self
+                                let filtered_photos: Vec<Photo> = self
                                     .photos
                                     .iter()
                                     .filter(|photo| {
@@ -1516,138 +1955,163 @@ impl eframe::App for NativeApp {
 
                                         true
                                     })
+                                    .cloned()
                                     .collect();
 
-                                let mut photo_to_select = None;
-                                ui.columns(2, |columns| {
-                                    // Left Column: Scrollable Photo Cards
-                                    egui::ScrollArea::vertical().show(&mut columns[0], |ui| {
-                                        for photo in filtered_photos {
-                                            let selected = self.selected_photo.as_deref()
-                                                == Some(photo.id.as_str());
+                                ui.vertical(|ui| {
+                                    let filmstrip_height = 110.0;
+                                    let available_height = ui.available_height();
+                                    let preview_height = available_height - filmstrip_height - 15.0;
 
-                                            // Styling cards based on selection and decision state
-                                            let card_bg =
-                                                if selected { BG_CARD_HOVER } else { BG_CARD };
-                                            let card_stroke = if selected {
-                                                egui::Stroke::new(1.5_f32, ACCENT_ORANGE)
-                                            } else {
-                                                egui::Stroke::new(1.0_f32, BORDER_COLOR)
-                                            };
-
-                                            let frame = card_frame(
-                                                card_bg,
-                                                8,
-                                                egui::Margin::symmetric(12, 10),
-                                            )
-                                            .stroke(card_stroke);
-
-                                            let frame_response = frame.show(ui, |ui| {
-                                                ui.horizontal(|ui| {
-                                                    // Left part: Decision colored dot and filename
-                                                    let dot_color =
-                                                        DecisionCategory::from_decision(
-                                                            &photo.decision,
-                                                        )
-                                                        .color();
-
-                                                    // Draw small dot
-                                                    let (dot_rect, _) = ui.allocate_exact_size(
-                                                        egui::vec2(8.0, 8.0),
-                                                        egui::Sense::hover(),
-                                                    );
-                                                    ui.painter().circle_filled(
-                                                        dot_rect.center(),
-                                                        4.0,
-                                                        dot_color,
-                                                    );
-                                                    ui.add_space(4.0);
-
-                                                    ui.vertical(|ui| {
+                                    // 1. Large Centered Preview taking remaining space above the horizontal filmstrip
+                                    if preview_height > 50.0 {
+                                        ui.allocate_ui_with_layout(
+                                            egui::vec2(ui.available_width(), preview_height),
+                                            egui::Layout::centered_and_justified(egui::Direction::TopDown),
+                                            |ui| {
+                                                if let Some(texture) = &self.selected_texture {
+                                                    let available = ui.available_size();
+                                                    let original = texture.size_vec2();
+                                                    // Allow upscale/downscale to fill available window area
+                                                    let scale = (available.x / original.x)
+                                                        .min(available.y / original.y);
+                                                    ui.image((texture.id(), original * scale));
+                                                } else {
+                                                    ui.vertical_centered(|ui| {
+                                                        ui.add_space(preview_height * 0.4);
                                                         ui.label(
-                                                            RichText::new(&photo.name)
-                                                                .size(13.0)
-                                                                .strong()
-                                                                .color(TEXT_PRIMARY),
-                                                        );
-                                                        ui.horizontal(|ui| {
-                                                            ui.label(
-                                                                RichText::new(
-                                                                    photo
-                                                                        .quality_tier
-                                                                        .to_uppercase(),
-                                                                )
-                                                                .size(9.0)
-                                                                .color(TEXT_SECONDARY),
-                                                            );
-                                                            ui.label(
-                                                                RichText::new("·")
-                                                                    .size(9.0)
-                                                                    .color(TEXT_MUTED),
-                                                            );
-                                                            let score_str = photo
-                                                                .score
-                                                                .map_or("—".to_string(), |s| {
-                                                                    format!("{:.2}", s)
-                                                                });
-                                                            ui.label(
-                                                                RichText::new(format!(
-                                                                    "SCORE: {}",
-                                                                    score_str
-                                                                ))
-                                                                .size(9.0)
-                                                                .color(ACCENT_TEAL)
+                                                            RichText::new("Selecciona una foto")
+                                                                .size(18.0)
                                                                 .strong(),
-                                                            );
+                                                        );
+                                                        ui.add_space(4.0);
+                                                        ui.label(
+                                                            RichText::new(
+                                                                "Su previsualización aparecerá aquí.",
+                                                            )
+                                                            .color(TEXT_SECONDARY),
+                                                        );
+                                                    });
+                                                }
+                                            }
+                                        );
+                                    }
+
+                                    ui.add_space(10.0);
+
+                                    // 2. Horizontal photo strip (filmstrip) at the bottom
+                                    ui.label(
+                                        RichText::new("TIRA DE FOTOS")
+                                            .size(9.0)
+                                            .strong()
+                                            .color(TEXT_MUTED),
+                                    );
+                                    ui.add_space(4.0);
+
+                                    egui::ScrollArea::horizontal()
+                                        .max_height(filmstrip_height)
+                                        .show(ui, |ui| {
+                                            ui.horizontal(|ui| {
+                                                let mut photo_to_select = None;
+                                                for photo in filtered_photos {
+                                                    let selected = self.selected_photo.as_deref()
+                                                        == Some(photo.id.as_str());
+
+                                                    let card_bg =
+                                                        if selected { BG_CARD_HOVER } else { BG_CARD };
+                                                    let card_stroke = if selected {
+                                                        egui::Stroke::new(1.5_f32, ACCENT_ORANGE)
+                                                    } else {
+                                                        egui::Stroke::new(1.0_f32, BORDER_COLOR)
+                                                    };
+
+                                                    let frame = card_frame(
+                                                        card_bg,
+                                                        8,
+                                                        egui::Margin::symmetric(12, 10),
+                                                    )
+                                                    .stroke(card_stroke);
+
+                                                    let frame_response = frame.show(ui, |ui| {
+                                                        ui.vertical(|ui| {
+                                                            ui.horizontal(|ui| {
+                                                                let dot_color =
+                                                                    DecisionCategory::from_decision(
+                                                                        &photo.decision,
+                                                                    )
+                                                                    .color();
+
+                                                                let (dot_rect, _) = ui.allocate_exact_size(
+                                                                    egui::vec2(8.0, 8.0),
+                                                                    egui::Sense::hover(),
+                                                                );
+                                                                ui.painter().circle_filled(
+                                                                    dot_rect.center(),
+                                                                    4.0,
+                                                                    dot_color,
+                                                                );
+                                                                ui.add_space(4.0);
+
+                                                                ui.label(
+                                                                    RichText::new(&photo.name)
+                                                                        .size(12.0)
+                                                                        .strong()
+                                                                        .color(TEXT_PRIMARY),
+                                                                );
+                                                            });
+                                                            ui.add_space(4.0);
+                                                            ui.horizontal(|ui| {
+                                                                ui.label(
+                                                                    RichText::new(
+                                                                        photo
+                                                                            .quality_tier
+                                                                            .to_uppercase(),
+                                                                    )
+                                                                    .size(9.0)
+                                                                    .color(TEXT_SECONDARY),
+                                                                );
+                                                                ui.label(
+                                                                    RichText::new("·")
+                                                                        .size(9.0)
+                                                                        .color(TEXT_MUTED),
+                                                                );
+                                                                let score_str = photo
+                                                                    .score
+                                                                    .map_or("—".to_string(), |s| {
+                                                                        format!("{:.1}", s)
+                                                                    });
+                                                                ui.label(
+                                                                    RichText::new(format!(
+                                                                        "SCORE: {}",
+                                                                        score_str
+                                                                    ))
+                                                                    .size(9.0)
+                                                                    .color(ACCENT_TEAL)
+                                                                    .strong(),
+                                                                );
+                                                            });
                                                         });
                                                     });
-                                                });
+
+                                                    if frame_response
+                                                        .response
+                                                        .interact(egui::Sense::click())
+                                                        .clicked()
+                                                    {
+                                                        photo_to_select = Some((
+                                                            photo.id.clone(),
+                                                            photo.thumbnail_url.clone(),
+                                                        ));
+                                                    }
+                                                    ui.add_space(6.0);
+                                                }
+
+                                                if let Some((photo_id, thumbnail_url)) = photo_to_select {
+                                                    self.select_photo(ctx, photo_id, thumbnail_url);
+                                                }
                                             });
-
-                                            // Reuse the frame response's input region for card clicks.
-                                            if frame_response
-                                                .response
-                                                .interact(egui::Sense::click())
-                                                .clicked()
-                                            {
-                                                photo_to_select = Some((
-                                                    photo.id.clone(),
-                                                    photo.thumbnail_url.clone(),
-                                                ));
-                                            }
-                                            ui.add_space(6.0);
-                                        }
-                                    });
-
-                                    // Right Column: Full-size/Inspect View of Selected Photo
-                                    if let Some(texture) = &self.selected_texture {
-                                        let available = columns[1].available_size();
-                                        let original = texture.size_vec2();
-                                        let scale = (available.x / original.x)
-                                            .min(available.y / original.y)
-                                            .min(1.0);
-                                        columns[1].image((texture.id(), original * scale));
-                                    } else {
-                                        columns[1].vertical_centered(|ui| {
-                                            ui.add_space(100.0);
-                                            ui.label(
-                                                RichText::new("Selecciona una foto")
-                                                    .size(18.0)
-                                                    .strong(),
-                                            );
-                                            ui.add_space(4.0);
-                                            ui.label(
-                                                RichText::new(
-                                                    "Su previsualización aparecerá aquí.",
-                                                )
-                                                .color(TEXT_SECONDARY),
-                                            );
                                         });
-                                    }
                                 });
-                                if let Some((photo_id, thumbnail_url)) = photo_to_select {
-                                    self.select_photo(ctx, photo_id, thumbnail_url);
-                                }
                             }
                         }
                     }

@@ -1,6 +1,8 @@
 """Tests for persistent non-destructive recipes and real preview rendering."""
 
 import io
+import sys
+from types import SimpleNamespace
 
 import numpy as np
 from fastapi.testclient import TestClient
@@ -101,3 +103,35 @@ def test_edit_api_returns_real_preview_and_validates_history(tmp_path):
         assert unknown.status_code == 404
         no_history = client.post("/api/v1/photos/unknown/edit/undo")
         assert no_history.status_code == 404
+
+
+def test_edit_preview_decodes_raw_sources_with_rawpy(tmp_path, monkeypatch):
+    class FakeRaw:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def postprocess(self, **kwargs):
+            assert kwargs == {"use_camera_wb": True, "output_bps": 8, "half_size": True}
+            return np.full((16, 24, 3), (90, 120, 150), dtype=np.uint8)
+
+    source = tmp_path / "source.nef"
+    source.write_bytes(b"camera raw data")
+    database = Database(tmp_path / "catalog.db")
+    photo_id = "raw-editable"
+    with database.session() as session:
+        PhotoRepository(session).save_photo(
+            Photo(
+                photo_id=photo_id,
+                stem_name="raw-editable",
+                files=[FileRecord(source, FileRole.RAW, source.stat().st_size, source.stat().st_mtime)],
+            )
+        )
+    monkeypatch.setitem(sys.modules, "rawpy", SimpleNamespace(imread=lambda path: FakeRaw()))
+
+    preview = EditService(database).render_preview(photo_id, max_size=128)
+
+    with Image.open(io.BytesIO(preview)) as image:
+        assert image.size == (24, 16)

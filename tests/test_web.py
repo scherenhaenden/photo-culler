@@ -159,6 +159,24 @@ def test_full_preview_sets_the_heic_content_type(web_client, tmp_path):
     assert preview.headers["content-type"] == "image/heic"
 
 
+def test_photo_inspector_shows_the_display_filename(web_client, tmp_path):
+    source = tmp_path / "DSC_0068.NEF"
+    source.write_bytes(b"raw source")
+    with web_client.app.state.db_engine.session() as session:
+        PhotoRepository(session).save_photo(
+            Photo(
+                "filename-frame",
+                "DSC_0068",
+                files=[FileRecord(source, FileRole.RAW, source.stat().st_size, source.stat().st_mtime)],
+            )
+        )
+
+    inspector = web_client.get("/photos/filename-frame")
+
+    assert inspector.status_code == 200
+    assert "DSC_0068.NEF" in inspector.text
+
+
 def test_gallery_import_api_and_empty_state(web_client, tmp_path):
     source = tmp_path / "photos"
     source.mkdir()
@@ -850,3 +868,35 @@ def test_system_usage_serializes_shared_cpu_sampling(monkeypatch):
         list(executor.map(lambda _index: get_system_usage(request), range(4)))
 
     assert peak_active == 1
+
+
+def test_photo_inspector_renders_filmstrip_and_toggles(web_client, tmp_path):
+    """The photo inspector must render the filmstrip container and all adjacent photos, and preserve it during decision updates."""
+    # Create 3 dummy photos
+    photos = [
+        Photo("photo-a", "DSC_0001", files=[]),
+        Photo("photo-b", "DSC_0002", files=[]),
+        Photo("photo-c", "DSC_0003", files=[]),
+    ]
+
+    with web_client.app.state.db_engine.session() as session:
+        repo = PhotoRepository(session)
+        for p in photos:
+            repo.save_photo(p)
+
+    # 1. GET inspect view for DSC_0002 (photo-b)
+    response = web_client.get("/photos/photo-b")
+    assert response.status_code == 200
+    assert "filmstrip-container" in response.text
+    assert "filmstrip-item-photo-a" in response.text
+    assert "filmstrip-item-photo-b" in response.text
+    assert "filmstrip-item-photo-c" in response.text
+    assert "filmstrip-checkbox" in response.text
+
+    # 2. Update decision via POST, should preserve the filmstrip and surrounding photos
+    post_response = web_client.post("/photos/photo-b/decision", data={"decision": "best"})
+    assert post_response.status_code == 200
+    assert "filmstrip-container" in post_response.text
+    assert "filmstrip-item-photo-a" in post_response.text
+    assert "filmstrip-item-photo-b" in post_response.text
+    assert "filmstrip-item-photo-c" in post_response.text
