@@ -105,6 +105,10 @@
               <input type="checkbox" id="status-bar-checkbox" onchange="toggleStatusBar(this.checked)">
               <span>Mostrar Barra de Estado</span>
             </label>
+            <label class="menu-dropdown-item" onclick="event.stopPropagation();">
+              <input type="checkbox" id="filmstrip-checkbox" onchange="toggleFilmstrip(this.checked)">
+              <span>Mostrar Tira de Fotos</span>
+            </label>
           </div>
         </div>
       </div>
@@ -185,6 +189,22 @@
       }
     }
 
+    // Toggle Filmstrip visibility
+    function toggleFilmstrip(visible) {
+      const filmstrip = document.getElementById('filmstrip-container');
+      const checkbox = document.getElementById('filmstrip-checkbox');
+
+      if (visible) {
+        if (filmstrip) filmstrip.classList.remove('hidden');
+        if (checkbox) checkbox.checked = true;
+        localStorage.setItem('showFilmstrip', 'true');
+      } else {
+        if (filmstrip) filmstrip.classList.add('hidden');
+        if (checkbox) checkbox.checked = false;
+        localStorage.setItem('showFilmstrip', 'false');
+      }
+    }
+
     // Initialize Status Bar visibility from LocalStorage
     document.addEventListener('DOMContentLoaded', function() {
       const showStatusBar = localStorage.getItem('showStatusBar');
@@ -192,6 +212,13 @@
         toggleStatusBar(true);
       } else {
         toggleStatusBar(false);
+      }
+
+      const showFilmstrip = localStorage.getItem('showFilmstrip');
+      if (showFilmstrip !== 'false') {
+        toggleFilmstrip(true);
+      } else {
+        toggleFilmstrip(false);
       }
 
       // Start periodic poller for system resources
