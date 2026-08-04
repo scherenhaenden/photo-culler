@@ -28,9 +28,28 @@
   </div>
 
   <div class="detail-view">
-    <!-- Center Premium Cinema View of Image -->
-    <div class="main-image-container">
-      <img id="edit-preview-image" src="/api/v1/photos/{{ photo.photo_id }}/edit-preview?max_size=1600" data-original-src="/thumbnails/{{ photo.photo_id }}/1600" alt="{{ display_name }}">
+    <div style="display: flex; flex-direction: column; gap: 1rem; height: 100%; min-width: 0;">
+      <!-- Center Premium Cinema View of Image -->
+      <div class="main-image-container" style="flex: 1; min-height: 0;">
+        <img id="edit-preview-image" src="/api/v1/photos/{{ photo.photo_id }}/edit-preview?max_size=1600" data-original-src="/thumbnails/{{ photo.photo_id }}/1600" alt="{{ display_name }}">
+      </div>
+
+      <!-- Filmstrip below -->
+      {% if filmstrip_photos %}
+      <div id="filmstrip-container" class="filmstrip-container">
+        {% for p in filmstrip_photos %}
+          {% set p_active = (p.photo_id == photo.photo_id) %}
+          <a href="/photos/{{ p.photo_id }}{% if active_group_id %}?group={{ active_group_id }}{% endif %}"
+             class="filmstrip-item{% if p_active %} active{% endif %}"
+             id="filmstrip-item-{{ p.photo_id }}"
+             title="{{ p.stem_name }}">
+            <img src="/thumbnails/{{ p.photo_id }}/256" alt="{{ p.stem_name }}" loading="lazy">
+            {% set p_d_val = p.decision.value if p.decision.value is defined else p.decision %}
+            <span class="filmstrip-badge badge-{{ p_d_val|lower }}">{{ p_d_val }}</span>
+          </a>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
 
     <!-- Inspector Sidebar Panel -->
@@ -154,19 +173,19 @@
         {% endif %}
 
         <div class="decision-actions-list">
-          <form hx-post="/photos/{{ photo.photo_id }}/decision" hx-target="body" hx-swap="innerHTML">
+          <form hx-post="/photos/{{ photo.photo_id }}/decision{% if active_group_id %}?group={{ active_group_id }}{% endif %}" hx-target="body" hx-swap="innerHTML">
             <input type="hidden" name="decision" value="best">
             <button type="submit" data-decision="best" class="decision-action-btn" style="background-color: var(--accent-teal);">[1] Mark as Best</button>
           </form>
-          <form hx-post="/photos/{{ photo.photo_id }}/decision" hx-target="body" hx-swap="innerHTML">
+          <form hx-post="/photos/{{ photo.photo_id }}/decision{% if active_group_id %}?group={{ active_group_id }}{% endif %}" hx-target="body" hx-swap="innerHTML">
             <input type="hidden" name="decision" value="keep">
             <button type="submit" data-decision="keep" class="decision-action-btn" style="background-color: var(--accent-blue);">[2] Mark as Keep</button>
           </form>
-          <form hx-post="/photos/{{ photo.photo_id }}/decision" hx-target="body" hx-swap="innerHTML">
+          <form hx-post="/photos/{{ photo.photo_id }}/decision{% if active_group_id %}?group={{ active_group_id }}{% endif %}" hx-target="body" hx-swap="innerHTML">
             <input type="hidden" name="decision" value="review">
             <button type="submit" data-decision="review" class="decision-action-btn" style="background-color: var(--accent-yellow); color: #000000;">[4] Mark for Review</button>
           </form>
-          <form hx-post="/photos/{{ photo.photo_id }}/decision" hx-target="body" hx-swap="innerHTML">
+          <form hx-post="/photos/{{ photo.photo_id }}/decision{% if active_group_id %}?group={{ active_group_id }}{% endif %}" hx-target="body" hx-swap="innerHTML">
             <input type="hidden" name="decision" value="reject">
             <button type="submit" data-decision="reject" class="decision-action-btn" style="background-color: var(--accent-orange);">[X] Reject Photo</button>
           </form>
@@ -283,6 +302,25 @@
   });
 
   fetch(`/api/v1/photos/${photoId}/edit`).then((response) => response.json()).then(syncControls);
+
+  // Auto-scroll active filmstrip item into center on page load
+  const activeItem = document.getElementById(`filmstrip-item-${photoId}`);
+  if (activeItem) {
+    activeItem.scrollIntoView({ behavior: "instant", block: "nearest", inline: "center" });
+  }
+
+  // Restore filmstrip visibility from localStorage
+  const showFilmstrip = localStorage.getItem("showFilmstrip");
+  const filmstripContainer = document.getElementById("filmstrip-container");
+  if (showFilmstrip === "false") {
+    if (filmstripContainer) {
+      filmstripContainer.classList.add("hidden");
+    }
+  } else {
+    if (filmstripContainer) {
+      filmstripContainer.classList.remove("hidden");
+    }
+  }
 })();
 </script>
 {% endblock %}

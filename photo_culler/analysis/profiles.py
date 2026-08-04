@@ -195,7 +195,7 @@ class AnalysisProfileStore:
                     raise ValueError("Cada perfil debe ser un objeto JSON.")
                 profile = self._validate(item)
                 profiles[profile["id"]] = profile
-        except OSError, ValueError, TypeError, json.JSONDecodeError:
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
             # A damaged preferences file must not prevent the application starting.
             return profiles
         return profiles
