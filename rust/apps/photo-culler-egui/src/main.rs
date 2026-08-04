@@ -1,3 +1,4 @@
+// allow-large-file
 //! Native egui/wgpu delivery adapter for the local Photo Culler application API.
 //!
 //! The UI intentionally does not read SQLite or implement selection/analysis
