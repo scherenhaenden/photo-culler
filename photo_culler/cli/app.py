@@ -20,6 +20,7 @@ from .commands.sessions_cmd import sessions_command
 from .commands.verify_cmd import verify_command
 from .commands.volumes_cmd import volumes_command
 from .commands.web_cmd import web_app
+from .commands.nas_cmd import nas_app
 from .context import CliContext
 
 app = typer.Typer(
@@ -45,6 +46,7 @@ app.command("report")(report_command)
 app.command("config")(config_command)
 app.add_typer(web_app, name="web")
 app.add_typer(desktop_app, name="desktop")
+app.add_typer(nas_app, name="nas")
 
 
 @app.callback()

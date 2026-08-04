@@ -10,12 +10,14 @@ from starlette.datastructures import MutableHeaders
 from starlette.requests import Request
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+import os
 from photo_culler.analysis.profiles import AnalysisProfileStore
 from photo_culler.catalog.database import Database
 from photo_culler.editing import EditService
 from photo_culler.importing import GalleryImportService
+from photo_culler.nas import NASManager
 from photo_culler.web.i18n import SUPPORTED_LOCALES, language_selector, localize_html, resolve_locale, translate
-from photo_culler.web.routes import analysis, api, dashboard, editing, groups, library, photos, sessions
+from photo_culler.web.routes import analysis, api, dashboard, editing, groups, library, photos, sessions, nas_api
 
 
 class InternationalizationMiddleware:
@@ -124,7 +126,34 @@ def create_app(
     app.state.analysis_profiles = AnalysisProfileStore(str(db_engine.db_path) + ".analysis-profiles.json")
     app.state.edit_service = EditService(db_engine)
 
+    # Environment default overrides for NAS
+    env_nas_enabled = os.environ.get("PHOTO_CULLER_NAS_MONITOR", "0") in ("1", "true", "True")
+    try:
+        env_nas_high = float(os.environ.get("PHOTO_CULLER_NAS_MAX_TEMP", "75.0"))
+    except ValueError:
+        env_nas_high = 75.0
+    try:
+        env_nas_low = float(os.environ.get("PHOTO_CULLER_NAS_MIN_TEMP", "60.0"))
+    except ValueError:
+        env_nas_low = 60.0
+    try:
+        env_nas_interval = float(os.environ.get("PHOTO_CULLER_NAS_INTERVAL", "5.0"))
+    except ValueError:
+        env_nas_interval = 5.0
+
+    app.state.nas_manager = NASManager(
+        analysis_jobs=app.state.analysis_jobs,
+        gallery_imports=app.state.gallery_imports,
+        high_temp=env_nas_high,
+        low_temp=env_nas_low,
+        interval=env_nas_interval,
+        enabled=env_nas_enabled,
+    )
+    if env_nas_enabled:
+        app.state.nas_manager.start()
+
     def shutdown_services() -> None:
+        app.state.nas_manager.stop()
         app.state.analysis_jobs.shutdown()
         app.state.gallery_imports.shutdown()
         db_engine.close()
@@ -187,5 +216,6 @@ def create_app(
     app.include_router(editing.router)
     app.include_router(sessions.router)
     app.include_router(api.router)
+    app.include_router(nas_api.router)
 
     return app
