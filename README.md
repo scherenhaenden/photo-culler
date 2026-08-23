@@ -173,18 +173,24 @@ photo-culler web
 photo-culler desktop
 ```
 
-### 3. Crear y abrir el build clicable de Linux
+### 3. Crear y abrir builds para macOS y Linux
 
 ```bash
-uv venv --python 3.14
-uv pip install -e '.[linux,build]'
+# macOS (Genera ejecutables en builds/{tipo}/mac/)
+./scripts/build_mac.sh
+
+# Linux (Genera ejecutable en builds/desktop/linux/)
 ./scripts/build.sh --linux
-./builds/linux/photo-culler
 ```
 
-The generated `builds/linux/photo-culler` is a single executable containing the Python application, templates, and static assets. All PyInstaller output, including temporary work files, stays under `builds/`. Double-clicking it opens an isolated Google Chrome/Chromium app window; closing that window also stops the protected local server. The replaceable build directory never stores the user's catalog: on Linux the desktop catalog lives at `${XDG_DATA_HOME:-~/.local/share}/photo-culler/catalog.db`.
+Los ejecutables se organizan en la estructura estandarizada **`builds/{tipo}/{sistema}/`**:
+- **macOS Desktop (`pywebview`)**: `builds/desktop/mac/photo-culler`
+- **macOS Rust GUI (`egui` + Metal)**: `builds/rust-egui/mac/photo-culler-egui`
+- **macOS Rust CLI**: `builds/rust-cli/mac/photo-culler-cli`
+- **macOS Web Server**: `builds/web/mac/photo-culler-web`
 
-`scripts/build.sh` is the unified local build command. It builds the Linux desktop application by default; choose targets explicitly with `--linux`, `--rust-cli`, `--rust-egui`, or `--rust-tauri`. `--all` builds them all, and exclusions such as `--no-rust-tauri` let you omit one: `./scripts/build.sh --all --no-rust-tauri`. Use `--output /ruta/a/builds` to place final artifacts elsewhere.
+Véase [`builds/README.md`](builds/README.md) para más detalles.
+
 
 ### 4. Rust workspace, CLI, and frontend bootstraps
 
