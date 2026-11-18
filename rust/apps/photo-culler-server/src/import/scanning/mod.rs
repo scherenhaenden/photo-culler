@@ -14,6 +14,7 @@ pub enum Role {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
+    /// Source-relative path; absolute server paths stay inside the scanner.
     pub path: PathBuf,
     pub role: Role,
     pub bytes: u64,
@@ -174,7 +175,10 @@ pub fn scan(
                 if let Some(role) = role(&extension(&path)) {
                     entries.push(Entry {
                         bytes: item.metadata()?.len(),
-                        path,
+                        path: path
+                            .strip_prefix(&source)
+                            .expect("walked entry remains under source")
+                            .to_path_buf(),
                         role,
                     });
                 }
@@ -277,6 +281,7 @@ mod tests {
         let scanned = scan(&source, &roots, &options).unwrap();
         let estimate = preflight(&source, &roots, &options).unwrap();
         assert_eq!(estimate.entries, scanned);
+        assert!(scanned.iter().all(|entry| !entry.path.is_absolute()));
         assert_eq!(estimate.total_files, 4);
         assert_eq!(estimate.total_bytes, 11);
         assert_eq!(estimate.logical_photos, 2);
