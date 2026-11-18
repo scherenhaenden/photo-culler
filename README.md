@@ -10,6 +10,8 @@ It combines compiler-style analysis pipelines, RAW+JPEG logical file pairing, sp
 
 ## Architecture Direction: Exchangeable Engines and Frontends
 
+The [Rust and Slint migration roadmap](docs/RUST_SLINT_ROADMAP.md) defines the target architecture and the 64 implementation tasks for shared native and WebAssembly interfaces over REST.
+
 The project deliberately supports parallel technology tracks while product behavior and performance requirements are still being validated. Domain models, catalog persistence, analysis pipelines, scoring, and selection rules remain independent of the presentation layer. Frontends must consume those boundaries instead of embedding culling logic, which lets an implementation be replaced without rewriting the product.
 
 ### Engine tracks
