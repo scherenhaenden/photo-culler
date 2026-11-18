@@ -1,0 +1,9 @@
+id = 39
+name = "Recipe rendering and RawTherapee suggestions"
+owned_paths = ["rust/crates/photo-culler-image-engine/src/editing/render/", "migration/tasks/39.toml"]
+imports = ["std::fs", "std::path::Path"]
+modules = ["editing::render"]
+http_routes = []
+cargo_dependencies = []
+test_commands = ["rust/crates/photo-culler-image-engine/src/editing/render/test-standalone.sh --offline"]
+integration = "Register editing::render in the image-engine crate root; connect the production decoder/encoder and versioned server recipe DTO; verify PP3 against approved fixtures and repeat source SHA-256 checks with approved photo corpus."
