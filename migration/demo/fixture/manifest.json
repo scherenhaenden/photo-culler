@@ -1,0 +1,25 @@
+{
+  "gallery_id": "demo",
+  "items": [
+    {
+      "photo_id": "demo-001",
+      "filename": "demo-001.jpg",
+      "representation": "jpeg",
+      "decision": "undecided",
+      "thumbnail_url": "/api/v1/photos/demo-001/thumbnail/800",
+      "source": "Generated synthetic landscape; contains no camera or personal data.",
+      "dimensions": {
+        "width": 1024,
+        "height": 640
+      },
+      "sha256": "f996f797fde19c10187d19538ad738a18235c6a9b03d34b85b896cff61401922",
+      "thumbnail": {
+        "filename": "demo-001-thumbnail.jpg",
+        "width": 400,
+        "height": 250,
+        "bytes": 8304,
+        "sha256": "cc20c24844d2fc6fca729fcb66cfe661960f7b56be41a3dd462a0f1b22cfb4f2"
+      }
+    }
+  ]
+}
