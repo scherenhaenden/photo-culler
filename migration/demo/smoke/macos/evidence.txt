@@ -1,0 +1,20 @@
+macOS smoke evidence template
+============================
+Date/time:
+macOS version:
+Architecture (uname -m):
+Desktop binary SHA-256:
+Server binary SHA-256:
+Staging directory (spaces exercised?):
+Desktop PID:
+Owned server child PID:
+Assigned loopback origin:
+Health/gallery/thumbnail probe output:
+Screenshot path (gallery + visible demo-001.jpg):
+Normal close observed:
+Owned child exited:
+Port released:
+Reopen observed:
+External service PID before/after app close:
+External health before/after app close:
+Result / blocked integration:

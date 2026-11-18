@@ -1,0 +1,16 @@
+[package]
+name = "photo-culler-slint"
+version = "2026.11.18+18.43.40"
+edition = "2024"
+license = "MIT"
+build = "build.rs"
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+slint = { version = "=1.19.0", default-features = false, features = ["std", "compat-1-18", "backend-winit", "renderer-femtovg"] }
+image = { version = "=0.25.10", default-features = false, features = ["jpeg"] }
+
+[build-dependencies]
+slint-build = "=1.19.0"
