@@ -45,8 +45,7 @@ export component ActionButton inherits Rectangle {
     border-width: 1px;
     border-color: primary ? DesignTokens.accent : DesignTokens.border;
 
-    FocusScope {
-        id: focus_scope;
+    focus_scope := FocusScope {
         width: parent.width;
         height: parent.height;
         enabled: root.enabled;
@@ -100,8 +99,7 @@ export component SidebarItem inherits Rectangle {
     background: selected ? (DesignTokens.dark-mode ? #303b4d : #e7eefb) : DesignTokens.surface;
     border-radius: 5px;
 
-    FocusScope {
-        id: focus_scope;
+    focus_scope := FocusScope {
         width: parent.width;
         height: parent.height;
         enabled: root.enabled;
