@@ -1,0 +1,47 @@
+# Copy to .github/workflows/rust-platform-builds.yml when the migration
+# integrator activates this workflow. This task intentionally owns only
+# repo/migration/packaging/ and does not edit shared workflow configuration.
+name: Rust platform packaging candidate
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "rust/**"
+      - "repo/migration/packaging/**"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: macos-arm64
+            runner: macos-14
+          - target: linux-x86_64
+            runner: ubuntu-24.04
+          - target: wasm32-web
+            runner: ubuntu-24.04
+          - target: nas-linux-x86_64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          targets: aarch64-apple-darwin,x86_64-unknown-linux-gnu,wasm32-unknown-unknown
+      - if: matrix.target == 'wasm32-web'
+        run: cargo install wasm-bindgen-cli --version 0.2.126 --locked
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libx11-dev libvulkan-dev
+      - name: Build or report blocked target
+        run: python3 repo/migration/packaging/package.py build "${{ matrix.target }}" --allow-pending
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ matrix.target }}-${{ github.sha }}
+          path: repo/migration/packaging/artifacts/${{ matrix.target }}
+          if-no-files-found: ignore

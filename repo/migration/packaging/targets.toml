@@ -1,0 +1,47 @@
+# Source-of-truth input to package.py. Status describes repository readiness,
+# not a claim that an artifact has been built or smoke-tested.
+schema_version = 1
+source_commit = "ad1bb99f50b0e46dd60dc2bb2b048291f064335a"
+rust_toolchain = "1.97.1"
+
+[[target]]
+id = "macos-arm64"
+triple = "aarch64-apple-darwin"
+runner = "macos-14"
+status = "buildable-prototype"
+package = "photo-culler-egui"
+manifest = "rust/apps/photo-culler-egui/Cargo.toml"
+binary = "photo-culler-egui"
+artifact_kind = "executable"
+
+[[target]]
+id = "linux-x86_64"
+triple = "x86_64-unknown-linux-gnu"
+runner = "ubuntu-24.04"
+status = "buildable-prototype"
+package = "photo-culler-egui"
+manifest = "rust/apps/photo-culler-egui/Cargo.toml"
+binary = "photo-culler-egui"
+artifact_kind = "executable"
+system_packages = ["libxkbcommon-dev", "libwayland-dev", "libx11-dev", "libvulkan-dev"]
+
+[[target]]
+id = "wasm32-web"
+triple = "wasm32-unknown-unknown"
+runner = "ubuntu-24.04"
+status = "blocked-no-frontend"
+package = "photo-culler-slint"
+manifest = "rust/apps/photo-culler-slint/Cargo.toml"
+binary = "photo_culler_slint.wasm"
+artifact_kind = "wasm-frontend"
+wasm_bindgen_cli = "0.2.126"
+
+[[target]]
+id = "nas-linux-x86_64"
+triple = "x86_64-unknown-linux-gnu"
+runner = "ubuntu-24.04"
+status = "blocked-no-server"
+package = "photo-culler-server"
+manifest = "rust/apps/photo-culler-server/Cargo.toml"
+binary = "photo-culler-server"
+artifact_kind = "headless-server"
