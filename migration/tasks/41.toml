@@ -1,0 +1,10 @@
+id = "41"
+name = "Shared Slint component library"
+base = "ad1bb99f50b0e46dd60dc2bb2b048291f064335a"
+owned_paths = ["rust/apps/photo-culler-slint/ui/components/", "migration/tasks/41.toml"]
+imports = []
+modules = ["slint::ComponentCatalog"]
+http_routes = []
+cargo_dependencies = []
+test_commands = ["python3 rust/apps/photo-culler-slint/ui/components/test_components.py"]
+integration = "Create/register the Slint app crate and pinned Slint toolchain; import ComponentCatalog into native and WASM smoke apps; validate real rendering and keyboard focus in both themes."
