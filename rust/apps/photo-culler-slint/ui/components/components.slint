@@ -1,0 +1,282 @@
+// Shared visual tokens and reusable controls for native and WASM screens.
+// Screens provide their own data and connect callbacks to the REST client.
+
+export global DesignTokens {
+    in-out property <bool> dark-mode: false;
+
+    out property <color> canvas: dark-mode ? #17191d : #f5f6f8;
+    out property <color> surface: dark-mode ? #22252b : #ffffff;
+    out property <color> foreground: dark-mode ? #f1f3f5 : #20242a;
+    out property <color> muted: dark-mode ? #b0b7c2 : #5f6875;
+    out property <color> border: dark-mode ? #414751 : #d8dde5;
+    out property <color> accent: dark-mode ? #87aefb : #285fca;
+    out property <color> focus: dark-mode ? #a8c7ff : #174ea6;
+    out property <color> danger: dark-mode ? #ffaaa5 : #a4262c;
+
+    out property <string> body-font: "Inter";
+    out property <string> heading-font: "Inter";
+    out property <length> text-small: 12px;
+    out property <length> text-body: 14px;
+    out property <length> text-heading: 20px;
+    out property <length> space-small: 8px;
+    out property <length> space-medium: 16px;
+    out property <length> space-large: 24px;
+    out property <length> control-height: 40px;
+}
+
+export enum PanelState {
+    loading,
+    error,
+    empty,
+}
+
+// A single keyboard policy for controls: tab can reach them; Enter and Space
+// activate them; a high-contrast outline remains visible in both themes.
+export component ActionButton inherits Rectangle {
+    in property <string> label: "Action";
+    in property <bool> enabled: true;
+    in property <bool> primary: true;
+    callback clicked();
+
+    height: DesignTokens.control-height;
+    min-width: 88px;
+    background: primary ? DesignTokens.accent : DesignTokens.surface;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: primary ? DesignTokens.accent : DesignTokens.border;
+
+    FocusScope {
+        id: focus_scope;
+        width: parent.width;
+        height: parent.height;
+        enabled: root.enabled;
+        focus-on-tab-navigation: true;
+
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.clicked();
+                accept
+            } else {
+                reject
+            }
+        }
+
+        Rectangle {
+            x: 2px;
+            y: 2px;
+            width: parent.width - 4px;
+            height: parent.height - 4px;
+            border-radius: 4px;
+            border-width: focus_scope.has-focus ? 2px : 0px;
+            border-color: DesignTokens.focus;
+            background: transparent;
+        }
+
+        Text {
+            text: root.label;
+            color: root.primary ? #ffffff : DesignTokens.foreground;
+            font-family: DesignTokens.body-font;
+            font-size: DesignTokens.text-body;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        TouchArea {
+            clicked => {
+                focus_scope.focus();
+                root.clicked();
+            }
+        }
+    }
+}
+
+export component SidebarItem inherits Rectangle {
+    in property <string> label: "Library";
+    in property <bool> selected: false;
+    in property <bool> enabled: true;
+    callback activated();
+
+    height: 40px;
+    background: selected ? (DesignTokens.dark-mode ? #303b4d : #e7eefb) : DesignTokens.surface;
+    border-radius: 5px;
+
+    FocusScope {
+        id: focus_scope;
+        width: parent.width;
+        height: parent.height;
+        enabled: root.enabled;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.activated();
+                accept
+            } else {
+                reject
+            }
+        }
+
+        Rectangle {
+            x: 2px;
+            y: 2px;
+            width: parent.width - 4px;
+            height: parent.height - 4px;
+            border-radius: 4px;
+            border-width: focus_scope.has-focus ? 2px : 0px;
+            border-color: DesignTokens.focus;
+            background: transparent;
+        }
+
+        Text {
+            x: 12px;
+            width: parent.width - 24px;
+            height: parent.height;
+            text: root.label;
+            color: DesignTokens.foreground;
+            font-family: DesignTokens.body-font;
+            font-size: DesignTokens.text-body;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        TouchArea {
+            clicked => {
+                focus_scope.focus();
+                root.activated();
+            }
+        }
+    }
+}
+
+export component StatusPanel inherits Rectangle {
+    in property <PanelState> state: PanelState.empty;
+    in property <string> title: "";
+    in property <string> detail: "";
+    in property <string> action-label: "Retry";
+    callback retry();
+
+    min-height: 180px;
+    background: DesignTokens.surface;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+
+    VerticalLayout {
+        padding: DesignTokens.space-large;
+        spacing: DesignTokens.space-small;
+
+        Text {
+            text: root.title;
+            color: root.state == PanelState.error ? DesignTokens.danger : DesignTokens.foreground;
+            font-family: DesignTokens.heading-font;
+            font-size: DesignTokens.text-heading;
+            font-weight: 600;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: root.detail;
+            color: DesignTokens.muted;
+            font-family: DesignTokens.body-font;
+            font-size: DesignTokens.text-body;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+
+        if root.state == PanelState.loading: Text {
+            text: "Loading…";
+            color: DesignTokens.accent;
+            font-family: DesignTokens.body-font;
+            font-size: DesignTokens.text-small;
+            horizontal-alignment: center;
+        }
+
+        if root.state == PanelState.error: ActionButton {
+            label: root.action-label;
+            primary: false;
+            clicked => { root.retry(); }
+        }
+    }
+}
+
+export component Sidebar inherits Rectangle {
+    in property <int> current-index: 0;
+    callback navigate(index: int);
+
+    background: DesignTokens.surface;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+    border-radius: 8px;
+
+    VerticalLayout {
+        padding: DesignTokens.space-small;
+        spacing: 4px;
+
+        Text {
+            text: "PHOTO CULLER";
+            color: DesignTokens.muted;
+            font-family: DesignTokens.heading-font;
+            font-size: DesignTokens.text-small;
+            font-weight: 700;
+            height: 32px;
+            vertical-alignment: center;
+        }
+
+        SidebarItem {
+            label: "Library";
+            selected: root.current-index == 0;
+            activated => { root.navigate(0); }
+        }
+        SidebarItem {
+            label: "Sessions";
+            selected: root.current-index == 1;
+            activated => { root.navigate(1); }
+        }
+        SidebarItem {
+            label: "Jobs";
+            selected: root.current-index == 2;
+            activated => { root.navigate(2); }
+        }
+    }
+}
+
+// Small native/WASM smoke catalog for the common component contract.
+export component ComponentCatalog inherits Window {
+    title: "Photo Culler components";
+    width: 720px;
+    height: 480px;
+    background: DesignTokens.canvas;
+
+    HorizontalLayout {
+        padding: DesignTokens.space-large;
+        spacing: DesignTokens.space-large;
+
+        Sidebar {
+            width: 180px;
+            current-index: 1;
+            navigate(index) => { debug(index); }
+        }
+
+        VerticalLayout {
+            spacing: DesignTokens.space-medium;
+
+            Text {
+                text: "Shared component catalog";
+                color: DesignTokens.foreground;
+                font-family: DesignTokens.heading-font;
+                font-size: DesignTokens.text-heading;
+                font-weight: 700;
+            }
+
+            ActionButton {
+                label: DesignTokens.dark-mode ? "Use light theme" : "Use dark theme";
+                clicked => { DesignTokens.dark-mode = !DesignTokens.dark-mode; }
+            }
+
+            StatusPanel {
+                state: PanelState.loading;
+                title: "Loading gallery";
+                detail: "The catalog is being requested.";
+            }
+        }
+    }
+}
