@@ -1,9 +1,13 @@
 [workspace]
 members = [
+    "crates/photo-culler-api",
+    "crates/photo-culler-client",
     "crates/photo-culler-core",
     "crates/photo-culler-image-engine",
     "apps/photo-culler-cli",
     "apps/photo-culler-egui",
+    "apps/photo-culler-server",
+    "apps/photo-culler-slint",
     "apps/photo-culler-tauri",
 ]
 resolver = "2"
