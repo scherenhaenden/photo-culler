@@ -18,7 +18,9 @@ The ownership rules are explicit:
 - `close` and `Drop` stop only the owned process. They detach from an external
   connection without terminating it.
 - `DesktopApiClient` sends requests under the selected origin, restricts paths
-  to `/api/v1/`, and supplies the session credential to the transport adapter.
+  to `/api/v1/`, and supplies the session credential as an HTTP
+  `Authorization: Bearer …` header value, separate from the URL. Debug output
+  redacts the credential.
 
 When the Slint crate is added, its close callback should call `close`; the
 launcher adapter should own the child process handle and its graceful shutdown,

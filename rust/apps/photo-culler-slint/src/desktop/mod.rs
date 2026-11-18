@@ -6,13 +6,24 @@
 
 use std::fmt;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct ApiConnection {
     /// Base URL, for example `http://127.0.0.1:43127`.
     pub base_url: String,
     /// Short-lived credential issued for this desktop session.
     pub credential: String,
     pub expires_at_unix_seconds: u64,
+}
+
+impl fmt::Debug for ApiConnection {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ApiConnection")
+            .field("base_url", &self.base_url)
+            .field("credential", &"[REDACTED]")
+            .field("expires_at_unix_seconds", &self.expires_at_unix_seconds)
+            .finish()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -215,13 +226,14 @@ fn valid_session(connection: &ApiConnection, now: u64) -> bool {
 
 /// Minimal HTTP request contract shared by the desktop adapter and a mock.
 /// The adapter must preserve the session credential and use the configured
-/// server origin for every `/api/v1` request.
+/// server origin for every `/api/v1` request. `authorization` is the HTTP
+/// Authorization header value; adapters must not place credentials in URLs.
 pub trait HttpTransport {
     type Error: fmt::Display;
     fn send(
         &mut self,
         url: &str,
-        credential: &str,
+        authorization: &str,
     ) -> Result<Vec<u8>, Self::Error>;
 }
 
@@ -248,8 +260,9 @@ impl<T: HttpTransport> DesktopApiClient<T> {
             return Err(DesktopError::SessionExpired);
         }
         let url = format!("{}{}", connection.base_url.trim_end_matches('/'), path);
+        let authorization = format!("Bearer {}", connection.credential);
         self.transport
-            .send(&url, &connection.credential)
+            .send(&url, &authorization)
             .map_err(|error| DesktopError::Transport(error.to_string()))
     }
 }
@@ -322,8 +335,8 @@ mod tests {
     }
     impl HttpTransport for FakeTransport {
         type Error = &'static str;
-        fn send(&mut self, url: &str, credential: &str) -> Result<Vec<u8>, Self::Error> {
-            self.requests.push((url.to_owned(), credential.to_owned()));
+        fn send(&mut self, url: &str, authorization: &str) -> Result<Vec<u8>, Self::Error> {
+            self.requests.push((url.to_owned(), authorization.to_owned()));
             Ok(b"ok".to_vec())
         }
     }
@@ -338,7 +351,9 @@ mod tests {
         assert_ne!(conn.base_url, "http://127.0.0.1:0");
         let mut client = DesktopApiClient::new(FakeTransport::default());
         assert_eq!(client.get(&runtime, "/api/v1/health", 5).unwrap(), b"ok");
-        assert_eq!(client.transport.requests[0], ("http://127.0.0.1:43001/api/v1/health".into(), "local-session-1".into()));
+        assert_eq!(client.transport.requests[0], ("http://127.0.0.1:43001/api/v1/health".into(), "Bearer local-session-1".into()));
+        assert!(!client.transport.requests[0].0.contains("local-session-1"));
+        assert!(!format!("{conn:?}").contains("local-session-1"));
     }
 
     #[test]
