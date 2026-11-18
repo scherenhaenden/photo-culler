@@ -1,0 +1,10 @@
+[package]
+name = "photo-culler-server"
+version = "2026.11.18+18.43.40"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+axum = "0.7"
+photo-culler-api = { path = "../../crates/photo-culler-api" }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal"] }
