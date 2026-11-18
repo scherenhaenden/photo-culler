@@ -16,40 +16,42 @@ The project deliberately supports parallel technology tracks while product behav
 
 ### Engine tracks
 
-| Track | Current maturity | Quality / evidence | Direction |
+| Track | Snapshot status | Source evidence | Direction |
 |---|:---:|---|---|
-| **Python analysis engines** | **85% — active** | Modular analyzer registry, cache, normalized image processing, scoring, benchmarks, and broad unit coverage | Reference implementation and current production path |
-| **Rust analysis engines** | **3% — contracts only** | Shared request/result/engine contracts compile; no analyzer has been ported or benchmarked | Port individual hot paths only after representative Python benchmarks prove that Rust provides a material end-to-end gain |
+| **Python analysis engines** | Implemented reference path | `photo_culler/analysis/`, `scoring/`, `validation/`, and `tests/` | Preserve as the comparison implementation while migration behavior is validated |
+| **Rust analysis engines** | Contracts and image primitives tracked | `rust/crates/photo-culler-core/` and `rust/crates/photo-culler-image-engine/`; no analyzer parity result is recorded | Port individual hot paths only after the same corpus demonstrates a measured end-to-end gain |
 
 A Rust port must preserve the analyzer input/output contract and pass the same validation corpus before replacing a Python implementation. Python remains the orchestration and correctness reference until a Rust engine is measurably faster, equally accurate, and operationally simpler.
 
 ### Frontend tracks
 
-| Frontend | Current maturity | What works now | Intended role |
+| Frontend | Snapshot status | Tracked evidence | Intended role |
 |---|:---:|---|---|
-| **FastAPI + HTMX web UI** | **88% — usable** | Dark responsive UI, dashboard, paginated/filterable library, inspector, decisions, keyboard navigation, background analysis progress | Fastest product/design iteration and browser-accessible reference UI |
-| **Python + pywebview desktop shell** | **82% — Linux build available** | Native window, random localhost port, session token, host validation, security headers, native bridge, clean shutdown | Current clickable desktop delivery and integration reference |
-| **Rust + Tauri + WebGL** | **7% — experimental shell** | Packaged Linux Tauri shell launches an authenticated FastAPI sidecar and has DEB startup coverage; Wayland navigation remains unreliable | Reuse the mature web interaction model with a Rust desktop shell and GPU-accelerated canvas |
-| **Rust + egui + wgpu** | **100% — Linux experimental delivery** | Native wgpu window, catalog/gallery browsing, import, thumbnail preview, analysis, decisions, sessions/groups, non-destructive editing and packaged launcher | Complete for the defined experimental Linux scope |
+| **FastAPI + HTMX web UI** | Python reference UI is tracked | `photo_culler/web/` routes, templates, static assets, and web tests | Browser-accessible reference for behavior during migration |
+| **Python desktop shells** | Linux launcher and pywebview source are tracked; current run status is not recorded here | `photo_culler/desktop/`, `scripts/`, and desktop tests | Desktop packaging and platform behavior must be reported from dated runs |
+| **Rust + Tauri** | Experimental shell source is tracked; runtime status is not recorded here | `rust/apps/photo-culler-tauri/` and package test/CI definitions | Candidate for reuse of the web interaction model after runtime validation |
+| **Rust + egui + wgpu** | Experimental shell source is tracked; runtime status is not recorded here | `rust/apps/photo-culler-egui/` and launcher test source | Candidate native UI; parity and package readiness remain to be verified |
 
-The three frontend directions are intentionally retained. Shared behavior belongs in engines/services; frontend-specific rendering, windowing, and interaction stay in adapters. A future decision should be based on measured catalog size, thumbnail/render latency, installer size, accessibility, platform support, development velocity, and maintenance cost—not language preference alone.
+The frontend implementations remain separate code paths. Shared behavior belongs in engines/services; frontend-specific rendering, windowing, and interaction stay in adapters. Any promotion decision should cite runs for catalog size, thumbnail/render latency, installer size, accessibility, platform support, development effort, and maintenance cost.
+
+This table describes tracked source at snapshot commit [`ad1bb99f50b0e46dd60dc2bb2b048291f064335a`](https://github.com/scherenhaenden/photo-culler/commit/ad1bb99f50b0e46dd60dc2bb2b048291f064335a), dated 2026-11-18. It is not a build or runtime report. See [`docs/TECHNOLOGY_MAP.md`](docs/TECHNOLOGY_MAP.md), [`docs/DESKTOP_READINESS.md`](docs/DESKTOP_READINESS.md), and [`docs/BUILDS.md`](docs/BUILDS.md) for evidence scope and platform execution records.
 
 Las releases usan el formato de calendario `yyyy.MM.dd-HH.mm.sss`; véase
 [`docs/VERSIONING.md`](docs/VERSIONING.md).
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for replacement boundaries and promotion gates.
-See [`docs/TECHNOLOGY_MAP.md`](docs/TECHNOLOGY_MAP.md) for the Python/Rust module map and desktop resource comparison.
+See [`docs/TECHNOLOGY_MAP.md`](docs/TECHNOLOGY_MAP.md) for the Python/Rust module map and evidence snapshot.
 See [`docs/FUTURE_INTELLIGENT_WORKFLOW.md`](docs/FUTURE_INTELLIGENT_WORKFLOW.md) for the planned human-approved selection, auto-editing and restoration workflow.
-See [`docs/DESKTOP_READINESS.md`](docs/DESKTOP_READINESS.md) for the evidence-based comparison of the two Python desktop paths and the completed easy Linux scope.
+See [`docs/DESKTOP_READINESS.md`](docs/DESKTOP_READINESS.md) for the platform readiness evidence matrix and [`docs/BUILDS.md`](docs/BUILDS.md) for dated build and validation runs.
 
 ### Catalog storage choices
 
 SQLite remains the default because Photo Culler is local-first, needs a zero-administration catalog, and benefits from WAL mode for concurrent UI/background reads. The persistence boundary now accepts either a path or `PHOTO_CULLER_DATABASE_URL`.
 
-| Backend | Readiness | Best fit |
+| Backend | Tracked implementation status | Best fit |
 |---|:---:|---|
-| **SQLite + WAL** | **90% — default** | Single-user desktop catalogs, removable/local storage, simple backups |
-| **PostgreSQL** | **10% — boundary only** | Future multi-user/shared-server catalog; SQLAlchemy URL is recognized, but driver packaging, migrations, CI, and operational testing remain |
+| **SQLite + WAL** | Default persistence path in the current Python catalog | Local-first catalogs and removable storage; backup behavior is documented separately |
+| **PostgreSQL** | URL boundary only; deployment readiness is not established | Future multi-user/shared-server use after driver packaging, migrations, CI, and operational validation |
 | **DuckDB** | **Research** | Analytics/benchmark snapshots, not transactional decision editing |
 | **Embedded key/value stores** | **Research** | Metric/thumbnail caches, not the relational source of truth |
 
@@ -61,55 +63,13 @@ PHOTO_CULLER_DATABASE_URL=sqlite:////absolute/path/catalog.db photo-culler web
 
 ---
 
-## 📊 Estado de Desarrollo y Cobertura de Código (Coverage Table)
+## Development and validation evidence
 
-### 🎯 Cobertura Global de Código: **84.0%** (72 Pruebas Superadas)
-
-Measured on Linux/Python 3.14 with statement and branch coverage enabled:
-
-| Módulo / Sub-paquete | Sentencias | Líneas Omitidas | Cobertura % |
-|---|:---:|:---:|:---:|
-| **`photo_culler/analysis/`** (Analizadores, pipeline, registry y cache) | 477 | 45 | **87.8%** |
-| **`photo_culler/catalog/`** (Persistencia SQLite & ORM) | 358 | 13 | **93.5%** |
-| **`photo_culler/importing/`** (Galerías, preflight y jobs persistentes) | 427 | 38 | **87.0%** |
-| **`photo_culler/editing/`** (Recetas y preview no destructivo) | 162 | 16 | **84.5%** |
-| **`photo_culler/cli/`** (Comandos Typer & Formateadores Rich) | 549 | 81 | **80.8%** |
-| **`photo_culler/web/`** (FastAPI, servicios, paginación y jobs SSE) | 613 | 98 | **81.3%** |
-| **`photo_culler/desktop/`** (Launcher seguro y bridge pywebview) | 97 | 75 | **18.8%** |
-| **`photo_culler/core/`** (Modelos de Dominio y Enums) | 96 | 2 | **96.2%** |
-| **`photo_culler/grouping/`** (Agrupación timeline) | 34 | 1 | **93.2%** |
-| **`photo_culler/bursts/`** (Detección de ráfagas) | 32 | 2 | **88.6%** |
-| **`photo_culler/identity/`** (Hashes SHA-256 & dHash) | 58 | 9 | **83.3%** |
-| **`photo_culler/pairing/`** (Emparejador RAW/JPEG) | 45 | 0 | **100.0%** |
-| **`photo_culler/previews/`** (Generador de thumbnails) | 28 | 5 | **79.4%** |
-| **`photo_culler/reports/`** (Generador de reportes) | 19 | 0 | **100.0%** |
-| **`photo_culler/scanner/`** (Crawler & filtros de extensión) | 62 | 3 | **94.0%** |
-| **`photo_culler/scoring/`** (Scorers técnicos & RAW recovery) | 76 | 2 | **90.8%** |
-| **`photo_culler/selection/`** (Reglas de decisión) | 29 | 13 | **51.1%** |
-| **`photo_culler/validation/`** (Corpus & benchmark runner) | 39 | 4 | **81.6%** |
-| **`photo_culler/volumes/`** (Detector de volúmenes) | 38 | 13 | **66.7%** |
-| **TOTAL PROYECTO** | **3,345** | **423** | **84.0%** |
-
----
-
-## 📈 Tabla de Madurez y Readiness (Updated System Readiness Index)
-
-| Área / Dimensión | Madurez Pre-Web | Madurez Actual | Estado & Avance |
-|---|:---:|:---:|---|
-| **Arquitectura y Modularidad** | 87% | **95%** | Tubería tipo compilador desacoplada, caché SQLite y arquitectura Web/Desktop unificada |
-| **Motor de Análisis & Rendimiento** | 80% | **90%** | Normalización espacial (`max_dim=1920`) y procesamiento en milisegundos |
-| **Analizadores Técnicos & ROI** | 74% | **85%** | Evaluación global + ROI central (Subject Zone) para nitidez y clipping |
-| **Scoring & Confianza** | 64% | **80%** | Scoring contextual (`concert`, `portrait`) con métrica explícita de confianza |
-| **Catálogo & Hashes** | 78% | **88%** | Hashes rápidos/completos, pairing de RAW/JPEG/Sidecars y guardado no destructivo |
-| **CLI & Experiencia** | 79% | **88%** | Comandos Typer/Rich completos con `PhotoSelector` y subcomandos `web` y `desktop` |
-| **Interfaz Web (FastAPI + HTMX)** | 0% | **88%** | Dark UI, dashboard, biblioteca paginada/filtrable, inspector, navegación y progreso SSE |
-| **Aplicación Desktop (pywebview)** | 0% | **82%** | Puerto aleatorio protegido, bridge nativo, cierre limpio y build Linux reproducible |
-| **Desktop Rust (Tauri + WebGL)** | 0% | **7%** | Shell experimental con sidecar FastAPI, empaquetado DEB y prueba de arranque; navegación Wayland aún no fiable |
-| **Desktop Rust nativo (egui + wgpu)** | 0% | **100%** | Entrega Linux experimental: cliente wgpu, API local, catálogo, importación, análisis, decisiones, sesiones/grupos, edición, paquete y E2E del launcher |
-| **Validación Fotográfica Real** | 38% | **70%** | Infraestructura de corpus (`BenchmarkEvaluator`) con F1-score, FRR y FAR |
-| **Integración Continua (CI & Testing)** | 70% | **94%** | 72 pruebas Python (incluye Importar → miniatura → Analizar en Chrome real), 2 pruebas Rust y CI Python 3.14 |
-| **Readiness para Uso Experimental Real** | 62% | **85%** | Listo para escanear, analizar y clasificar visualmente mediante CLI, Web o Desktop |
-| **Readiness Producción con Miles de Fotos** | 35% | **72%** | Modo asistido por UI con atajos de teclado y salvaguardas no destructivas |
+This repository snapshot contains tests under `tests/`, including unit and
+end-to-end test sources. This README does not carry a dated coverage report,
+immutable source commit, or raw coverage output, so it does not publish a
+coverage total or maturity score. See [`docs/BUILDS.md`](docs/BUILDS.md) for
+the evidence currently recorded and the fields required for a future run.
 
 ---
 
@@ -158,8 +118,7 @@ background tier. The current white-balance transform is an initial deterministic
 preview approximation, not a color-managed RAW pipeline. Export, PostgreSQL
 operations, Tauri, advanced color management and local masks remain
 planned or prototype-only.
-The percentages above must only be updated from measured test and coverage
-output.
+Record future test, coverage, and performance results in [`docs/BUILDS.md`](docs/BUILDS.md) with the exact commit, date, and platform.
 
 ### 1. Iniciar Servidor Web Local (`FastAPI` + `HTMX`)
 
@@ -191,7 +150,7 @@ Los ejecutables se organizan en la estructura estandarizada **`builds/{tipo}/{si
 - **macOS Rust CLI**: `builds/rust-cli/mac/photo-culler-cli`
 - **macOS Web Server**: `builds/web/mac/photo-culler-web`
 
-Véase [`builds/README.md`](builds/README.md) para más detalles.
+Véase [`docs/BUILDS.md`](docs/BUILDS.md) para el registro de builds y validación.
 
 
 ### 4. Rust workspace, CLI, and frontend bootstraps

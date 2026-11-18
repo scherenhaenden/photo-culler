@@ -1,0 +1,131 @@
+import { Button, HorizontalBox, Slider, TextInput, VerticalBox } from "std-widgets.slint";
+
+/// Isolated non-destructive recipe editor. The Slint host maps callbacks to
+/// RecipeEditor commands and renders REST-provided preview images.
+export component RecipeEditor inherits Rectangle {
+    in property <image> original-image;
+    in property <image> edited-image;
+    in property <string> photo-label: "";
+    in property <string> original-hash: "";
+    in property <string> revision-label: "";
+    in property <string> status: "";
+    in property <string> export-plan-summary: "";
+    in-out property <float> exposure-value: 0;
+    in-out property <float> temperature-value: 6500;
+    in-out property <float> tint-value: 0;
+    in-out property <string> destination: "";
+    in property <bool> busy: false;
+    in-out property <bool> destination-confirmed: false;
+
+    callback recipe-changed(float, float, float);
+    callback preview-requested();
+    callback save-requested();
+    callback revert-requested();
+    callback export-plan-requested(string);
+    callback destination-changed(string);
+    callback destination-confirmation-requested(string);
+    callback export-requested();
+
+    background: #17191d;
+    VerticalBox {
+        padding: 16px;
+        spacing: 10px;
+
+        Text { text: root.photo-label; color: #f4f4f5; font-size: 20px; }
+        Text { text: root.revision-label + " · original hash " + root.original-hash; color: #aeb4bd; }
+
+        HorizontalBox {
+            spacing: 10px;
+            VerticalBox {
+                Text { text: "Original · solo lectura"; color: #d5d9df; }
+                Image { source: root.original-image; image-fit: contain; }
+            }
+            VerticalBox {
+                Text { text: "Vista previa derivada"; color: #d5d9df; }
+                Image { source: root.edited-image; image-fit: contain; }
+            }
+        }
+
+        HorizontalBox {
+            spacing: 8px;
+            Text { text: "Exposición (EV)"; color: #d5d9df; }
+            Slider {
+                enabled: !root.busy;
+                minimum: -5;
+                maximum: 5;
+                value: root.exposure-value;
+                changed => {
+                    root.exposure-value = self.value;
+                    root.recipe-changed(root.exposure-value, root.temperature-value, root.tint-value);
+                }
+            }
+        }
+        HorizontalBox {
+            spacing: 8px;
+            Text { text: "Temperatura (K)"; color: #d5d9df; }
+            Slider {
+                enabled: !root.busy;
+                minimum: 2000;
+                maximum: 12000;
+                value: root.temperature-value;
+                changed => {
+                    root.temperature-value = self.value;
+                    root.recipe-changed(root.exposure-value, root.temperature-value, root.tint-value);
+                }
+            }
+        }
+        HorizontalBox {
+            spacing: 8px;
+            Text { text: "Matiz"; color: #d5d9df; }
+            Slider {
+                enabled: !root.busy;
+                minimum: -100;
+                maximum: 100;
+                value: root.tint-value;
+                changed => {
+                    root.tint-value = self.value;
+                    root.recipe-changed(root.exposure-value, root.temperature-value, root.tint-value);
+                }
+            }
+        }
+
+        HorizontalBox {
+            spacing: 8px;
+            Button { text: "Previsualizar"; enabled: !root.busy; clicked => { root.preview-requested(); } }
+            Button { text: "Guardar"; enabled: !root.busy; clicked => { root.save-requested(); } }
+            Button { text: "Revertir"; enabled: !root.busy; clicked => { root.revert-requested(); } }
+        }
+
+        Text { text: "Destino de derivados"; color: #d5d9df; }
+        HorizontalBox {
+            spacing: 8px;
+            TextInput {
+                text: root.destination;
+                placeholder-text: "Selecciona un destino autorizado";
+                enabled: !root.busy;
+                edited => {
+                    root.destination = self.text;
+                    root.destination-confirmed = false;
+                    root.destination-changed(self.text);
+                }
+            }
+            Button {
+                text: "Previsualizar nombres";
+                enabled: !root.busy && root.destination != "";
+                clicked => { root.export-plan-requested(root.destination); }
+            }
+            Button {
+                text: "Confirmar destino";
+                enabled: !root.busy && root.export-plan-summary != "";
+                clicked => { root.destination-confirmation-requested(root.destination); }
+            }
+            Button {
+                text: "Exportar derivados";
+                enabled: !root.busy && root.destination-confirmed;
+                clicked => { root.export-requested(); }
+            }
+        }
+        Text { text: root.export-plan-summary; color: #d5d9df; wrap: word-wrap; }
+        Text { text: root.status; color: #aeb4bd; wrap: word-wrap; }
+    }
+}
