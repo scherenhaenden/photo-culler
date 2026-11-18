@@ -1,9 +1,9 @@
 //! Versioned, explainable photo scores built only from metrics that ran.
 //!
 //! This module is locally provisional until the core crate registers it from
-//! `lib.rs` during integration. Metric names and units follow the Python
-//! analyzer contracts: scores/noise are in `[0, 1]`; clipping values are
-//! percentages.
+//! `lib.rs` during integration. Metric names and units follow the Rust image
+//! engine (`*.ratio` values are in `[0, 1]`). Legacy Python keys are accepted
+//! through explicit aliases and remain named as supplied in explanations.
 
 use std::collections::BTreeMap;
 
@@ -110,30 +110,31 @@ pub fn score(profile: ProfileId, metrics: &[Metric], raw_recoverability: Option<
     }
 
     let weights = profile.weights();
-    let names = ["global_sharpness", "exposure_score", "estimated_noise_level"];
+    let names = ["sharpness.global_score", "exposure.score", "noise.estimated_level"];
+    let aliases = ["global_sharpness", "exposure_score", "estimated_noise_level"];
     let mut components = Vec::new();
-    for (name, index) in [(names[0], 0), (names[1], 1), (names[2], 3)] {
-        let Some(metric) = by_name.get(name) else { continue };
-        let Some(value) = normalize(name, metric.value) else { continue };
+    for (name, legacy, index) in [(names[0], aliases[0], 0), (names[1], aliases[1], 1), (names[2], aliases[2], 3)] {
+        let Some(metric) = by_name.get(name).or_else(|| by_name.get(legacy)) else { continue };
+        let Some(value) = normalize(&metric.name, metric.value) else { continue };
         if weights[index] <= 0.0 { continue; }
         components.push(ComponentExplanation {
-            metrics: vec![name.to_owned()], metric_versions: vec![metric.version], normalized_value: round(value),
+            metrics: vec![metric.name.clone()], metric_versions: vec![metric.version], normalized_value: round(value),
             weight: weights[index], contribution: round(value * weights[index]),
             confidence: metric.confidence.clamp(0.0, 1.0),
         });
     }
     // Use the exact metric keys emitted by the legacy clipping analyzer.
     if weights[2] > 0.0 {
-        let hi = by_name.get("highlight_clipping_pct");
-        let center = by_name.get("center_highlight_clipping_pct").or(hi);
-        let shadows = by_name.get("shadow_clipping_pct");
+        let hi = by_name.get("clipping.highlight_ratio").or_else(|| by_name.get("highlight_clipping_pct"));
+        let center = by_name.get("clipping.center_highlight_ratio").or_else(|| by_name.get("center_highlight_clipping_pct")).or(hi);
+        let shadows = by_name.get("clipping.shadow_ratio").or_else(|| by_name.get("shadow_clipping_pct"));
         if hi.is_some() || center.is_some() || shadows.is_some() {
             let hi_value = hi.map(|m| m.value).unwrap_or(0.0);
             let center_value = center.map(|m| m.value).unwrap_or(hi_value);
             let shadow_value = shadows.map(|m| m.value).unwrap_or(0.0);
             let penalty = if profile == ProfileId::Concert {
-                center_value * 0.03 + hi_value * 0.005 + shadow_value * 0.01
-            } else { hi_value * 0.02 + shadow_value * 0.01 };
+                center_value * 3.0 + hi_value * 0.5 + shadow_value
+            } else { hi_value * 2.0 + shadow_value };
             let used: Vec<_> = [hi, center, shadows].into_iter().flatten().collect();
             let value = (1.0 - penalty).clamp(0.0, 1.0);
             components.push(ComponentExplanation {
@@ -161,10 +162,11 @@ pub fn score(profile: ProfileId, metrics: &[Metric], raw_recoverability: Option<
 
 fn normalize(name: &str, value: f64) -> Option<f64> {
     let normalized = match name {
-        "global_sharpness" | "exposure_score" => value,
-        // Python analyzer stores clipping as percentages from 0 to 100.
-        "highlight_clipping_pct" | "shadow_clipping_pct" | "center_highlight_clipping_pct" => 1.0 - value / 100.0,
-        "estimated_noise_level" => 1.0 - value,
+        "sharpness.global_score" | "global_sharpness" | "exposure.score" | "exposure_score" => value,
+        // Rust clipping ratios are [0, 1]; the legacy percentages require /100.
+        "clipping.highlight_ratio" | "clipping.shadow_ratio" | "clipping.center_highlight_ratio" => value,
+        "highlight_clipping_pct" | "shadow_clipping_pct" | "center_highlight_clipping_pct" => value / 100.0,
+        "noise.estimated_level" | "estimated_noise_level" => 1.0 - value,
         "corruption_status" => return None,
         _ => return None,
     };
@@ -181,17 +183,17 @@ mod tests {
     use super::*;
     fn metric(name: &str, value: f64) -> Metric { Metric::new(name, 1, value, 0.9) }
     fn full(sharpness: f64, exposure: f64, clipping: f64, noise: f64) -> Vec<Metric> {
-        vec![metric("global_sharpness", sharpness), metric("exposure_score", exposure),
-             metric("highlight_clipping_pct", clipping), metric("center_highlight_clipping_pct", clipping),
-             metric("shadow_clipping_pct", 0.0), metric("estimated_noise_level", noise)]
+        vec![metric("sharpness.global_score", sharpness), metric("exposure.score", exposure),
+             metric("clipping.highlight_ratio", clipping), metric("clipping.center_highlight_ratio", clipping),
+             metric("clipping.shadow_ratio", 0.0), metric("noise.estimated_level", noise)]
     }
 
     #[test]
     fn golden_profile_orderings_and_concert_light_tolerance() {
         let clean = full(0.9, 0.8, 0.0, 0.1);
         let soft = full(0.4, 0.8, 0.0, 0.1);
-        let mut stage_clipped = full(0.9, 0.8, 80.0, 0.1);
-        stage_clipped.iter_mut().find(|m| m.name == "center_highlight_clipping_pct").unwrap().value = 0.0;
+        let mut stage_clipped = full(0.9, 0.8, 0.8, 0.1);
+        stage_clipped.iter_mut().find(|m| m.name == "clipping.center_highlight_ratio").unwrap().value = 0.0;
         assert!(score(ProfileId::Fast, &clean, None).score > score(ProfileId::Fast, &soft, None).score);
         assert!(score(ProfileId::Technical, &clean, None).score > score(ProfileId::Technical, &stage_clipped, None).score);
         assert!(score(ProfileId::Concert, &stage_clipped, None).score > score(ProfileId::Technical, &stage_clipped, None).score);
@@ -200,16 +202,16 @@ mod tests {
 
     #[test]
     fn explanation_only_names_available_metrics_and_reports_raw_separately() {
-        let metrics = vec![metric("global_sharpness", 0.8), metric("exposure_score", 0.7), metric("unavailable_horizon", 0.2)];
+        let metrics = vec![metric("sharpness.global_score", 0.8), metric("exposure.score", 0.7), metric("unavailable_horizon", 0.2)];
         let result = score(ProfileId::Technical, &metrics, Some(0.75));
-        assert_eq!(result.components.iter().flat_map(|c| c.metrics.iter().map(String::as_str)).collect::<Vec<_>>(), vec!["global_sharpness", "exposure_score"]);
+        assert_eq!(result.components.iter().flat_map(|c| c.metrics.iter().map(String::as_str)).collect::<Vec<_>>(), vec!["sharpness.global_score", "exposure.score"]);
         assert_eq!(result.raw_recoverability, Some(0.75));
         assert!((result.score - ((0.8*0.4 + 0.7*0.25)/0.65)).abs() < 0.0001);
     }
 
     #[test]
     fn cache_key_tracks_profile_and_metric_versions_independent_of_input_order() {
-        let a = vec![Metric::new("global_sharpness", 2, 0.8, 1.0), metric("exposure_score", 0.6)];
+        let a = vec![Metric::new("sharpness.global_score", 2, 0.8, 1.0), metric("exposure.score", 0.6)];
         let b = vec![a[1].clone(), a[0].clone()];
         assert_eq!(cache_key(ProfileId::Fast, &a), cache_key(ProfileId::Fast, &b));
         assert_ne!(cache_key(ProfileId::Fast, &a), cache_key(ProfileId::Technical, &a));
