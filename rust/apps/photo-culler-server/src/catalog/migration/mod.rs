@@ -77,7 +77,7 @@ mod tests {
     use std::ffi::{c_char, c_int, c_void, CStr, CString};
     use std::ptr;
     #[link(name = "sqlite3")]
-    extern "C" {
+    unsafe extern "C" {
         fn sqlite3_open(name: *const c_char, db: *mut *mut c_void) -> c_int;
         fn sqlite3_close(db: *mut c_void) -> c_int;
         fn sqlite3_exec(db: *mut c_void, sql: *const c_char, cb: Option<unsafe extern "C" fn(*mut c_void, c_int, *mut *mut c_char, *mut *mut c_char) -> c_int>, arg: *mut c_void, err: *mut *mut c_char) -> c_int;
@@ -88,8 +88,11 @@ mod tests {
         fn new() -> Self { let mut db = ptr::null_mut(); unsafe { assert_eq!(sqlite3_open(c":memory:".as_ptr(), &mut db), 0) }; Self(db) }
         fn query(&mut self, sql: &str) -> Result<Vec<Vec<String>>, String> {
             unsafe extern "C" fn collect(arg: *mut c_void, n: c_int, values: *mut *mut c_char, _: *mut *mut c_char) -> c_int {
-                let rows = &mut *(arg as *mut Vec<Vec<String>>);
-                rows.push((0..n as usize).map(|i| { let p = *values.add(i); if p.is_null() { "<null>".into() } else { CStr::from_ptr(p).to_string_lossy().into_owned() } }).collect()); 0
+                unsafe {
+                    let rows = &mut *(arg as *mut Vec<Vec<String>>);
+                    rows.push((0..n as usize).map(|i| { let p = *values.add(i); if p.is_null() { "<null>".into() } else { CStr::from_ptr(p).to_string_lossy().into_owned() } }).collect());
+                }
+                0
             }
             let mut rows = Vec::new(); let mut error = ptr::null_mut();
             let rc = unsafe { sqlite3_exec(self.0, CString::new(sql).unwrap().as_ptr(), Some(collect), &mut rows as *mut _ as *mut c_void, &mut error) };
