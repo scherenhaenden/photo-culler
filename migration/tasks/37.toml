@@ -1,0 +1,10 @@
+id = "37"
+name = "Contact sheets and manifest filtering"
+base = "8b2ddcec5e64fd17683b79813a2b9a7a5ff4e309"
+owned_paths = ["rust/apps/photo-culler-server/src/review/contact_sheets/", "migration/tasks/37.toml"]
+imports = ["image::{DynamicImage, ImageFormat, RgbaImage}"]
+modules = ["review::contact_sheets"]
+http_routes = []
+cargo_dependencies = ["image 0.25 with png feature (reuse workspace image dependency when server crate is registered)"]
+test_commands = ["rust/apps/photo-culler-server/src/review/contact_sheets/test-standalone.sh --offline"]
+integration = "Register review::contact_sheets in the server module tree, provide the preview decoder and API/CSV contract, and route generated PNGs and omission reports to the caller."
