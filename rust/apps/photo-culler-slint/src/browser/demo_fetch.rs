@@ -9,6 +9,7 @@ use std::fmt;
 
 pub const MAX_JSON_BYTES: usize = 64 * 1024;
 pub const MAX_THUMBNAIL_BYTES: usize = 2 * 1024 * 1024;
+const API_PREFIX: &str = "/api/v1";
 pub const HEALTH_PATH: &str = "/api/v1/health";
 pub const GALLERY_PATH: &str = "/api/v1/galleries/demo/photos";
 pub const THUMBNAIL_PATH: &str = "/api/v1/photos/demo-001/thumbnail/800";
@@ -52,7 +53,16 @@ impl fmt::Display for TransportError {
 /// Validate before passing a route to Fetch. Reject absolute and scheme-relative
 /// URLs so the browser cannot send application data to another origin.
 pub fn validate_api_path(path: &str) -> Result<(), TransportError> {
-    if !path.starts_with("/api/v1/")
+    let api_prefix = format!("{API_PREFIX}/");
+    #[cfg(target_arch = "wasm32")]
+    let same_origin_path = {
+        let suffix = path.strip_prefix(&api_prefix).unwrap_or_default();
+        super::api_path(suffix).is_ok()
+    };
+    #[cfg(not(target_arch = "wasm32"))]
+    let same_origin_path = true;
+    if !path.starts_with(&api_prefix)
+        || !same_origin_path
         || path.starts_with("//")
         || path.contains('\\')
         || path.contains('#')

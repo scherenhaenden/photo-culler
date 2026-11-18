@@ -4790,8 +4790,12 @@ name = "photo-culler-slint"
 version = "2026.11.18+18.43.40"
 dependencies = [
  "image",
+ "js-sys",
  "slint",
  "slint-build",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]

@@ -12,5 +12,11 @@ crate-type = ["rlib", "cdylib"]
 slint = { version = "=1.19.0", default-features = false, features = ["std", "compat-1-18", "backend-winit", "renderer-femtovg"] }
 image = { version = "=0.25.10", default-features = false, features = ["jpeg"] }
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "=0.3.103"
+wasm-bindgen = "=0.2.126"
+wasm-bindgen-futures = "=0.4.76"
+web-sys = { version = "=0.3.103", features = ["Headers", "ReadableStream", "ReadableStreamDefaultReader", "Request", "RequestInit", "RequestMode", "RequestRedirect", "Response", "Window", "console"] }
+
 [build-dependencies]
 slint-build = "=1.19.0"
