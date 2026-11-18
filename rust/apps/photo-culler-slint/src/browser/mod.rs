@@ -1,11 +1,18 @@
 //! Browser startup and same-origin REST endpoint rules.
 //!
-//! The Slint/WASM crate is not present at the sprint base, so this module pins
-//! the browser-facing contract without adding shared manifests or crate roots.
+//! Browser-facing contract and WASM startup integration. The browser-only
+//! transport and startup entry stay out of native builds.
+
+#[cfg(target_arch = "wasm32")]
+mod demo_fetch;
+
+#[cfg(target_arch = "wasm32")]
+mod demo_start;
 
 pub const API_PREFIX: &str = "/api/v1";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[allow(dead_code)] // Mirrored by the minimal JS bootstrap, covered here as a Rust contract.
 pub enum StartupDiagnostic {
     WebGlUnavailable,
     WasmLoadFailed,
@@ -80,8 +87,10 @@ mod tests {
             assert!(!diagnostic.title().is_empty());
             assert!(diagnostic.message().contains("Photo Culler Desktop"));
         }
-        assert!(StartupDiagnostic::WebGlUnavailable
-            .message()
-            .contains("WebGL"));
+        assert!(
+            StartupDiagnostic::WebGlUnavailable
+                .message()
+                .contains("WebGL")
+        );
     }
 }

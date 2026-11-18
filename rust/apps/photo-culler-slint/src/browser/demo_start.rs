@@ -169,11 +169,16 @@ pub fn start() -> Result<(), wasm_bindgen::JsValue> {
                     .into(),
                 );
             }
-            Err(error) => web_sys::console::error_1(
-                &format!("Photo Culler demo API failed: {error:?}").into(),
-            ),
+            Err(error) => {
+                let diagnostic = super::StartupDiagnostic::ApiUnavailable;
+                web_sys::console::error_2(
+                    &diagnostic.title().into(),
+                    &format!("{}: {error:?}", diagnostic.message()).into(),
+                );
+            }
         }
-    });
+    })
+    .map_err(|error| wasm_bindgen::JsValue::from_str(&error.to_string()))?;
     window
         .run()
         .map_err(|error| wasm_bindgen::JsValue::from_str(&error.to_string()))
