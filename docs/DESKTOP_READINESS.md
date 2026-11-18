@@ -1,123 +1,39 @@
-# Estado de las versiones de escritorio
+# Desktop and platform readiness
 
-## Decisión de esta entrega
+## Evidence snapshot
 
-Se terminó como camino recomendado **Linux fácil (ejecutable + ventana aislada de
-Chrome/Chromium)**. “Terminado” aquí significa que el flujo de instalación y uso
-experimental es completo: el ejecutable encuentra el navegador, crea el catálogo
-fuera del directorio reemplazable del programa, levanta el servidor privado en un
-puerto aleatorio, abre una ventana dedicada con token de sesión y apaga el servidor
-al cerrar la ventana. No significa todavía un instalador firmado ni soporte para
-Windows/macOS.
+This readiness record inspects tracked source at commit
+[`ad1bb99f50b0e46dd60dc2bb2b048291f064335a`](https://github.com/scherenhaenden/photo-culler/commit/ad1bb99f50b0e46dd60dc2bb2b048291f064335a)
+on 2026-11-18. Inspection ran on a macOS Darwin arm64 host. No build, startup,
+or end-to-end command was run for this record. “Tracked” means code or a test
+exists in the commit; it does not mean the test passed on the named platform.
+See [`BUILDS.md`](BUILDS.md) for recorded executions.
 
-La decisión favorece el camino que ya reutiliza toda la interfaz web y que no obliga
-a distribuir Qt/WebKit. Se añadió `PHOTO_CULLER_CHROME` para instalaciones donde el
-navegador no está en `PATH`; un valor inválido produce ahora un error explícito. El
-perfil del navegador es temporal, aislado y tiene la sincronización desactivada. Un
-cierre anormal del navegador o un servidor que no se detiene ya no se reportan como
-éxito.
+## Evidence by platform
 
-## Análisis verificable de los dos caminos Python
+| Platform / surface | Tracked implementation evidence | Build evidence in this record | Startup / complete flow evidence in this record | Current statement |
+|---|---|---|---|---|
+| Linux x86-64, Python + isolated Chromium | `scripts/build_linux.sh`; `photo_culler/desktop/`; `tests/test_linux_launcher.py`; `tests/e2e/test_linux_desktop_launcher.py`; CI `linux-build-smoke` job | Workflow and build script are tracked; this record contains no artifact or build log | Tests are tracked; this record contains no test run | Source and automated checks are present. Build and startup are unverified in this snapshot record. |
+| Linux x86-64, Python + pywebview | Optional `desktop`/`linux` extras in `pyproject.toml`; `photo_culler/desktop/`; `tests/test_desktop.py` | No platform-specific build record in this snapshot | No platform-specific startup or full-flow record in this snapshot | Source exists; packaged desktop readiness is not established here. |
+| Linux x86-64, Rust egui | `rust/apps/photo-culler-egui/`; `tests/e2e/test_egui_desktop_launcher.py` | Package is in `rust/Cargo.toml`; this record contains no binary or build log | Test source exists; this record contains no run | Experimental source exists; release readiness and parity are unverified here. |
+| Linux x86-64, Rust Tauri | `rust/apps/photo-culler-tauri/`; `tests/e2e/test_tauri_desktop_package.py`; `.github/workflows/ci.yml` package job | Packaging workflow is tracked; this record contains no artifact or build log | Test source exists; this record contains no run | Experimental shell source exists; runtime reliability is unverified here. |
+| macOS arm64 | Python desktop source and Rust egui source are tracked | No macOS artifact or build run is recorded in this snapshot | No macOS startup or end-to-end run is recorded | Platform delivery is unverified. |
+| WebAssembly / Slint | Roadmap only: `docs/RUST_SLINT_ROADMAP.md` | No Slint crate or WASM build is present in the workspace manifest | No browser startup or flow is recorded | Planned target; not implemented in this snapshot. |
+| NAS headless | Python NAS code under `photo_culler/nas/`; Rust NAS modules under `rust/apps/photo-culler-server/src/nas/` | No NAS binary or build record is present in this snapshot | No NAS host acceptance is recorded | Source exists; supported hardware, architecture, package, and deployment acceptance remain open. |
 
-Los porcentajes son una estimación de **readiness de entrega desktop**, no cobertura
-de código. Se calculan con diez criterios de igual peso: UI utilizable, catálogo
-persistente, importación, análisis, edición no destructiva, aislamiento de sesión,
-cierre limpio, build reproducible, prueba unitaria del launcher y prueba end-to-end
-del launcher. Cada criterio vale 10 puntos y sólo se acredita cuando existe código y
-una comprobación automatizable en este repositorio.
+## Promotion checks
 
-| Criterio | Linux fácil (Chrome) | pywebview |
-|---|:---:|:---:|
-| UI web completa reutilizada | ✅ | ✅ |
-| Catálogo persistente en datos de usuario | ✅ | ✅ |
-| Importación desde carpeta | ✅ | ✅ |
-| Análisis y decisiones | ✅ | ✅ |
-| Edición no destructiva | ✅ | ✅ |
-| Puerto aleatorio + token + perfil aislado | ✅ | Parcial: no controla perfil del motor |
-| Cierre del servidor comprobado | ✅ | Parcial: cierre implementado, no verificado E2E |
-| Build reproducible en CI | ✅ | ❌ |
-| Tests unitarios del launcher | ✅ | Parcial |
-| Test de proceso end-to-end | ✅ | ❌ |
-| **Resultado** | **100% (10/10) para el alcance Linux experimental** | **65% (6 completos + 1 parcial)** |
+For each platform, record these stages separately and cite the exact commit and
+artifact:
 
-Los “parciales” cuentan 2.5 puntos. El resultado del camino Linux no incluye tareas
-fuera del alcance declarado: paquete `.deb`/AppImage, firma, actualizaciones,
-asociación de archivos, sandbox nativo ni builds Windows/macOS. Por eso no debe
-interpretarse como 100% de readiness comercial multiplataforma.
+1. **Compile/package:** command, runner or host OS/architecture, compiler and
+   dependency versions, exit code, artifact filename, and SHA-256.
+2. **Startup:** clean-install instructions, health/readiness result, log path,
+   and clean process shutdown.
+3. **Product flow:** fixture/corpus identifier, server/client versions, steps,
+   persisted result, and original-file hash comparison.
+4. **Support decision:** known limitations, signing/notarization, update path,
+   architecture coverage, and owner for the next acceptance run.
 
-### Evidencia y comandos
-
-- Unitarias del escritorio: `pytest -m 'not e2e' tests/test_desktop.py tests/test_linux_launcher.py`.
-- End-to-end del launcher: `pytest -m e2e tests/e2e/test_linux_desktop_launcher.py`.
-- Suite completa: `pytest`.
-- Calidad estática: `ruff check photo_culler tests` y `ruff format --check photo_culler tests`.
-- Build: `./scripts/build_linux.sh`; CI comprueba que `builds/linux/chromium/photo-culler` sea ejecutable.
-
-El E2E inicia el launcher como proceso real. Un navegador controlado de prueba abre
-la URL autenticada generada por el launcher, solicita el dashboard FastAPI real,
-comprueba su contenido, sale y permite verificar el cierre limpio, el catálogo y el
-log persistentes. No reemplaza el E2E existente en Chrome real, que cubre el flujo
-completo de importar, generar miniatura, analizar y editar en el navegador.
-
-## Uso del camino terminado
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e '.[build]'
-./scripts/build_linux.sh
-./builds/linux/chromium/photo-culler
-```
-
-Si Chrome/Chromium no está en `PATH`:
-
-```bash
-PHOTO_CULLER_CHROME=/ruta/al/chromium ./builds/linux/chromium/photo-culler
-```
-
-El catálogo queda en `${XDG_DATA_HOME:-~/.local/share}/photo-culler/catalog.db` y el
-log rotativo en `${XDG_STATE_HOME:-~/.local/state}/photo-culler/photo-culler.log`.
-
-## Qué falta en pywebview
-
-1. E2E de apertura y cierre de la ventana real en al menos Linux.
-2. Build reproducible por plataforma y matriz CI.
-3. Propagación explícita de fallos del motor gráfico y del cierre del servidor.
-4. Pruebas del bridge nativo (seleccionar carpeta, guardar, fullscreen y revelar).
-5. Decidir si el coste de Qt/WebKit mejora realmente la experiencia frente al build
-   Linux fácil ya terminado.
-
-## Estado de los caminos Rust
-
-Tauri/WebGL conserva el **7%**: el shell empaquetado inicia un sidecar FastAPI
-autenticado y tiene cobertura de arranque DEB, pero la navegación Wayland hacia
-la UI de referencia no es todavía fiable.
-
-egui/wgpu se recalculó a **100% de readiness funcional para el alcance Linux
-experimental** con diez criterios de igual peso. Usa el API local versionado, sin
-leer SQLite directamente, y su launcher empaquetado inicia/cierra el servicio local.
-
-| Criterio egui/wgpu | Estado |
-|---|:---:|
-| Ventana nativa con backend wgpu | ✅ |
-| Consulta de catálogo y galerías | ✅ |
-| Importación persistente | ✅ |
-| Vista de miniatura | ✅ |
-| Inicio y control de análisis | ✅ |
-| Decisiones no destructivas | ✅ |
-| Sesiones y grupos | ✅ |
-| Edición no destructiva | ✅ |
-| Packaging independiente | ✅ |
-| E2E de launcher nativo | ✅ |
-| **Resultado** | **100% (10/10)** |
-
-Tauri parece el candidato más corto para reutilizar la UI web cuando su navegación
-sea fiable; egui ya cubre el alcance Linux experimental y requiere validación en
-instalaciones limpias antes de una promoción de producto.
-
-## Siguiente corte recomendado
-
-Crear un artefacto AppImage o `.deb`, probarlo en una instalación Linux limpia y
-añadir una prueba de ventana con Chrome/Chromium real. Después conviene congelar el
-camino pywebview o justificarlo con una ventaja medida; mantener dos launchers Python
-sin evidencia duplica packaging y soporte.
+Do not derive a single readiness score from source files or test declarations.
+An empty execution record is “not run,” not a pass or an estimate.

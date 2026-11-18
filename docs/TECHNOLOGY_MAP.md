@@ -1,36 +1,42 @@
-# Mapa tecnológico y rendimiento de escritorio
+# Technology map and evidence snapshot
 
-## Qué corre dónde
+## Snapshot scope
 
-| Capa | Python | Rust |
-|---|---|---|
-| Dominio y catálogo | `core`, `catalog`, `identity`, `pairing`, `metadata` | Contratos iniciales en `rust/crates/photo-culler-core` |
-| Importación y organización | `importing`, `scanner`, `grouping`, `bursts`, `sessions`, `volumes` | No hay implementación de producto aún |
-| Análisis y decisión | `analysis`, `scoring`, `selection`, `learning`, `validation` | Sólo `AnalysisRequest`, `MetricResult` y el trait `AnalysisEngine` |
-| Imagen y edición | `previews`, `editing`, `restoration`, `generative` | No hay procesadores de imagen aún |
-| Aplicación y entrega | `cli`, `web`, `desktop`, `reports`, `config`, `logging` | CLI experimental y shells `tauri`/`egui` |
+This map describes tracked source at commit
+[`ad1bb99f50b0e46dd60dc2bb2b048291f064335a`](https://github.com/scherenhaenden/photo-culler/commit/ad1bb99f50b0e46dd60dc2bb2b048291f064335a),
+dated 2026-11-18. It is an inventory of repository evidence, not a statement
+that every path was built or exercised on each platform. See
+[`BUILDS.md`](BUILDS.md) for execution records and
+[`DESKTOP_READINESS.md`](DESKTOP_READINESS.md) for platform-specific gates.
 
-Python es hoy el motor de producto: catálogo SQLite, análisis, importación,
-miniaturas, edición, sesiones, grupos y la API FastAPI. Rust no reemplaza esos
-módulos; establece contratos compartidos y contiene prototipos de shells de UI.
-Mover un analizador a Rust sólo está justificado cuando conserve el contrato y
-demuestre una mejora medible de tiempo o memoria con el mismo corpus.
+## Component map
 
-## Comparación de recursos de las superficies Linux
+| Area | Python evidence in snapshot | Rust evidence in snapshot | Status supported by source |
+|---|---|---|---|
+| Domain and catalog | `photo_culler/core/`, `identity/`, `catalog/` | `rust/crates/photo-culler-core/src/lib.rs`; server catalog code under `rust/apps/photo-culler-server/src/catalog/` | Python implementation and Rust domain/catalog modules are tracked. This does not prove schema parity or deployment. |
+| Import and organization | `importing/`, `scanner/`, `pairing/`, `grouping/`, `bursts/`, `sessions/`, `volumes/` | Server import modules under `rust/apps/photo-culler-server/src/import/` | Both code paths are present. The Rust server package is not a workspace member on this snapshot. |
+| Analysis and selection | `analysis/`, `scoring/`, `selection/`, `learning/`, `validation/` | Core analysis contract in `rust/crates/photo-culler-core/`; image primitives in `rust/crates/photo-culler-image-engine/` | Python path is the implemented reference. Rust analyzer parity and corpus agreement are not evidenced here. |
+| Image and editing | `previews/`, `metadata/`, `editing/`, `restoration/`, `generative/` | `photo-culler-image-engine` has metric primitives and `image` JPEG/PNG/TIFF feature declarations | The Rust crate is not evidence of a complete image or RAW pipeline. Its codec feature list does not include a RAW decoder. |
+| API and web UI | `photo_culler/web/` routes, services, templates and static files | Rust server HTTP modules are tracked under `rust/apps/photo-culler-server/src/http/` | Python web is the current reference implementation. Rust route modules require integration and platform validation. |
+| Desktop | `photo_culler/desktop/`, `scripts/build_linux.sh`, desktop tests under `tests/` | `rust/apps/photo-culler-egui/` and `rust/apps/photo-culler-tauri/` | Python and Rust desktop source exists. Source presence alone does not establish package readiness, parity, or clean shutdown. |
+| CLI and NAS | `photo_culler/cli/`, `photo_culler/nas/` | `rust/apps/photo-culler-cli/`; Rust NAS and server modules under `rust/apps/photo-culler-server/src/nas/` | Python commands and NAS path are tracked. Rust CLI/server runtime wiring is not established by the workspace manifest. |
+| Slint/WASM | No Slint implementation is tracked | No `photo-culler-slint` crate or generated WASM frontend is present | Target architecture only; no implementation or build evidence in this snapshot. |
 
-Estas cifras son **rangos orientativos**, no benchmarks del proyecto. Varían con
-el driver, WebKit/Chromium instalado, tamaño de catálogo, resolución y número de
-miniaturas. El análisis de fotos se ejecuta hoy en Python, por lo que su coste es
-prácticamente común a todas las interfaces.
+## Evidence limits
 
-| Superficie | Memoria base esperada | Arranque/UI | Estado para uso |
-|---|---:|---|---|
-| Rust + egui + wgpu | ~80–250 MB | Menor overhead y render nativo | No tiene paridad ni entrega standalone |
-| Rust + Tauri + WebKitGTK | ~200–500 MB | Menor que Chromium, motor del sistema | Prototipo; no recomendado todavía |
-| Chromium aislado | ~400–900 MB | Más procesos y mayor huella | Entrega funcional recomendada |
+- The snapshot workspace lists the core, image-engine, CLI, egui, and Tauri
+  crates in `rust/Cargo.toml`. It does not list the server crate or a Slint
+  crate. Inspect the manifest before treating server source as a runnable app.
+- Rust `.rs` modules and Python package directories establish tracked source,
+  not successful builds, correctness, startup, or cross-platform behavior.
+- The repository contains CI definitions and tests. They are not execution
+  records; exact build and test runs belong in [`BUILDS.md`](BUILDS.md).
+- No resource or performance benchmark is asserted here. Record the machine,
+  OS, architecture, corpus, command, commit, result, and raw output before
+  comparing memory, latency, or throughput.
 
-La alternativa más ligera a largo plazo es egui/wgpu; la alternativa con mejor
-equilibrio previsto entre paridad web y uso de recursos es Tauri; y Chromium es
-la opción completa y verificable disponible hoy. Estas decisiones deben revisarse
-con un benchmark que registre RAM pico, CPU, GPU, tiempo de arranque, latencia de
-galería y corpus/catálogo utilizados.
+## Evidence record
+
+| Snapshot date | Commit | Platform inspected | Inspection performed | Result |
+|---|---|---|---|---|
+| 2026-11-18 | `ad1bb99f50b0e46dd60dc2bb2b048291f064335a` | macOS Darwin arm64 | Tracked-path and manifest review | Source inventory only; no application build or runtime test is claimed. |
