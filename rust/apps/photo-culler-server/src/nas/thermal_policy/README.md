@@ -5,15 +5,19 @@ which are not present in the sprint base. It consumes a `TemperatureSensor`
 port and a monotonic `Clock`, and emits `Pause`/`Resume` actions for the queue
 adapter to persist.
 
-The sensor port currently returns `TemperatureReading { celsius_milli,
-origin, observed_at_ms }` or `SensorFailure::{Unavailable, Invalid}`. Task 53
-can implement this trait directly or map its reading/status DTO to these
-types. Missing, invalid, future-dated, and expired readings use the configured
-`UnavailablePolicy`. `Pause` fails safe by pausing running work with the
-`SensorUnavailable` cause; `HoldLastDecision` preserves the previous thermal
-state. A later valid reading at or below the recovery threshold resumes only
-jobs whose queue state records `ThermalHigh` or `SensorUnavailable` as their
-pause cause.
+Task 53's sensor port is `read(sensor, clock, max_age_ms) -> Reading`, with
+`temperature_celsius: Option<f64>`, status, origin, and age. The server adapter
+should map an `Available` reading with a finite temperature to
+`TemperatureReading`: round Celsius times 1000 into `celsius_milli`, and set
+`observed_at_ms` to the monotonic policy clock minus `age_ms` (saturating at
+zero). Map `Invalid` to `SensorFailure::Invalid`; map `Unavailable(Missing)`,
+`Unavailable(Expired)`, and `Unavailable(Io)` to
+`SensorFailure::Unavailable`. An `Available` reading without a temperature
+maps to `Invalid`. The policy then applies `UnavailablePolicy`: `Pause` fails
+safe by pausing running work with the `SensorUnavailable` cause;
+`HoldLastDecision` preserves the previous thermal state. A later valid reading
+at or below the recovery threshold resumes only jobs whose queue state records
+`ThermalHigh` or `SensorUnavailable` as their pause cause.
 
 Jobs already paused manually are never resumed or overwritten by the thermal
 policy. Temperature thresholds use milli-Celsius sensor values and hysteresis:
