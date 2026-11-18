@@ -49,6 +49,9 @@ impl Invocation {
                 "--verbose" | "-v" => verbose = true,
                 "--dry-run" => dry_run = true,
                 "--no-color" => no_color = true,
+                flag if flag.starts_with('-') && command.is_some() => {
+                    args.push(flag.to_owned());
+                }
                 flag if flag.starts_with('-') => {
                     return Err(CliError::Usage("unknown global option"));
                 }
@@ -255,19 +258,36 @@ fn request_for(invocation: &Invocation) -> Result<Request, CliError> {
                 )),
             )
         }
-        "preselect" => (
-            Method::Post,
-            "/api/v1/preselection".into(),
-            Some(json_arg(
-                "root",
-                arg(0, "preselect PATH needs a directory")?,
-            )),
-        ),
-        "verify" => (
-            Method::Post,
-            "/api/v1/verification".into(),
-            Some(json_arg("path", arg(0, "verify PATH needs a path")?)),
-        ),
+        "preselect" => {
+            let root = json_escape(arg(0, "preselect PATH needs a directory")?);
+            let output =
+                optional_option(&invocation.args, "--output").unwrap_or("preselection.csv");
+            let raw_dir = optional_option(&invocation.args, "--raw-dir").unwrap_or("");
+            let similarity =
+                optional_option(&invocation.args, "--duplicate-similarity").unwrap_or("0.88");
+            (
+                Method::Post,
+                "/api/v1/preselection".into(),
+                Some(format!(
+                    "{{\"root\":\"{root}\",\"output\":\"{}\",\"raw_dir\":\"{}\",\"duplicate_similarity\":\"{}\"}}",
+                    json_escape(output),
+                    json_escape(raw_dir),
+                    json_escape(similarity)
+                )),
+            )
+        }
+        "verify" => {
+            let path = json_escape(arg(0, "verify PATH needs a path")?);
+            let against = optional_option(&invocation.args, "--against").unwrap_or("");
+            (
+                Method::Post,
+                "/api/v1/verification".into(),
+                Some(format!(
+                    "{{\"path\":\"{path}\",\"against\":\"{}\"}}",
+                    json_escape(against)
+                )),
+            )
+        }
         "evaluate" => (
             Method::Post,
             "/api/v1/evaluations".into(),
@@ -334,6 +354,13 @@ fn failure(error: CliError) -> CommandOutput {
 
 fn json_arg(name: &str, value: &str) -> String {
     format!("{{\"{name}\":\"{}\"}}", json_escape(value))
+}
+
+fn optional_option<'a>(args: &'a [String], option: &str) -> Option<&'a str> {
+    args.iter()
+        .position(|argument| argument == option)
+        .and_then(|index| args.get(index + 1))
+        .map(String::as_str)
 }
 
 fn json_escape(value: &str) -> String {
@@ -446,6 +473,49 @@ mod tests {
         assert_eq!(
             server.seen[0].body.as_deref(),
             Some("{\"root\":\"/photos\"}")
+        );
+    }
+
+    #[test]
+    fn decision_options_survive_parsing_and_map_to_bulk_decision_contract() {
+        let inv = Invocation::parse(&args(&[
+            "decisions",
+            "set",
+            "--decision",
+            "keep",
+            "--confirm",
+        ]))
+        .unwrap();
+        let mut server = FixtureServer::default();
+        assert_eq!(execute(&mut server, &inv).exit_code, 0);
+        assert_eq!(server.seen[0].method, Method::Put);
+        assert_eq!(server.seen[0].path, "/api/v1/decisions");
+        assert_eq!(
+            server.seen[0].body.as_deref(),
+            Some("{\"decision\":\"keep\",\"confirmed\":true}")
+        );
+    }
+
+    #[test]
+    fn preselection_arguments_are_forwarded_to_the_rest_contract() {
+        let inv = Invocation::parse(&args(&[
+            "preselect",
+            "/photos",
+            "--output",
+            "/reports/picks.csv",
+            "--raw-dir",
+            "/raw",
+            "--duplicate-similarity",
+            "0.91",
+        ]))
+        .unwrap();
+        let mut server = FixtureServer::default();
+        assert_eq!(execute(&mut server, &inv).exit_code, 0);
+        assert_eq!(
+            server.seen[0].body.as_deref(),
+            Some(
+                "{\"root\":\"/photos\",\"output\":\"/reports/picks.csv\",\"raw_dir\":\"/raw\",\"duplicate_similarity\":\"0.91\"}"
+            )
         );
     }
 
