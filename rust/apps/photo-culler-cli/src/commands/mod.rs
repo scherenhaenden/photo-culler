@@ -143,6 +143,19 @@ pub fn execute(client: &mut impl RestClient, invocation: &Invocation) -> Command
     }
     match request_for(invocation) {
         Err(error) => failure(error),
+        Ok(request) if invocation.dry_run && request.method != Method::Get => CommandOutput {
+            stdout: format!(
+                "dry run: {} {}{}",
+                method_name(request.method),
+                request.path,
+                request
+                    .body
+                    .map(|body| format!(" {body}"))
+                    .unwrap_or_default()
+            ),
+            stderr: String::new(),
+            exit_code: 0,
+        },
         Ok(request) => match client.request(&invocation.server, request) {
             Err(message) => failure(CliError::ServerUnavailable(message)),
             Ok(response) if (200..300).contains(&response.status) => CommandOutput {
@@ -155,6 +168,15 @@ pub fn execute(client: &mut impl RestClient, invocation: &Invocation) -> Command
                 message: response.body,
             }),
         },
+    }
+}
+
+fn method_name(method: Method) -> &'static str {
+    match method {
+        Method::Get => "GET",
+        Method::Post => "POST",
+        Method::Put => "PUT",
+        Method::Delete => "DELETE",
     }
 }
 
@@ -517,6 +539,17 @@ mod tests {
                 "{\"root\":\"/photos\",\"output\":\"/reports/picks.csv\",\"raw_dir\":\"/raw\",\"duplicate_similarity\":\"0.91\"}"
             )
         );
+    }
+
+    #[test]
+    fn dry_run_reports_mutation_without_contacting_server() {
+        let inv = Invocation::parse(&args(&["--dry-run", "scan", "/photos"])).unwrap();
+        assert!(inv.dry_run);
+        let mut server = FixtureServer::default();
+        let out = execute(&mut server, &inv);
+        assert_eq!(out.exit_code, 0);
+        assert!(out.stdout.contains("dry run: POST /api/v1/imports"));
+        assert!(server.seen.is_empty());
     }
 
     #[test]
