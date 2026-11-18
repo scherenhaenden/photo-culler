@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import http from "node:http";
 import { firefox } from "playwright";
 
-const jpeg = Buffer.from("/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9k=", "base64");
+const jpeg = readFileSync(new URL("./tiny.jpg", import.meta.url));
 const wasm = Buffer.from([0, 97, 115, 109, 1, 0, 0, 0]);
 const requests = [];
 const pageHtml = `<!doctype html><html><body><main id="diagnostic" role="alert" aria-live="assertive" hidden><h1 id="diagnostic-title"></h1><p id="diagnostic-message"></p></main><canvas id="canvas" aria-label="Photo Culler"></canvas><p id="result" role="status">loading</p><img id="thumbnail" alt="demo thumbnail"><script type="module" src="/bootstrap.js"></script></body></html>`;
@@ -32,12 +33,12 @@ try {
   browser = await firefox.launch({ headless: true, ...(process.env.FIREFOX_EXECUTABLE ? { executablePath: process.env.FIREFOX_EXECUTABLE } : {}) });
   const page = await browser.newPage();
   page.on("request", request => requests.push({ method: request.method(), path: new URL(request.url()).pathname, origin: new URL(request.url()).origin }));
-  await page.goto(origin, { waitUntil: "networkidle" });
+  await page.goto(origin, { waitUntil: "domcontentloaded" });
   await page.locator("#result").waitFor({ state: "visible" });
   await page.waitForFunction(() => document.querySelector("#result").textContent.startsWith("ready"));
   assert.equal(await page.locator("#thumbnail").evaluate(el => el.naturalWidth), 1);
   assert.equal(await page.locator("#canvas").getAttribute("data-ready"), "true");
-  await page.goto(`${origin}/?fail=1`, { waitUntil: "networkidle" });
+  await page.goto(`${origin}/?fail=1`, { waitUntil: "domcontentloaded" });
   await page.getByRole("alert").waitFor({ state: "visible" });
   assert.match(await page.locator("#diagnostic-title").textContent(), /could not load/i);
   const relevant = requests.filter(entry => entry.path?.startsWith("/api/v1/") || entry.path?.endsWith(".wasm"));
