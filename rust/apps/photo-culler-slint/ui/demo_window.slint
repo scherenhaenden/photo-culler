@@ -1,0 +1,58 @@
+import { Sidebar, StatusPanel, PanelState, ActionButton, DesignTokens } from "./components/components.slint";
+
+export component DemoWindow inherits Window {
+    in property <int> view-state: 0; // 0 loading, 1 ready, 2 empty, 3 error
+    in property <string> photo-name: "demo-001.jpg";
+    in property <string> error-message: "The local service could not be reached.";
+    in property <image> photo-thumbnail;
+    in property <int> photo-index: 0;
+    in property <int> photo-count: 1;
+    in property <string> navigation-label: "Photo 1 of 1";
+    callback retry();
+    callback previous-photo();
+    callback next-photo();
+
+    title: "Photo Culler Demo";
+    preferred-width: 1080px;
+    preferred-height: 720px;
+    background: DesignTokens.canvas;
+
+    HorizontalLayout {
+        spacing: DesignTokens.space-medium;
+        padding: DesignTokens.space-medium;
+        Sidebar { width: 220px; current-index: 0; navigate(index) => { } }
+
+        VerticalLayout {
+            spacing: DesignTokens.space-medium;
+            Text { text: "Demo gallery"; color: DesignTokens.foreground; font-size: DesignTokens.text-heading; }
+
+            if root.view-state == 0: StatusPanel {
+                state: PanelState.loading;
+                title: "Loading gallery";
+                detail: "Connecting to the local Photo Culler service…";
+            }
+            if root.view-state == 2: StatusPanel {
+                state: PanelState.empty;
+                title: "No photos yet";
+                detail: "The selected gallery contains no photos.";
+            }
+            if root.view-state == 3: StatusPanel {
+                state: PanelState.error;
+                title: "Gallery unavailable";
+                detail: root.error-message;
+                retry => { root.retry(); }
+            }
+            if root.view-state == 1: VerticalLayout {
+                spacing: DesignTokens.space-small;
+                Text { text: root.photo-name; color: DesignTokens.foreground; font-size: DesignTokens.text-body; }
+                Image { source: root.photo-thumbnail; image-fit: contain; min-height: 420px; }
+                HorizontalLayout {
+                    ActionButton { label: "Previous"; enabled: root.photo-index > 0; clicked => { root.previous-photo(); } }
+                    Text { text: root.navigation-label; color: DesignTokens.muted; vertical-alignment: center; }
+                    ActionButton { label: "Next"; enabled: root.photo-index + 1 < root.photo-count; clicked => { root.next-photo(); } }
+                    ActionButton { label: "Retry"; primary: false; clicked => { root.retry(); } }
+                }
+            }
+        }
+    }
+}
