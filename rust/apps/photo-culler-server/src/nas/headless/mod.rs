@@ -5,7 +5,7 @@
 //! with `rustc --test`; the server integrator can adapt these contracts to the
 //! eventual Axum runtime and shared API types.
 
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BindAddress {
@@ -75,12 +75,26 @@ impl HeadlessConfig {
     /// Writable paths are owned by the service; original files remain read-only.
     pub fn permits_write(&self, path: &Path) -> bool {
         path == self.catalog_path
-            || path.starts_with(&self.cache_path)
+            || lexically_within(path, &self.cache_path)
             || self
                 .authorized_destinations
                 .iter()
-                .any(|root| path.starts_with(root))
+                .any(|root| lexically_within(path, root))
     }
+}
+
+/// Reject dot and parent components before applying a lexical root check.
+/// The runtime adapter must additionally canonicalize paths and guard symlinks.
+fn lexically_within(path: &Path, root: &Path) -> bool {
+    path.is_absolute()
+        && root.is_absolute()
+        && path
+            .components()
+            .all(|part| !matches!(part, Component::ParentDir | Component::CurDir))
+        && root
+            .components()
+            .all(|part| !matches!(part, Component::ParentDir | Component::CurDir))
+        && path.starts_with(root)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -191,6 +205,8 @@ mod tests {
         let cfg = config();
         assert!(!cfg.permits_write(Path::new("/photos/original.nef")));
         assert!(!cfg.permits_write(Path::new("/cache-escape/evil")));
+        assert!(!cfg.permits_write(Path::new("/exports/../photos/evil.jpg")));
+        assert!(!cfg.permits_write(Path::new("/exports/sub/../../photos/evil.jpg")));
         assert!(cfg.permits_write(Path::new("/cache/thumbs/a.jpg")));
         assert!(cfg.permits_write(Path::new("/exports/selected.jpg")));
         assert!(cfg.permits_write(Path::new("/state/catalog.sqlite")));

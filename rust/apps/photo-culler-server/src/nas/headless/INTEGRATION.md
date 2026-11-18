@@ -32,3 +32,7 @@ The catalog callback in the harness is a double for the startup boundary, not
 a persistence implementation. LAN token handling is likewise an opaque
 credential-presence check; secret loading, hashing, and session validation
 belong to the shared authentication layer.
+
+The write-scope helper rejects lexical `.` and `..` traversal. The filesystem
+adapter must still canonicalize configured roots and candidate paths and
+protect against symlinks before opening any writable file.
