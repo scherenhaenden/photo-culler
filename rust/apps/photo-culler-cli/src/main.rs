@@ -3,6 +3,8 @@ use std::{env, path::Path, process::ExitCode};
 use photo_culler_core::{Frontend, StorageBackend};
 use photo_culler_image_engine::analyze_path;
 
+pub mod commands;
+
 fn usage() {
     println!("photo-culler-rs <status|backends|frontends|analyze PATH [MAX_DIMENSION]>");
     println!("MAX_DIMENSION defaults to 1920; 0 also uses the default bound.");

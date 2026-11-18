@@ -12,6 +12,16 @@ pub mod algorithms {
     pub mod edges;
     pub mod fft;
 }
+pub mod analyzers {
+    pub mod composition;
+    pub mod detail;
+    pub mod tone;
+}
+pub mod decode;
+pub mod editing {
+    pub mod render;
+}
+pub mod metadata;
 pub mod metrics;
 
 pub use metrics::PixelFeatures;

@@ -2,6 +2,12 @@
 
 use std::{fmt, path::PathBuf, str::FromStr};
 
+pub mod grouping;
+pub mod scoring;
+pub mod selection {
+    pub mod preselect;
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StorageBackend {
     Sqlite,

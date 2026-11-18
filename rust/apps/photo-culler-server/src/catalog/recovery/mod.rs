@@ -66,8 +66,10 @@ fn integrity(db: &Db) -> io::Result<()> {
         vals: *mut *mut c_char,
         _: *mut *mut c_char,
     ) -> c_int {
-        if n == 1 && !(*vals).is_null() && CStr::from_ptr(*vals).to_bytes() == b"ok" {
-            *(arg as *mut bool) = true;
+        unsafe {
+            if n == 1 && !(*vals).is_null() && CStr::from_ptr(*vals).to_bytes() == b"ok" {
+                *(arg as *mut bool) = true;
+            }
         }
         0
     }
@@ -293,11 +295,13 @@ mod tests {
             vals: *mut *mut c_char,
             _: *mut *mut c_char,
         ) -> c_int {
-            if n == 2
-                && CStr::from_ptr(*vals).to_bytes() == b"selected-1"
-                && CStr::from_ptr(*vals.add(1)).to_bytes() == b"recipe-1"
-            {
-                *(arg as *mut bool) = true;
+            unsafe {
+                if n == 2
+                    && CStr::from_ptr(*vals).to_bytes() == b"selected-1"
+                    && CStr::from_ptr(*vals.add(1)).to_bytes() == b"recipe-1"
+                {
+                    *(arg as *mut bool) = true;
+                }
             }
             0
         }
