@@ -1,0 +1,10 @@
+id = "40"
+name = "Explicit derived export"
+base = "ad1bb99f50b0e46dd60dc2bb2b048291f064335a"
+owned_paths = ["rust/apps/photo-culler-server/src/editing/export/", "migration/tasks/40.toml"]
+imports = ["std::collections::BTreeSet"]
+modules = ["editing::export"]
+http_routes = []
+cargo_dependencies = []
+test_commands = ["rust/apps/photo-culler-server/src/editing/export/test-standalone.sh --offline"]
+integration = "Register module and connect the approved destination root, rendered-derived adapter, persistent provenance/report, REST plan-review-apply flow, and real W:O:A context source."
