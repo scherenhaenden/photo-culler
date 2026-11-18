@@ -1,0 +1,4 @@
+jpeg_path,raw_path,group,selected,representative_jpeg,quality,similarity
+"/photos/DSC, 0001.jpg","/raw/DSC, 0001.NEF",burst-0001,no,"/photos/DSC, 0002.jpg",0.7000,0.9914
+"/photos/DSC, 0002.jpg","/raw/DSC, 0002.ARW",burst-0001,yes,"/photos/DSC, 0002.jpg",0.8000,1.0000
+/photos/solo.jpg,,burst-0002,yes,/photos/solo.jpg,0.6500,1.0000
