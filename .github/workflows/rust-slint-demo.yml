@@ -34,7 +34,7 @@ jobs:
           mkdir -p artifacts/macos-arm64
           recipe=migration/demo/build/macos/build.sh
           if [[ -f "$recipe" ]]; then
-            bash "$recipe" artifacts/macos-arm64
+            bash "$recipe" --build artifacts/macos-arm64 "$PWD"
             status=built
           else
             echo "D18 recipe is not integrated yet; artifact is a build-status manifest only."
@@ -63,7 +63,7 @@ jobs:
           mkdir -p artifacts/linux-x64
           recipe=migration/demo/build/linux/build.sh
           if [[ -f "$recipe" ]]; then
-            bash "$recipe" artifacts/linux-x64
+            bash "$recipe" --build artifacts/linux-x64 "$PWD"
             status=built
           else
             echo "D29 recipe is not integrated yet; artifact is a build-status manifest only."
@@ -94,7 +94,7 @@ jobs:
           New-Item -ItemType Directory -Force artifacts/windows-x64 | Out-Null
           $recipe = 'migration/demo/build/windows/build.ps1'
           if (Test-Path $recipe) {
-            & $recipe artifacts/windows-x64
+            & $recipe -Mode Build -OutputDirectory artifacts/windows-x64 -WorkspaceRoot $PWD
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             $status = 'built'
           } else {
