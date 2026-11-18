@@ -1,0 +1,10 @@
+id = "42"
+name = "Typed REST client and shared presentation state"
+base = "ad1bb99f50b0e46dd60dc2bb2b048291f064335a"
+owned_paths = ["rust/crates/photo-culler-client/src/", "rust/crates/photo-culler-client/test-standalone.sh", "migration/tasks/42.toml"]
+imports = ["serde::{Deserialize, Serialize}", "serde_json"]
+modules = ["photo_culler_client"]
+http_routes = ["GET /api/v1/galleries/{gallery_id}/photos"]
+cargo_dependencies = ["serde with derive", "serde_json"]
+test_commands = ["sh rust/crates/photo-culler-client/test-standalone.sh --offline"]
+integration = "Add photo-culler-client to the workspace and declare dependencies in Cargo.toml/Cargo.lock; align gallery DTO and routes with frozen API contracts; provide native HTTP and browser Fetch Transport adapters and connect shared presentation state to Slint controllers."

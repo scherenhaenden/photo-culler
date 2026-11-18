@@ -1,0 +1,91 @@
+import { ScrollView } from "std-widgets.slint";
+
+export struct SessionItem {
+    id: string,
+    name: string,
+    photo_count_label: string,
+    state: string,
+    selected: bool,
+}
+
+export struct SourceItem {
+    name: string,
+    state: string,
+}
+
+export struct JobItem {
+    label: string,
+    state: string,
+}
+
+export component CatalogSessionsPanel inherits Rectangle {
+    in property <string> total_summary;
+    in property <int> session_count;
+    in property <int> connected_sources;
+    in property <int> disconnected_sources;
+    in property <int> missing_sources;
+    in property <string> empty_message;
+    in property <[SessionItem]> sessions;
+    in property <[SourceItem]> sources;
+    in property <[JobItem]> recent_jobs;
+    callback select_session(string);
+
+    background: #17191d;
+    border-radius: 8px;
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+
+        Text {
+            text: "Catálogo";
+            color: #f4f4f5;
+            font-size: 20px;
+            font-weight: 700;
+        }
+        Text {
+            text: root.total_summary;
+            color: #c6c8cc;
+        }
+        if root.empty_message != "": Text {
+            text: root.empty_message;
+            color: #d6d7da;
+        }
+
+        Text { text: "Sesiones"; color: #f4f4f5; font-weight: 600; }
+        ScrollView {
+            height: 180px;
+            VerticalLayout {
+                for session in root.sessions: TouchArea {
+                    clicked => { root.select_session(session.id); }
+                    Rectangle {
+                        height: 44px;
+                        background: session.selected ? #343a46 : #22252a;
+                        border-radius: 5px;
+                        HorizontalLayout {
+                            padding: 8px;
+                            spacing: 8px;
+                            Text { text: session.name; color: #f4f4f5; horizontal-stretch: 1; }
+                            Text { text: session.photo_count_label + " · " + session.state; color: #c6c8cc; }
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: "Fuentes · " + root.connected_sources + " conectadas · " + root.disconnected_sources + " desconectadas · " + root.missing_sources + " ausentes";
+            color: #c6c8cc;
+        }
+        for source in root.sources: Text {
+            text: source.name + " · " + source.state;
+            color: source.state == "Conectada" ? #a9d7b4 : #f0bd86;
+        }
+
+        Text { text: "Trabajos recientes"; color: #f4f4f5; font-weight: 600; }
+        for job in root.recent_jobs: Text {
+            text: job.label + " · " + job.state;
+            color: #c6c8cc;
+        }
+    }
+}
