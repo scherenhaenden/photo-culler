@@ -1,0 +1,101 @@
+import { Button } from "std-widgets.slint";
+
+export component JobsPanel inherits Rectangle {
+    in property <string> job-id: "";
+    in property <string> job-kind: "";
+    in property <string> job-status: "Sin trabajo";
+    in property <string> phase: "";
+    in property <string> progress-label: "";
+    in property <string> connection-label: "Conectado";
+    in property <string> error-message: "";
+    in property <float> progress: 0.0;
+    in property <bool> connected: true;
+    in property <bool> can-pause: false;
+    in property <bool> can-resume: false;
+    in property <bool> can-cancel: false;
+
+    callback pause-requested();
+    callback resume-requested();
+    callback cancel-requested();
+    callback refresh-requested();
+
+    background: #20242b;
+    border-radius: 8px;
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: root.job-kind + " · " + root.job-status;
+                color: #f3f5f7;
+                font-size: 18px;
+                vertical-alignment: center;
+            }
+            Text {
+                text: root.connection-label;
+                color: root.connected ? #8fd694 : #ffb36b;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+            }
+        }
+
+        Text {
+            text: root.job-id == "" ? "No hay un trabajo seleccionado" : "Trabajo " + root.job-id;
+            color: #c7ccd3;
+        }
+        Text {
+            text: root.phase;
+            color: #c7ccd3;
+        }
+
+        Rectangle {
+            height: 8px;
+            background: #353b45;
+            border-radius: 4px;
+            clip: true;
+            Rectangle {
+                width: parent.width * root.progress;
+                height: parent.height;
+                background: #5c9ded;
+                border-radius: 4px;
+            }
+        }
+
+        Text {
+            text: root.progress-label;
+            color: #f3f5f7;
+        }
+        if root.error-message != "" : Text {
+            text: root.error-message;
+            color: #ffb36b;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            Button {
+                text: "Pausar";
+                enabled: root.connected && root.can-pause;
+                clicked => { root.pause-requested(); }
+            }
+            Button {
+                text: "Reanudar";
+                enabled: root.connected && root.can-resume;
+                clicked => { root.resume-requested(); }
+            }
+            Button {
+                text: "Cancelar";
+                enabled: root.connected && root.can-cancel;
+                clicked => { root.cancel-requested(); }
+            }
+            Button {
+                text: "Sincronizar";
+                enabled: root.connected;
+                clicked => { root.refresh-requested(); }
+            }
+        }
+    }
+}
