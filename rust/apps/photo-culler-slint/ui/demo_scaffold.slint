@@ -1,0 +1,26 @@
+import { Sidebar, StatusPanel, PanelState } from "./components/components.slint";
+
+export component DemoScaffold inherits Window {
+    title: "Photo Culler";
+    preferred-width: 1080px;
+    preferred-height: 720px;
+    background: #f5f6f8;
+
+    HorizontalLayout {
+        spacing: 16px;
+        padding: 20px;
+
+        Sidebar {
+            width: 220px;
+            current-index: 0;
+            navigate(index) => { }
+        }
+
+        StatusPanel {
+            state: PanelState.loading;
+            title: "Loading gallery";
+            detail: "Connecting to the local Photo Culler service…";
+            retry => { }
+        }
+    }
+}
