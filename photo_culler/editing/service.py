@@ -8,11 +8,12 @@ from collections import OrderedDict
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageOps
 from sqlalchemy import select
 
 from photo_culler.catalog.database import Database
 from photo_culler.catalog.schema import EditDocumentDB, FileDB, PhotoDB, utc_now
+from photo_culler.previews.generator import PreviewGenerator
 
 DEFAULT_RECIPE: dict[str, float | int] = {
     "exposure": 0.0,
@@ -117,16 +118,7 @@ class EditService:
         recipe = document["recipe"]
         assert isinstance(recipe, dict)
         try:
-            try:
-                opened = Image.open(source)
-            except Exception:
-                from photo_culler.previews.generator import extract_embedded_jpeg
-                jpeg_bytes = extract_embedded_jpeg(source)
-                if jpeg_bytes:
-                    opened = Image.open(io.BytesIO(jpeg_bytes))
-                else:
-                    raise
-
+            opened = PreviewGenerator._load_image(source)
             with opened:
                 image = ImageOps.exif_transpose(opened).convert("RGB")
                 image.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)

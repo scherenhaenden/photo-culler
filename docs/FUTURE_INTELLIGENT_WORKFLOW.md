@@ -34,6 +34,25 @@ La afirmación de que un modelo "domina" no es suficiente para incorporarlo: los
 
 Antes de adoptar un candidato se necesita un benchmark reproducible: RAW/JPEG reales de conciertos con ISO alto, movimiento, focos recortados y piel/instrumentos; métricas de rendimiento y una revisión ciega de fidelidad por el fotógrafo. Las afirmaciones de reducción de cómputo o superioridad publicadas por cada autor se tratarán como hipótesis a validar en ese benchmark, no como garantía del producto.
 
+## Experimento actual: sugerencias RawTherapee después del cull
+
+El módulo `photo_culler.restoration.rawtherapee.RawTherapeeProfileSuggester` ya
+permite probar el primer eslabón sin instalar pesos ni procesar imágenes fuera
+del equipo. Convierte las métricas existentes de exposición, clipping, ruido,
+foco y blur en un texto `.pp3` parcial y explicable. Sugiere corrección de
+exposición, compresión de luces/sombras, denoise conservador y enfoque solo si
+no hay ruido fuerte ni blur direccional. No guarda sidecars ni edita RAWs: la
+UI/CLI futura deberá mostrar razones, avisos y una previsualización para que el
+fotógrafo decida guardar o aplicar el perfil.
+
+El perfil **Technical Precision** incluye además dos mediciones visuales: una
+estimación de nivel basada en líneas horizontales y el centro del peso visual
+basado en detalle/contraste. La sugerencia expone giro y recorte como
+coordenadas normalizadas, pero no los inserta a ciegas en el `.pp3`: el
+fotógrafo debe poder ajustar el encuadre en una previsualización. Esto no es
+todavía detección semántica de personas; esa parte debe usar un modelo local y
+ser evaluada con un corpus antes de tratarla como una recomendación fiable.
+
 ## Arquitectura propuesta
 
 Cada integración de IA vive detrás de un proveedor `RestorationEngine`: `analyze`, `suggest_recipe`, `render_preview` y `export_derivative`. El catálogo guarda el proveedor, versión, parámetros, checksum de entrada y receta/salida. Esto permite comparar modelos, desactivar uno y reproducir un resultado sin contaminar los originales.

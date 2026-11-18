@@ -33,7 +33,7 @@ class MetadataExtractor:
                     # Orientation
                     try:
                         orientation = int(exif_data.get("Orientation", 1))
-                    except TypeError, ValueError:
+                    except (TypeError, ValueError):
                         orientation = 1
 
                     # Camera make & model
@@ -55,7 +55,7 @@ class MetadataExtractor:
                     if fnum is not None:
                         try:
                             aperture = float(fnum)
-                        except TypeError, ValueError:
+                        except (TypeError, ValueError):
                             pass
 
                     # Shutter Speed (ExposureTime)
@@ -63,7 +63,7 @@ class MetadataExtractor:
                     if exp_time is not None:
                         try:
                             shutter_speed = str(exp_time)
-                        except TypeError, ValueError:
+                        except (TypeError, ValueError):
                             pass
 
                     # Focal Length
@@ -71,7 +71,7 @@ class MetadataExtractor:
                     if focal is not None:
                         try:
                             focal_length = float(focal)
-                        except TypeError, ValueError:
+                        except (TypeError, ValueError):
                             pass
 
                     # Date Time Original

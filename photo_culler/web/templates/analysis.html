@@ -73,6 +73,9 @@
     <button type="button" class="btn btn-secondary" id="group-similar-button" onclick="groupSimilarPhotos()">Agrupar ahora</button>
   </div>
   <div id="group-similar-status" class="status-note" style="padding:0 1.1rem 1rem;"></div>
+  <div id="group-similar-progress" style="display:none;padding:0 1.1rem 1rem;">
+    <div style="background:var(--bg-main);border-radius:4px;height:10px;overflow:hidden;border:1px solid var(--border-color);"><div id="group-similar-progress-bar" style="background:var(--accent-teal);height:100%;width:0%;transition:width .1s ease;"></div></div>
+  </div>
 </section>
 
 <div id="progress-container" style="margin-top:1rem;background:var(--bg-card);padding:1.25rem;border-radius:8px;border:1px solid var(--border-color);display:none;">
@@ -100,6 +103,7 @@
   let profiles = {{ profiles | tojson }};
   let selectedId = profiles.length ? profiles[0].id : null;
   let eventSource = null;
+  let groupingEventSource = null;
 
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, char => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
@@ -322,19 +326,40 @@
   async function groupSimilarPhotos() {
     const button = document.getElementById("group-similar-button");
     const status = document.getElementById("group-similar-status");
-    button.disabled = true;
-    button.textContent = "Agrupando…";
     status.className = "status-note";
     try {
       const result = await api("/analysis/group-similar", {method:"POST"});
-      status.innerHTML = `${result.groups} grupos creados · ${result.grouped_photos} fotos agrupadas${result.skipped ? ` · ${result.skipped} sin archivo disponible` : ""}. ${result.groups ? '<a href="/groups">Ver grupos →</a>' : ""}`;
+      status.textContent = result.message;
+      watchSimilarityGrouping();
     } catch (error) {
       status.className = "status-note error";
       status.textContent = error.message;
-    } finally {
-      button.disabled = false;
-      button.textContent = "Agrupar ahora";
     }
+  }
+
+  function watchSimilarityGrouping() {
+    if (groupingEventSource) groupingEventSource.close();
+    const button = document.getElementById("group-similar-button");
+    const status = document.getElementById("group-similar-status");
+    const progress = document.getElementById("group-similar-progress");
+    const bar = document.getElementById("group-similar-progress-bar");
+    groupingEventSource = new EventSource("/analysis/group-similar/progress");
+    groupingEventSource.onmessage = event => {
+      const data = JSON.parse(event.data);
+      const active = data.status === "running";
+      button.disabled = active;
+      button.textContent = active ? "Agrupando…" : "Agrupar ahora";
+      progress.style.display = active ? "block" : "none";
+      bar.style.width = `${data.progress || 0}%`;
+      if (active) status.textContent = data.message;
+      if (data.status === "completed") {
+        status.innerHTML = `${data.groups} grupos guardados · ${data.grouped_photos} fotos agrupadas${data.skipped ? ` · ${data.skipped} sin archivo disponible` : ""}. ${data.groups ? '<a href="/groups">Ver grupos →</a>' : ""}`;
+        groupingEventSource.close(); groupingEventSource = null;
+      } else if (data.status === "failed") {
+        status.className = "status-note error"; status.textContent = data.message;
+        groupingEventSource.close(); groupingEventSource = null;
+      }
+    };
   }
 
   function controlAnalysis(action) {

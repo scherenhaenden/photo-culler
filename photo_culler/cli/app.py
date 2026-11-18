@@ -14,12 +14,14 @@ from .commands.evaluate_cmd import evaluate_command
 from .commands.group_cmd import group_command
 from .commands.init_cmd import init_command
 from .commands.photos_cmd import photos_command
+from .commands.preselect_cmd import preselect_command
 from .commands.report_cmd import report_command
 from .commands.scan_cmd import scan_command
 from .commands.sessions_cmd import sessions_command
 from .commands.verify_cmd import verify_command
 from .commands.volumes_cmd import volumes_command
 from .commands.web_cmd import web_app
+from .commands.nas_cmd import nas_app
 from .context import CliContext
 
 app = typer.Typer(
@@ -35,6 +37,7 @@ app.command("scan")(scan_command)
 app.command("verify")(verify_command)
 app.command("volumes")(volumes_command)
 app.command("photos")(photos_command)
+app.command("preselect")(preselect_command)
 app.command("analyze")(analyze_command)
 app.command("evaluate")(evaluate_command)
 app.command("group")(group_command)
@@ -45,6 +48,7 @@ app.command("report")(report_command)
 app.command("config")(config_command)
 app.add_typer(web_app, name="web")
 app.add_typer(desktop_app, name="desktop")
+app.add_typer(nas_app, name="nas")
 
 
 @app.callback()
