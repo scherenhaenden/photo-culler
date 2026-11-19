@@ -17,7 +17,9 @@ decoded and published `demo-001.jpg` to the Library view. The screenshot loop
 then retries for up to 20 seconds until it detects the fixture's yellow sun and
 blue sky together inside the central upper gallery viewport, proving that
 Slint painted the thumbnail. The pixel scan excludes the sidebar, filter
-controls, and transparent window edges. It then:
+controls, and transparent window edges. On Linux, the loop also retries X11
+window discovery while the native window is being mapped. Timeout evidence
+includes process liveness and the final full X11 window tree. It then:
 
 1. Probes health, gallery JSON, and the real JPEG content type.
 2. Captures the visible Slint window at the runner's native viewport.

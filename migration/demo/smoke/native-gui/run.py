@@ -22,6 +22,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+class WindowNotVisibleError(RuntimeError):
+    """No visible native window was discovered on this capture attempt."""
+
+    def __init__(self, message, diagnostic=None):
+        super().__init__(message)
+        self.diagnostic = diagnostic or {}
+
+
 def call(args, timeout=15, check=True):
     result = subprocess.run(args, check=False, capture_output=True, text=True, timeout=timeout)
     if check and result.returncode:
@@ -192,10 +200,20 @@ def capture_visible_gallery(platform_name, pid, image, timeout=15):
     attempts = 0
     latest = None
     latest_window = None
+    last_window_error = None
+    last_window_diagnostic = None
     minimum = (800, 500) if platform_name == "windows" else (1000, 650)
     while time.monotonic() < deadline:
         attempts += 1
-        latest_window = capture(platform_name, pid, image)
+        try:
+            latest_window = capture(platform_name, pid, image)
+            last_window_error = None
+            last_window_diagnostic = None
+        except WindowNotVisibleError as error:
+            last_window_error = str(error)
+            last_window_diagnostic = error.diagnostic
+            time.sleep(.5)
+            continue
         header = image.read_bytes()[:24]
         if (header[:8] != b"\x89PNG\r\n\x1a\n" or header[12:16] != b"IHDR"
                 or image.stat().st_size < 10000):
@@ -212,10 +230,24 @@ def capture_visible_gallery(platform_name, pid, image, timeout=15):
             return latest_window, dimensions, latest
         time.sleep(.5)
     readiness = image.with_name("screenshot-content-readiness.json")
-    readiness.write_text(json.dumps({"attempts": attempts, "last_capture": latest}, indent=2) + "\n")
+    linux_debug = image.parent / "linux-window-debug.txt"
+    platform_diagnostics = {"process_alive_at_timeout": alive(pid)}
+    if platform_name == "linux" and linux_debug.exists():
+        platform_diagnostics.update({
+            "linux_window_debug_path": str(linux_debug),
+            "linux_window_debug": linux_debug.read_text(errors="replace"),
+        })
+    readiness.write_text(json.dumps({
+        "attempts": attempts,
+        "last_capture": latest,
+        "last_window_error": last_window_error,
+        "last_window_diagnostic": last_window_diagnostic,
+        "platform_diagnostics": platform_diagnostics,
+    }, indent=2) + "\n")
     raise RuntimeError(
-        f"Slint window never painted the demo fixture thumbnail after {attempts} captures; "
-        f"last gallery pixels={latest} (diagnostic: {readiness})"
+        f"Slint window never painted the demo fixture thumbnail after {attempts} attempts; "
+        f"last gallery pixels={latest}; last window discovery error={last_window_error!r} "
+        f"(diagnostic: {readiness})"
     )
 
 
@@ -307,7 +339,8 @@ def capture(platform_name, pid, output):
             xwininfo.stdout,
             xwininfo.stderr,
         ]
-        (output.parent / "linux-window-debug.txt").write_text("\n".join(debug_lines))
+        debug_path = output.parent / "linux-window-debug.txt"
+        debug_path.write_text("\n".join(debug_lines))
         candidates = [window for window in x11_windows
                       if "photo culler" in window["title"].casefold()
                       and "photo-culler-desktop" in window["resource_name"].casefold()
@@ -316,9 +349,16 @@ def capture(platform_name, pid, output):
                       and window["geometry"]["width"] >= 1000
                       and window["geometry"]["height"] >= 650]
         if not candidates:
-            raise RuntimeError(
+            raise WindowNotVisibleError(
                 f"no visible titled X11 Photo Culler child for desktop PID {pid}; "
-                f"pid-search={by_pid.stdout.strip()!r}; xwininfo-windows={x11_windows!r}"
+                f"pid-search={by_pid.stdout.strip()!r}; xwininfo-windows={x11_windows!r}",
+                {
+                    "desktop_process_alive": alive(pid),
+                    "xwininfo_exit": xwininfo.returncode,
+                    "xwininfo_tree": xwininfo.stdout,
+                    "xwininfo_stderr": xwininfo.stderr,
+                    "linux_window_debug_path": str(debug_path),
+                },
             )
         wid = max(candidates, key=lambda window: window["geometry"]["width"]
                   * window["geometry"]["height"])
