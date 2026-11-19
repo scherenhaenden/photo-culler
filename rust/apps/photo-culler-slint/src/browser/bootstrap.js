@@ -36,6 +36,11 @@ async function start() {
     const app = await import("./photo_culler_slint.js");
     await app.default();
   } catch (error) {
+    // Winit uses this exception to hand control to the browser event loop.
+    // Slint's web example treats it as successful startup, not a load failure.
+    if (String(error).includes("Using exceptions for control flow, don't mind me")) {
+      return;
+    }
     console.error("Photo Culler WebAssembly initialization failed:", error);
     showDiagnostic(
       "Photo Culler could not load its web application",
