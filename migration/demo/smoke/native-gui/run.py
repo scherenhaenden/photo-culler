@@ -7,6 +7,7 @@ import json
 import os
 import platform
 import queue
+import re
 import shutil
 import struct
 import subprocess
@@ -266,6 +267,29 @@ def capture(platform_name, pid, output):
                 "geometry": geometry,
             })
         xwininfo = call(["xwininfo", "-root", "-tree"], check=False)
+        x11_windows = []
+        window_pattern = re.compile(
+            r'^\s*(0x[0-9a-fA-F]+)\s+"([^"]*)":\s+\("([^"]*)"\s+"([^"]*)"\)\s+'
+            r'(\d+)x(\d+)\+(-?\d+)\+(-?\d+)'
+        )
+        for line in xwininfo.stdout.splitlines():
+            match = window_pattern.match(line)
+            if not match:
+                continue
+            xid, title, resource_name, class_name, width, height, x, y = match.groups()
+            window_id = str(int(xid, 16))
+            window_info = call(["xwininfo", "-id", xid], check=False)
+            window_pid_text = call(["xdotool", "getwindowpid", window_id], check=False).stdout.strip()
+            x11_windows.append({
+                "window_id": window_id,
+                "xid": xid,
+                "title": title,
+                "resource_name": resource_name,
+                "class_name": class_name,
+                "pid": int(window_pid_text) if window_pid_text.isdigit() else None,
+                "viewable": "Map State: IsViewable" in window_info.stdout,
+                "geometry": {"x": int(x), "y": int(y), "width": int(width), "height": int(height)},
+            })
         debug_lines = [
             f"DISPLAY={os.environ.get('DISPLAY', '')}",
             f"WAYLAND_DISPLAY={os.environ.get('WAYLAND_DISPLAY', '')}",
@@ -274,25 +298,26 @@ def capture(platform_name, pid, output):
             f"pid_search={by_pid.stdout.strip()!r}",
             f"visible_search={all_visible.stdout.strip()!r}",
             f"visible_windows={windows!r}",
+            f"xwininfo_windows={x11_windows!r}",
             f"xwininfo_exit={xwininfo.returncode}",
             xwininfo.stdout,
             xwininfo.stderr,
         ]
         (output.parent / "linux-window-debug.txt").write_text("\n".join(debug_lines))
-        title_candidates = [window for window in windows
-                            if "photo culler" in window["title"].casefold()]
-        pid_candidates = [window for window in title_candidates if window["pid"] == pid]
-        candidates = pid_candidates or title_candidates
-        candidates = [window for window in candidates
-                      if window["geometry"].get("width", 0) >= 1000
-                      and window["geometry"].get("height", 0) >= 650]
+        candidates = [window for window in x11_windows
+                      if "photo culler" in window["title"].casefold()
+                      and "photo-culler-desktop" in window["resource_name"].casefold()
+                      and window["viewable"]
+                      and (window["pid"] is None or window["pid"] == pid)
+                      and window["geometry"]["width"] >= 1000
+                      and window["geometry"]["height"] >= 650]
         if not candidates:
             raise RuntimeError(
-                f"no visible X11 Photo Culler window for desktop PID {pid}; "
-                f"pid-search={by_pid.stdout.strip()!r}; visible-windows={windows!r}"
+                f"no visible titled X11 Photo Culler child for desktop PID {pid}; "
+                f"pid-search={by_pid.stdout.strip()!r}; xwininfo-windows={x11_windows!r}"
             )
-        wid = max(candidates, key=lambda window: window["geometry"].get("width", 0)
-                  * window["geometry"].get("height", 0))
+        wid = max(candidates, key=lambda window: window["geometry"]["width"]
+                  * window["geometry"]["height"])
         window_id = wid["window_id"]
         call(["xdotool", "windowactivate", "--sync", window_id])
         time.sleep(.75)
