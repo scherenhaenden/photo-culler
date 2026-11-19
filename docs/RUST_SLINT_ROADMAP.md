@@ -158,6 +158,8 @@ CLI Rust ────── API o servicios Rust ──────────�
 
 ## Ensamblaje y entrega
 
+El [plan de la primera demo Rust y Slint](rust-slint-demo/README.md) desglosa la etapa 1 en 34 fichas e incluye arranque nativo en macOS, Linux y Windows, además del navegador.
+
 Las etapas siguientes ordenan **los merges de integración y las pruebas de extremo a extremo**. El trabajo de las 64 fichas ya puede estar en marcha desde el commit común. Los scripts, guías y pruebas que esperan un artefacto real se desarrollan con su sustituto y se reejecutan cuando llega el artefacto.
 
 | Etapa | Qué se conecta | Evidencia para avanzar |
