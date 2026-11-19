@@ -35,7 +35,8 @@ async function start() {
   try {
     const app = await import("./photo_culler_slint.js");
     await app.default();
-  } catch (_) {
+  } catch (error) {
+    console.error("Photo Culler WebAssembly initialization failed:", error);
     showDiagnostic(
       "Photo Culler could not load its web application",
       "The WebAssembly interface could not initialize. Reload this page or open Photo Culler Desktop.",

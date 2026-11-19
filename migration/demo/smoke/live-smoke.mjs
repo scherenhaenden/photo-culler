@@ -41,6 +41,7 @@ export async function runLiveSmoke(browserName) {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
     const responses = [];
     const pageErrors = [];
+    const consoleErrors = [];
     page.on("response", (response) => {
       const url = new URL(response.url());
       if (MIME_BY_PATH.has(url.pathname)) {
@@ -53,6 +54,9 @@ export async function runLiveSmoke(browserName) {
       }
     });
     page.on("pageerror", (error) => pageErrors.push(error.message));
+    page.on("console", (message) => {
+      if (message.type() === "error") consoleErrors.push(message.text());
+    });
 
     await page.goto(origin, { waitUntil: "domcontentloaded" });
     await page.waitForFunction(
@@ -63,7 +67,14 @@ export async function runLiveSmoke(browserName) {
     const status = page.locator("#application-status");
     assert.equal(await status.getAttribute("data-state"), "ready");
     assert.match(await status.textContent(), /demo-001\.jpg/);
-    assert.equal(await page.locator("#diagnostic").isVisible(), false);
+    const diagnosticVisible = await page.locator("#diagnostic").isVisible();
+    const diagnosticTitle = await page.locator("#diagnostic-title").textContent();
+    const diagnosticMessage = await page.locator("#diagnostic-message").textContent();
+    assert.equal(
+      diagnosticVisible,
+      false,
+      `bootstrap diagnostic appeared during successful app load: ${diagnosticTitle}; ${diagnosticMessage}; console: ${consoleErrors.join(" | ")}`,
+    );
     assert.deepEqual(pageErrors, [], "the actual Slint WASM application must not raise page errors");
 
     for (const [path, expectedMime] of MIME_BY_PATH) {
