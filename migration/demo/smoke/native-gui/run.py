@@ -520,6 +520,7 @@ def owned_run(platform_name, desktop, out, label, screenshot=False, gallery_smok
                 if wid.get("dpi_awareness") != "thread-per-monitor-v2":
                     raise RuntimeError(f"Windows capture did not report per-monitor DPI awareness: {wid}")
                 physical_bounds = wid["window_bounds"]
+                outer_bounds = wid.get("window_rect_bounds")
                 screen_bounds = wid["physical_screen_bounds"]
                 work_area_bounds = wid.get("work_area_bounds")
                 expected_dimensions = wid["screenshot_dimensions"]
@@ -533,6 +534,11 @@ def owned_run(platform_name, desktop, out, label, screenshot=False, gallery_smok
                         or physical_bounds[2] > work_area_bounds[2]
                         or physical_bounds[3] > work_area_bounds[3]):
                     raise RuntimeError(f"Windows window is not fully within the usable work area: {wid}")
+                if (not outer_bounds or outer_bounds[0] < work_area_bounds[0]
+                        or outer_bounds[1] < work_area_bounds[1]
+                        or outer_bounds[2] > work_area_bounds[2]
+                        or outer_bounds[3] > work_area_bounds[3]):
+                    raise RuntimeError(f"Windows outer resize frame is not fully within the usable work area: {wid}")
             if platform_name == "linux":
                 geometry = wid["geometry"]
                 window_dimensions = (geometry.get("width"), geometry.get("height"))

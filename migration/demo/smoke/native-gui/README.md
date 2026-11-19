@@ -6,9 +6,11 @@ binaries. Linux uses Xvfb plus Openbox; the other jobs use the hosted runner's
 native window server. Each screenshot is cropped to the Slint top-level window.
 No user desktop is involved. The Windows capture helper enables a per-monitor
 DPI-aware thread before reading `GetWindowRect`, moves the unchanged-size
-window into the primary work area, records the work-area and physical
-primary-screen bounds, and verifies the PNG dimensions match a window fully
-inside both. This keeps the hosted taskbar outside the capture.
+window into the primary work area, then captures the DWM visible-frame bounds
+so invisible resize borders and desktop margins stay outside the PNG. It
+records the outer window, visible frame, work-area, and physical primary-screen
+bounds and verifies both window rectangles fit inside the usable work area.
+This keeps the hosted taskbar outside the capture.
 
 The runner-side Python script does not ship in the application or become a
 descendant of the desktop. It copies both Rust executables into a temporary

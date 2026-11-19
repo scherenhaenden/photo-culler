@@ -16,6 +16,7 @@ public static class NativeWindow {
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
   [DllImport("user32.dll", SetLastError=true)] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
   [DllImport("user32.dll", SetLastError=true)] private static extern bool SystemParametersInfo(uint action, uint parameter, out RECT value, uint flags);
+  [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr hWnd, uint attribute, out RECT value, uint size);
   [DllImport("user32.dll", SetLastError=true)] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr value);
   [DllImport("user32.dll")] public static extern IntPtr GetThreadDpiAwarenessContext();
   [DllImport("user32.dll")] public static extern int GetAwarenessFromDpiAwarenessContext(IntPtr value);
@@ -26,6 +27,12 @@ public static class NativeWindow {
   public static int[] GetWindowBounds(IntPtr hWnd) {
     RECT rect;
     if (!GetWindowRect(hWnd, out rect)) return null;
+    return new int[] { rect.Left, rect.Top, rect.Right, rect.Bottom };
+  }
+  public static int[] GetVisibleFrameBounds(IntPtr hWnd) {
+    RECT rect;
+    int result = DwmGetWindowAttribute(hWnd, 9, out rect, (uint)Marshal.SizeOf(typeof(RECT)));
+    if (result != 0) return null; // DWMWA_EXTENDED_FRAME_BOUNDS
     return new int[] { rect.Left, rect.Top, rect.Right, rect.Bottom };
   }
   public static int[] GetPhysicalPrimaryScreenBounds() {
@@ -96,13 +103,20 @@ if ($Mode -eq 'Capture') {
   Start-Sleep -Milliseconds 300
   $windowRect = [NativeWindow]::GetWindowBounds($handle)
   if (-not $windowRect) { throw "Could not reread bounds for Slint window $handle after repositioning." }
-  $bounds = [System.Drawing.Rectangle]::FromLTRB($windowRect[0], $windowRect[1], $windowRect[2], $windowRect[3])
-  if ($bounds.Width -ne $originalWidth -or $bounds.Height -ne $originalHeight) {
-    throw "Repositioning unexpectedly resized the Slint window from ${originalWidth}x${originalHeight} to $($bounds.Width)x$($bounds.Height)."
+  $windowRectBounds = [System.Drawing.Rectangle]::FromLTRB($windowRect[0], $windowRect[1], $windowRect[2], $windowRect[3])
+  if ($windowRectBounds.Width -ne $originalWidth -or $windowRectBounds.Height -ne $originalHeight) {
+    throw "Repositioning unexpectedly resized the Slint window from ${originalWidth}x${originalHeight} to $($windowRectBounds.Width)x$($windowRectBounds.Height)."
+  }
+  $visibleRect = [NativeWindow]::GetVisibleFrameBounds($handle)
+  if (-not $visibleRect) { throw 'Could not read the DWM visible-frame bounds for the Slint window.' }
+  $bounds = [System.Drawing.Rectangle]::FromLTRB($visibleRect[0], $visibleRect[1], $visibleRect[2], $visibleRect[3])
+  if ($windowRectBounds.Left -lt $workArea[0] -or $windowRectBounds.Top -lt $workArea[1] -or
+      $windowRectBounds.Right -gt $workArea[2] -or $windowRectBounds.Bottom -gt $workArea[3]) {
+    throw "Slint GetWindowRect bounds ($($windowRectBounds.Left),$($windowRectBounds.Top),$($windowRectBounds.Right),$($windowRectBounds.Bottom)) exceed the primary work area ($($workArea -join ','))."
   }
   if ($bounds.Left -lt $workArea[0] -or $bounds.Top -lt $workArea[1] -or
       $bounds.Right -gt $workArea[2] -or $bounds.Bottom -gt $workArea[3]) {
-    throw "Slint window bounds ($($bounds.Left),$($bounds.Top),$($bounds.Right),$($bounds.Bottom)) exceed the primary work area ($($workArea -join ','))."
+    throw "Slint DWM visible-frame bounds ($($bounds.Left),$($bounds.Top),$($bounds.Right),$($bounds.Bottom)) exceed the primary work area ($($workArea -join ','))."
   }
   $physicalScreen = [NativeWindow]::GetPhysicalPrimaryScreenBounds()
   if (-not $physicalScreen) { throw 'Could not read physical primary-screen pixel bounds.' }
@@ -125,6 +139,7 @@ if ($Mode -eq 'Capture') {
   [ordered]@{
     dpi_awareness = 'thread-per-monitor-v2'
     window_bounds = @($bounds.Left, $bounds.Top, $bounds.Right, $bounds.Bottom)
+    window_rect_bounds = @($windowRectBounds.Left, $windowRectBounds.Top, $windowRectBounds.Right, $windowRectBounds.Bottom)
     work_area_bounds = @($workArea[0], $workArea[1], $workArea[2], $workArea[3])
     physical_screen_bounds = @($physicalScreen[0], $physicalScreen[1], $physicalScreen[2], $physicalScreen[3])
     screenshot_dimensions = @($bounds.Width, $bounds.Height)
