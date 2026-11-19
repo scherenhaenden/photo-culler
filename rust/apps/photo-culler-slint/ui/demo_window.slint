@@ -1,7 +1,7 @@
 import { DesignTokens } from "./components/components.slint";
 import { GalleryPhoto, LibraryGallery } from "./library/gallery.slint";
 import { PhotoCullerProHeader } from "./library/photo_culler_pro_header.slint";
-import { PhotoCullerProPrimarySidebar, PhotoCullerProFilterSidebar } from "./library/photo_culler_pro_sidebars.slint";
+import { CameraFilterOption, PhotoCullerProPrimarySidebar, PhotoCullerProFilterSidebar } from "./library/photo_culler_pro_sidebars.slint";
 
 export { DesignTokens } from "./components/components.slint";
 
@@ -29,12 +29,28 @@ export component DemoWindow inherits Window {
     in property <int> alternate-count: 0;
     in property <int> rejected-count: 0;
     in property <int> unrated-count: 0;
+    in property <int> selected-photo-count: 0;
+    in property <bool> all-visible-selected: false;
+    in property <bool> gallery-metadata-available: false;
+    in property <bool> gallery-smoke-fixture: false;
+    in property <[CameraFilterOption]> camera-filter-options: [];
+    in-out property <string> cull-status: "all";
+    in-out property <int> max-iso: 12800;
+    in-out property <int> min-sharpness: 0;
+    in-out property <int> min-rating: 0;
+    in-out property <bool> raw-only: false;
+    in-out property <bool> sort-descending: true;
+    in-out property <int> grid-density: 1;
     callback select-photo(string);
     callback select-archive(string);
     callback navigate(view: string);
     callback search-changed(query: string);
     callback action-requested(action: string);
     callback filter-requested(name: string, value: string);
+    callback selection-requested(photo-id: string, multi: bool);
+    callback select-all-requested();
+    callback sort-direction-changed(descending: bool);
+    callback density-changed(density: int);
 
     title: "Photo Culler Pro";
     preferred-width: 1440px;
@@ -76,7 +92,14 @@ export component DemoWindow inherits Window {
 
             PhotoCullerProFilterSidebar {
                 vertical-stretch: 1;
-                result-count: root.photo-count;
+                result-count: root.gallery-photos.length;
+                camera-options: root.camera-filter-options;
+                metadata-available: root.gallery-metadata-available;
+                cull-status <=> root.cull-status;
+                max-iso <=> root.max-iso;
+                min-sharpness <=> root.min-sharpness;
+                min-rating <=> root.min-rating;
+                raw-only <=> root.raw-only;
                 filter-requested(name, value) => { root.filter-requested(name, value); }
             }
 
@@ -93,8 +116,17 @@ export component DemoWindow inherits Window {
                 fallback-thumbnail: root.photo-thumbnail;
                 selected-id: root.selected-photo-id;
                 error-message: root.error-message;
+                selected-photo-count: root.selected-photo-count;
+                all-visible-selected: root.all-visible-selected;
+                smoke-fixture: root.gallery-smoke-fixture;
+                grid-density <=> root.grid-density;
+                sort-descending <=> root.sort-descending;
                 retry => { root.retry(); }
                 select-photo(id) => { root.select-photo(id); }
+                selection-requested(id, multi) => { root.selection-requested(id, multi); }
+                select-all-requested => { root.select-all-requested(); }
+                sort-direction-changed(descending) => { root.sort-direction-changed(descending); }
+                density-changed(density) => { root.density-changed(density); }
             }
         }
     }

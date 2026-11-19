@@ -2,6 +2,11 @@
 import { DesignTokens } from "../components/components.slint";
 import { ScrollView } from "std-widgets.slint";
 
+export struct CameraFilterOption {
+    label: string,
+    selected: bool,
+}
+
 component ProNavigationItem inherits Rectangle {
     in property <string> icon;
     in property <string> label;
@@ -223,6 +228,7 @@ component FilterChoice inherits Rectangle {
     in property <string> value;
     in property <string> filter-name;
     in property <bool> selected: false;
+    in property <bool> enabled: true;
     callback activated(name: string, value: string);
 
     height: 28px;
@@ -230,10 +236,12 @@ component FilterChoice inherits Rectangle {
     border-radius: 8px;
     border-width: 1px;
     border-color: selected ? #ff6b35 : #ffffff19;
+    opacity: root.enabled ? 1 : 0.42;
 
     focus_scope := FocusScope {
         width: parent.width;
         height: parent.height;
+        enabled: root.enabled;
         focus-on-tab-navigation: true;
         key-pressed(event) => {
             if (event.text == Key.Return || event.text == " ") {
@@ -260,7 +268,10 @@ component FilterChoice inherits Rectangle {
             border-color: DesignTokens.focus;
             background: transparent;
         }
-        TouchArea { clicked => { focus_scope.focus(); root.activated(root.filter-name, root.value); } }
+        TouchArea {
+            enabled: root.enabled;
+            clicked => { focus_scope.focus(); root.activated(root.filter-name, root.value); }
+        }
     }
 }
 
@@ -274,6 +285,7 @@ component FilterSectionTitle inherits Text {
 }
 
 component FilterRange inherits Rectangle {
+    in property <bool> enabled: true;
     in property <string> title;
     in property <string> filter-name;
     in property <string> unit;
@@ -288,11 +300,12 @@ component FilterRange inherits Rectangle {
 
     height: 54px;
     background: transparent;
+    opacity: root.enabled ? 1 : 0.42;
 
     VerticalLayout {
         spacing: 4px;
         HorizontalLayout {
-            FilterSectionTitle { text: root.title; horizontal-stretch: 1; }
+            FilterSectionTitle { text: root.enabled ? root.title : root.title + " · UNAVAILABLE"; horizontal-stretch: 1; }
             Text {
                 text: "" + root.value + root.unit;
                 color: root.tint;
@@ -304,6 +317,7 @@ component FilterRange inherits Rectangle {
         }
         focus_scope := FocusScope {
             height: 14px;
+            enabled: root.enabled;
             focus-on-tab-navigation: true;
             key-pressed(event) => {
                 if (event.text == Key.LeftArrow) {
@@ -338,6 +352,7 @@ component FilterRange inherits Rectangle {
                 background: transparent;
             }
             TouchArea {
+                enabled: root.enabled;
                 clicked => {
                     focus_scope.focus();
                     root.changed(root.value + root.step > root.maximum ? root.minimum : root.value + root.step);
@@ -352,6 +367,7 @@ component FilterRange inherits Rectangle {
 }
 
 component FilterToggle inherits Rectangle {
+    in property <bool> enabled: true;
     in property <string> label;
     in property <string> filter-name;
     in property <bool> checked: false;
@@ -359,10 +375,12 @@ component FilterToggle inherits Rectangle {
 
     height: 28px;
     background: transparent;
+    opacity: root.enabled ? 1 : 0.42;
 
     focus_scope := FocusScope {
         width: parent.width;
         height: parent.height;
+        enabled: root.enabled;
         focus-on-tab-navigation: true;
         key-pressed(event) => {
             if (event.text == Key.Return || event.text == " ") {
@@ -401,17 +419,20 @@ component FilterToggle inherits Rectangle {
             border-color: DesignTokens.focus;
             background: transparent;
         }
-        TouchArea { clicked => { focus_scope.focus(); root.toggled(root.filter-name, root.checked ? "false" : "true"); } }
+        TouchArea {
+            enabled: root.enabled;
+            clicked => { focus_scope.focus(); root.toggled(root.filter-name, root.checked ? "false" : "true"); }
+        }
     }
 }
 
 export component PhotoCullerProFilterSidebar inherits Rectangle {
     in property <int> result-count: 1;
-    in property <string> camera-label: "DEMO CAMERA";
+    in property <[CameraFilterOption]> camera-options: [];
+    in property <bool> metadata-available: false;
     callback filter-requested(name: string, value: string);
 
     in-out property <string> cull-status: "all";
-    in-out property <bool> camera-selected: false;
     in-out property <int> max-iso: 12800;
     in-out property <int> min-sharpness: 0;
     in-out property <int> min-rating: 0;
@@ -442,7 +463,6 @@ export component PhotoCullerProFilterSidebar inherits Rectangle {
                     key-pressed(event) => {
                         if (event.text == Key.Return || event.text == " ") {
                             root.cull-status = "all";
-                            root.camera-selected = false;
                             root.max-iso = 12800;
                             root.min-sharpness = 0;
                             root.min-rating = 0;
@@ -465,7 +485,6 @@ export component PhotoCullerProFilterSidebar inherits Rectangle {
                     TouchArea {
                         clicked => {
                             root.cull-status = "all";
-                            root.camera-selected = false;
                             root.max-iso = 12800;
                             root.min-sharpness = 0;
                             root.min-rating = 0;
@@ -506,16 +525,25 @@ export component PhotoCullerProFilterSidebar inherits Rectangle {
                     alignment: start;
                     spacing: 6px;
                     FilterSectionTitle { text: "CAMERA BODY"; }
-                    FilterToggle {
-                        label: root.camera-label;
+                    if root.camera-options.length == 0: Text {
+                        text: root.metadata-available ? "NO CAMERA VALUES" : "CAMERA FILTER · UNAVAILABLE";
+                        color: #ffffff66;
+                        font-family: DesignTokens.body-mono-font;
+                        font-size: 8px;
+                        vertical-alignment: center;
+                    }
+                    for option[index] in root.camera-options: FilterToggle {
+                        label: option.label;
                         filter-name: "camera-body";
-                        checked: root.camera-selected;
-                        toggled(name, value) => { root.camera-selected = value == "true"; root.filter-requested(name, root.camera-selected ? root.camera-label : ""); }
+                        checked: option.selected;
+                        enabled: root.metadata-available;
+                        toggled(name, value) => { root.filter-requested(name, option.label); }
                     }
                 }
 
                 FilterRange {
                     title: "ISO THRESHOLD";
+                    enabled: root.metadata-available;
                     filter-name: "max-iso";
                     value: root.max-iso;
                     minimum: 100;
@@ -530,6 +558,7 @@ export component PhotoCullerProFilterSidebar inherits Rectangle {
 
                 FilterRange {
                     title: "MIN SHARPNESS";
+                    enabled: root.metadata-available;
                     filter-name: "min-sharpness";
                     value: root.min-sharpness;
                     minimum: 0;
@@ -546,22 +575,23 @@ export component PhotoCullerProFilterSidebar inherits Rectangle {
                     vertical-stretch: 0;
                     alignment: start;
                     spacing: 7px;
-                    FilterSectionTitle { text: "MIN STAR RATING"; }
+                    FilterSectionTitle { text: root.metadata-available ? "MIN STAR RATING" : "MIN STAR RATING · UNAVAILABLE"; }
                     HorizontalLayout {
                         spacing: 4px;
-                        FilterChoice { width: 30px; label: "ANY"; value: "0"; filter-name: "min-rating"; selected: root.min-rating == 0; activated(name, value) => { root.min-rating = 0; root.filter-requested(name, value); } }
-                        FilterChoice { width: 30px; label: "1"; value: "1"; filter-name: "min-rating"; selected: root.min-rating == 1; activated(name, value) => { root.min-rating = 1; root.filter-requested(name, value); } }
-                        FilterChoice { width: 30px; label: "2"; value: "2"; filter-name: "min-rating"; selected: root.min-rating == 2; activated(name, value) => { root.min-rating = 2; root.filter-requested(name, value); } }
-                        FilterChoice { width: 30px; label: "3"; value: "3"; filter-name: "min-rating"; selected: root.min-rating == 3; activated(name, value) => { root.min-rating = 3; root.filter-requested(name, value); } }
-                        FilterChoice { width: 30px; label: "4"; value: "4"; filter-name: "min-rating"; selected: root.min-rating == 4; activated(name, value) => { root.min-rating = 4; root.filter-requested(name, value); } }
-                        FilterChoice { width: 30px; label: "5"; value: "5"; filter-name: "min-rating"; selected: root.min-rating == 5; activated(name, value) => { root.min-rating = 5; root.filter-requested(name, value); } }
+                        FilterChoice { width: 30px; label: "ANY"; value: "0"; filter-name: "min-rating"; selected: root.min-rating == 0; enabled: root.metadata-available; activated(name, value) => { root.min-rating = 0; root.filter-requested(name, value); } }
+                        FilterChoice { width: 30px; label: "1"; value: "1"; filter-name: "min-rating"; selected: root.min-rating == 1; enabled: root.metadata-available; activated(name, value) => { root.min-rating = 1; root.filter-requested(name, value); } }
+                        FilterChoice { width: 30px; label: "2"; value: "2"; filter-name: "min-rating"; selected: root.min-rating == 2; enabled: root.metadata-available; activated(name, value) => { root.min-rating = 2; root.filter-requested(name, value); } }
+                        FilterChoice { width: 30px; label: "3"; value: "3"; filter-name: "min-rating"; selected: root.min-rating == 3; enabled: root.metadata-available; activated(name, value) => { root.min-rating = 3; root.filter-requested(name, value); } }
+                        FilterChoice { width: 30px; label: "4"; value: "4"; filter-name: "min-rating"; selected: root.min-rating == 4; enabled: root.metadata-available; activated(name, value) => { root.min-rating = 4; root.filter-requested(name, value); } }
+                        FilterChoice { width: 30px; label: "5"; value: "5"; filter-name: "min-rating"; selected: root.min-rating == 5; enabled: root.metadata-available; activated(name, value) => { root.min-rating = 5; root.filter-requested(name, value); } }
                     }
                 }
 
                 FilterToggle {
-                    label: "RAW FORMATS ONLY";
+                    label: root.metadata-available ? "RAW FORMATS ONLY" : "RAW FORMATS ONLY · UNAVAILABLE";
                     filter-name: "raw-only";
                     checked: root.raw-only;
+                    enabled: root.metadata-available;
                     toggled(name, value) => { root.raw-only = value == "true"; root.filter-requested(name, value); }
                 }
             }

@@ -11,6 +11,11 @@ export struct GalleryPhoto {
     rating: int,
     iso: int,
     is-raw: bool,
+    camera: string,
+    capture-time: string,
+    sharpness: int,
+    metadata-known: bool,
+    selected: bool,
 }
 
 component DensityButton inherits Rectangle {
@@ -60,9 +65,10 @@ component GalleryCard inherits Rectangle {
     in property <bool> selected: false;
     in property <bool> web-layout: false;
     in property <string> search-query: "";
-    in property <bool> filter-locally: false;
     in property <length> card-width: 240px;
     callback activated(string);
+    callback selection-requested(photo-id: string, multi: bool);
+    property <bool> multi-select-click: false;
 
     property <string> filename-lower: root.photo.filename.to-lowercase();
     property <string> query-lower: root.search-query.to-lowercase();
@@ -78,8 +84,6 @@ component GalleryCard inherits Rectangle {
 
     width: root.card-width;
     height: root.card-width * 3 / 4;
-    // A single demo tile can filter locally without leaving a hole in the multi-column grid.
-    visible: !root.filter-locally || root.matches-search;
     background: #111111;
     border-radius: 16px;
     border-width: root.selected ? 2px : 1px;
@@ -94,7 +98,7 @@ component GalleryCard inherits Rectangle {
         height: parent.height;
     }
 
-    if root.photo.is-raw: Rectangle {
+    if root.photo.metadata-known && root.photo.is-raw: Rectangle {
         x: 8px;
         y: 8px;
         width: 38px;
@@ -150,9 +154,9 @@ component GalleryCard inherits Rectangle {
             HorizontalLayout {
                 spacing: 4px;
                 Text {
-                    text: (root.photo.rating >= 1 ? "★" : "☆") + (root.photo.rating >= 2 ? "★" : "☆") +
+                    text: root.photo.metadata-known ? (root.photo.rating >= 1 ? "★" : "☆") + (root.photo.rating >= 2 ? "★" : "☆") +
                         (root.photo.rating >= 3 ? "★" : "☆") + (root.photo.rating >= 4 ? "★" : "☆") +
-                        (root.photo.rating >= 5 ? "★" : "☆");
+                        (root.photo.rating >= 5 ? "★" : "☆") : "RATING —";
                     color: #ff6b35;
                     font-family: DesignTokens.body-font;
                     font-size: 11px;
@@ -173,7 +177,7 @@ component GalleryCard inherits Rectangle {
             HorizontalLayout {
                 spacing: 4px;
                 Text {
-                    text: root.photo.iso > 0 ? root.photo.iso + " ISO" : "ISO —";
+                    text: root.photo.metadata-known && root.photo.iso > 0 ? root.photo.iso + " ISO" : "ISO —";
                     color: #ffffff99;
                     font-family: DesignTokens.body-mono-font;
                     font-size: 8px;
@@ -217,6 +221,10 @@ component GalleryCard inherits Rectangle {
         key-pressed(event) => {
             if (event.text == Key.Return || event.text == " ") {
                 root.activated(root.photo.id);
+                root.selection-requested(
+                    root.photo.id,
+                    event.modifiers.shift || event.modifiers.control || event.modifiers.meta,
+                );
                 accept
             } else { reject }
         }
@@ -232,7 +240,16 @@ component GalleryCard inherits Rectangle {
         }
         hover-area := TouchArea {
             mouse-cursor: pointer;
-            clicked => { focus_scope.focus(); root.activated(root.photo.id); }
+            pointer-event(event) => {
+                if (event.kind == PointerEventKind.down) {
+                    root.multi-select-click = event.modifiers.shift || event.modifiers.control || event.modifiers.meta;
+                }
+            }
+            clicked => {
+                focus_scope.focus();
+                root.activated(root.photo.id);
+                root.selection-requested(root.photo.id, root.multi-select-click);
+            }
         }
     }
 }
@@ -249,30 +266,33 @@ export component LibraryGallery inherits Rectangle {
     in property <string> fallback-decision: "UNRATED";
     in property <string> selected-id: "";
     in property <string> error-message: "No se pudo cargar la galería.";
+    in property <int> selected-photo-count: 0;
+    in property <bool> all-visible-selected: false;
+    in property <bool> smoke-fixture: false;
+    in-out property <int> grid-density: 1; // 0 small, 1 medium, 2 large
+    in-out property <bool> sort-descending: true;
     callback retry();
     callback select-photo(string);
+    callback selection-requested(photo-id: string, multi: bool);
+    callback select-all-requested();
+    callback sort-direction-changed(descending: bool);
+    callback density-changed(density: int);
 
     background: #050505;
     property <int> effective-viewport-width: root.viewport-width > 0 ? root.viewport-width : round(root.width / 1px);
-    property <int> grid-size: 1; // 0 small, 1 medium, 2 large
     property <int> medium-columns: root.effective-viewport-width >= 1280 ? 5 :
         (root.effective-viewport-width >= 1024 ? 4 : (root.effective-viewport-width >= 768 ? 3 : (root.effective-viewport-width >= 640 ? 2 : 1)));
-    property <int> grid-columns: root.grid-size == 0 ?
+    property <int> grid-columns: root.grid-density == 0 ?
         (root.effective-viewport-width >= 1024 ? 6 : (root.effective-viewport-width >= 768 ? 4 : (root.effective-viewport-width >= 640 ? 3 : 2))) :
-        (root.grid-size == 2 ? (root.effective-viewport-width >= 1024 ? 3 : (root.effective-viewport-width >= 640 ? 2 : 1)) : root.medium-columns);
-    property <int> item-count: root.photos.length == 0 ? 1 : root.photos.length;
-    property <int> selected-count: root.selected-id == "" ? 0 : 1;
-    property <bool> all-selected: root.selected-count == root.item-count;
-    property <bool> single-photo-matches-search: root.photos.length != 1 || root.query-lower == "" ||
-        root.photos[0].filename.to-lowercase().replace-all(root.query-lower, "") != root.photos[0].filename.to-lowercase();
+        (root.grid-density == 2 ? (root.effective-viewport-width >= 1024 ? 3 : (root.effective-viewport-width >= 640 ? 2 : 1)) : root.medium-columns);
+    property <int> item-count: root.photos.length;
+    property <int> selected-count: root.selected-photo-count;
+    property <bool> all-selected: root.all-visible-selected;
     property <length> card-width: (root.width - 32px - (root.grid-columns - 1) * 12px) / root.grid-columns;
     property <length> card-height: root.card-width * 3 / 4;
     property <int> grid-rows: (root.item-count + root.grid-columns - 1) / root.grid-columns;
     property <length> grid-content-height: root.grid-rows * (root.card-height + 12px) - 12px;
-    property <string> fallback-name-lower: root.fallback-name.to-lowercase();
     property <string> query-lower: root.search-query.to-lowercase();
-    property <bool> fallback-matches-search: root.query-lower == "" ||
-        root.fallback-name-lower.replace-all(root.query-lower, "") != root.fallback-name-lower;
 
     if root.view-state == 0: StatusPanel {
         state: PanelState.loading;
@@ -338,14 +358,29 @@ export component LibraryGallery inherits Rectangle {
                             vertical-alignment: center;
                         }
                         Text {
-                            text: "CAPTURE TIME";
+                            text: root.sort-descending ? "CAPTURE TIME ↓" : "CAPTURE TIME ↑";
                             color: #ffffffcc;
                             font-family: DesignTokens.body-font;
                             font-size: 8px;
                             font-weight: 800;
                             vertical-alignment: center;
                         }
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.sort-descending = !root.sort-descending;
+                                root.sort-direction-changed(root.sort-descending);
+                            }
+                        }
                     }
+                }
+                if root.smoke-fixture: Text {
+                    text: "SMOKE FIXTURE · SYNTHETIC METADATA";
+                    color: #ff6b35;
+                    font-family: DesignTokens.body-mono-font;
+                    font-size: 7px;
+                    font-weight: 800;
+                    vertical-alignment: center;
                 }
                 Rectangle { horizontal-stretch: 1; background: transparent; }
                 if root.selected-count > 0: Rectangle {
@@ -363,6 +398,14 @@ export component LibraryGallery inherits Rectangle {
                             color: #ffffff;
                             font-family: DesignTokens.body-font;
                             font-size: 8px;
+                            font-weight: 900;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: "READ ONLY";
+                            color: #ffffff66;
+                            font-family: DesignTokens.body-mono-font;
+                            font-size: 7px;
                             font-weight: 900;
                             vertical-alignment: center;
                         }
@@ -390,15 +433,7 @@ export component LibraryGallery inherits Rectangle {
                     }
                     TouchArea {
                         mouse-cursor: pointer;
-                        clicked => {
-                            if root.all-selected {
-                                root.select-photo("");
-                            } else if root.photos.length > 0 {
-                                root.select-photo(root.photos[0].id);
-                            } else {
-                                root.select-photo(root.fallback-id);
-                            }
-                        }
+                        clicked => { root.select-all-requested(); }
                     }
                 }
                 Rectangle {
@@ -411,16 +446,15 @@ export component LibraryGallery inherits Rectangle {
                     HorizontalLayout {
                         padding: 2px;
                         spacing: 2px;
-                        DensityButton { label: "SMALL"; selected: root.grid-size == 0; activated => { root.grid-size = 0; } }
-                        DensityButton { label: "MED"; selected: root.grid-size == 1; activated => { root.grid-size = 1; } }
-                        DensityButton { label: "LARGE"; selected: root.grid-size == 2; activated => { root.grid-size = 2; } }
+                        DensityButton { label: "SMALL"; selected: root.grid-density == 0; activated => { root.grid-density = 0; root.density-changed(0); } }
+                        DensityButton { label: "MED"; selected: root.grid-density == 1; activated => { root.grid-density = 1; root.density-changed(1); } }
+                        DensityButton { label: "LARGE"; selected: root.grid-density == 2; activated => { root.grid-density = 2; root.density-changed(2); } }
                     }
                 }
             }
         }
 
-        if (root.photos.length > 1) || (root.photos.length == 1 && root.single-photo-matches-search) ||
-            (root.photos.length == 0 && root.fallback-matches-search): ScrollView {
+        if root.photos.length > 0: ScrollView {
             vertical-stretch: 1;
             width: parent.width;
             content-width: parent.width;
@@ -434,44 +468,21 @@ export component LibraryGallery inherits Rectangle {
                 width: parent.width - 32px;
                 spacing: 12px;
 
-                if root.photos.length == 0 && root.fallback-matches-search: GalleryCard {
-                    row: 0;
-                    col: 0;
-                    photo: {
-                        id: root.fallback-id,
-                        filename: root.fallback-name,
-                        decision: root.fallback-decision,
-                        quality: "—",
-                        score: "—",
-                        thumbnail: root.fallback-thumbnail,
-                        rating: 0,
-                        iso: 0,
-                        is-raw: false,
-                    };
-                    selected: root.fallback-id == root.selected-id;
-                    web-layout: root.web-layout;
-                    search-query: root.search-query;
-                    filter-locally: false;
-                    card-width: root.card-width;
-                    activated(id) => { root.select-photo(id); }
-                }
-
                 for photo[index] in root.photos: GalleryCard {
                     row: index / root.grid-columns;
                     col: Math.mod(index, root.grid-columns);
                     photo: photo;
-                    selected: photo.id == root.selected-id;
+                    selected: photo.selected || photo.id == root.selected-id;
                     web-layout: root.web-layout;
                     search-query: root.search-query;
-                    filter-locally: root.photos.length == 1;
                     card-width: root.card-width;
                     activated(id) => { root.select-photo(id); }
+                    selection-requested(id, multi) => { root.selection-requested(id, multi); }
                 }
             }
         }
 
-        if (root.photos.length == 0 && !root.fallback-matches-search) ||
-            (root.photos.length == 1 && !root.single-photo-matches-search): VerticalLayout {
+        if root.photos.length == 0: VerticalLayout {
             vertical-stretch: 1;
             alignment: center;
             spacing: 6px;
