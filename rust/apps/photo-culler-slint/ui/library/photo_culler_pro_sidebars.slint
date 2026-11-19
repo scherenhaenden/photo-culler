@@ -280,7 +280,7 @@ component FilterSectionTitle inherits Text {
     font-family: DesignTokens.body-font;
     font-size: 9px;
     font-weight: 700;
-    letter-spacing: 1.1px;
+    letter-spacing: 1.8px;
     vertical-alignment: center;
 }
 
@@ -288,6 +288,7 @@ component FilterRange inherits Rectangle {
     in property <bool> enabled: true;
     in property <string> title;
     in property <string> filter-name;
+    in property <string> value-prefix: "";
     in property <string> unit;
     in property <int> value;
     in property <int> minimum;
@@ -296,9 +297,10 @@ component FilterRange inherits Rectangle {
     in property <color> tint;
     in property <string> min-label;
     in property <string> max-label;
+    in property <bool> show-endpoints: true;
     callback changed(value: int);
 
-    height: 54px;
+    height: root.show-endpoints ? 54px : 34px;
     background: transparent;
     opacity: root.enabled ? 1 : 0.42;
 
@@ -307,7 +309,7 @@ component FilterRange inherits Rectangle {
         HorizontalLayout {
             FilterSectionTitle { text: root.enabled ? root.title : root.title + " · UNAVAILABLE"; horizontal-stretch: 1; }
             Text {
-                text: "" + root.value + root.unit;
+                text: root.value-prefix + root.value + root.unit;
                 color: root.tint;
                 font-family: DesignTokens.body-mono-font;
                 font-size: 10px;
@@ -342,6 +344,17 @@ component FilterRange inherits Rectangle {
                 }
             }
             Rectangle {
+                x: max(0px, min(parent.width - 12px,
+                    parent.width * (root.value - root.minimum) / (root.maximum - root.minimum) - 6px));
+                y: 1px;
+                width: 12px;
+                height: 12px;
+                border-radius: 999px;
+                border-width: 1px;
+                border-color: #ffffff33;
+                background: root.tint;
+            }
+            Rectangle {
                 x: 1px;
                 y: 1px;
                 width: parent.width - 2px;
@@ -359,7 +372,7 @@ component FilterRange inherits Rectangle {
                 }
             }
         }
-        HorizontalLayout {
+        if root.show-endpoints: HorizontalLayout {
             Text { text: root.min-label; color: #ffffff66; font-family: DesignTokens.body-mono-font; font-size: 8px; horizontal-stretch: 1; }
             Text { text: root.max-label; color: #ffffff66; font-family: DesignTokens.body-mono-font; font-size: 8px; horizontal-alignment: right; }
         }
@@ -503,7 +516,7 @@ export component PhotoCullerProFilterSidebar inherits Rectangle {
                 vertical-stretch: 0;
                 alignment: start;
                 padding: 12px;
-                spacing: 18px;
+                spacing: 20px;
 
                 VerticalLayout {
                     vertical-stretch: 0;
@@ -545,6 +558,7 @@ export component PhotoCullerProFilterSidebar inherits Rectangle {
                     title: "ISO THRESHOLD";
                     enabled: root.metadata-available;
                     filter-name: "max-iso";
+                    value-prefix: "≤ ";
                     value: root.max-iso;
                     minimum: 100;
                     maximum: 12800;
@@ -559,6 +573,7 @@ export component PhotoCullerProFilterSidebar inherits Rectangle {
                 FilterRange {
                     title: "MIN SHARPNESS";
                     enabled: root.metadata-available;
+                    show-endpoints: false;
                     filter-name: "min-sharpness";
                     value: root.min-sharpness;
                     minimum: 0;

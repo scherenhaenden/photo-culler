@@ -47,6 +47,15 @@ class GalleryParityTests(unittest.TestCase):
         self.assertIn("width: 220px;", SIDEBARS)
         self.assertIn("width: 230px;", SIDEBARS)
         self.assertIn("spacing: 12px;", GALLERY)
+        self.assertIn('text: "CULL";', GALLERY)
+        self.assertIn("color: #ffffff04;", GALLERY)
+
+    def test_pro_filter_ranges_match_the_reference_controls(self):
+        self.assertIn("in property <bool> show-endpoints: true;", SIDEBARS)
+        self.assertIn('show-endpoints: false;', SIDEBARS)
+        self.assertIn('value-prefix: "≤ ";', SIDEBARS)
+        self.assertIn("background: root.tint;", SIDEBARS)
+        self.assertNotIn('text: "SMOKE FIXTURE · SYNTHETIC METADATA";', GALLERY)
 
     def test_search_filters_sort_density_and_selection_reach_the_live_adapter(self):
         for name in (
@@ -99,6 +108,7 @@ class GalleryParityTests(unittest.TestCase):
         for camera in ("NIKON Z9", "Sony A7R IV", "Canon EOS R5"):
             with self.subTest(camera=camera):
                 self.assertIn(f'"{camera}"', VIEW)
+        self.assertIn("ordered_camera_names(&state.items)", VIEW)
         self.assertNotIn('"Fujifilm X-T5"', VIEW)
         self.assertIn('format!("{filename} · 10-card smoke fixture")', VIEW)
         self.assertIn('EXPECTED_JPEG_SHA256 = "cc20c24844d2fc6fca729fcb66cfe661960f7b56be41a3dd462a0f1b22cfb4f2"', CAPTURE)
@@ -109,11 +119,20 @@ class GalleryParityTests(unittest.TestCase):
         self.assertIn('canvas_backing_width: document.querySelector("#canvas").width', CAPTURE)
         self.assertIn('fullPage: false', CAPTURE)
 
-    def test_write_actions_are_visible_but_read_only(self):
-        self.assertIn('text: "READ ONLY";', GALLERY)
+    def test_write_actions_remain_disabled_without_an_implementation_badge(self):
+        self.assertNotIn('text: "READ ONLY";', GALLERY)
         self.assertIn('DisabledAction { label: "KEEP";', GALLERY)
         self.assertIn('DisabledAction { label: "ALT";', GALLERY)
         self.assertIn('DisabledAction { label: "REJECT";', GALLERY)
+
+    def test_1100px_header_keeps_every_reference_tab_and_control_visible(self):
+        header = (UI / "library" / "photo_culler_pro_header.slint").read_text(encoding="utf-8")
+        self.assertIn('if root.width >= 1100px: PhotoCullerProTab {\n                    label: "BURSTS";', header)
+        self.assertIn('if root.width >= 1100px: PhotoCullerProTab {\n                    label: "DASHBOARD";', header)
+        self.assertIn('width: root.width >= 1200px ? 208px : (root.width >= 900px ? 128px : 96px);', header)
+        self.assertIn('width: root.width >= 1200px ? 108px : 60px;', header)
+        self.assertIn('if root.width < 1200px: VerticalLayout {', header)
+        self.assertIn('if root.width >= 1100px: PhotoCullerProControl {', header)
 
     def test_card_selection_is_rendered_from_the_adapter_selection_set(self):
         self.assertIn("selected: photo.selected;", GALLERY)

@@ -32,7 +32,6 @@ export component DemoWindow inherits Window {
     in property <int> selected-photo-count: 0;
     in property <bool> all-visible-selected: false;
     in property <bool> gallery-metadata-available: false;
-    in property <bool> gallery-smoke-fixture: false;
     in property <[CameraFilterOption]> camera-filter-options: [];
     in-out property <string> cull-status: "all";
     in-out property <int> max-iso: 12800;
@@ -118,7 +117,6 @@ export component DemoWindow inherits Window {
                 error-message: root.error-message;
                 selected-photo-count: root.selected-photo-count;
                 all-visible-selected: root.all-visible-selected;
-                smoke-fixture: root.gallery-smoke-fixture;
                 grid-density <=> root.grid-density;
                 sort-descending <=> root.sort-descending;
                 retry => { root.retry(); }

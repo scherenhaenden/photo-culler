@@ -2,7 +2,9 @@
   "reference_source": {
     "archive": "photo_culler_pro.zip",
     "archive_sha256": "66b06c65a453182dc0bfcf24efa07460255d0a914b5a606b5fafeb990e8f59c7",
-    "reference_method": "Original Photo Culler Pro Vite/React source rendered from a temporary extracted copy. Only remote photo URLs were replaced in that temporary copy with the bundled demo JPEG so both renders use identical pixels.",
+    "reference_method": "Prior capture record says the Photo Culler Pro Vite/React source was rendered from a temporary extracted copy with remote photo URLs replaced by the bundled demo JPEG. The supplied ZIP has no screenshot, photo/avatar assets, lockfile, or installed dependencies; this review could not independently reproduce the render because Node/npm and the dependencies were unavailable.",
+    "reference_screenshot_in_archive": false,
+    "reproduced_in_current_review": false,
     "fixture_jpeg_sha256": "cc20c24844d2fc6fca729fcb66cfe661960f7b56be41a3dd462a0f1b22cfb4f2"
   },
   "candidate": {
@@ -70,8 +72,9 @@
   ],
   "acceptance_boundary": {
     "browser_capture_is_native_gui_evidence": false,
-    "native_window_capture": "passed on Linux x86-64, macOS arm64, and Windows x86-64 in workflow 44546749693; see native/manifest.json",
-    "native_acceptance_commit": "68959bf702c554839b720d80fd51bfbad6824317",
+    "native_window_capture": "passed on Linux x86-64, macOS arm64, and Windows x86-64 in workflows 44546749693 and 44550496763; PNGs in native/manifest.json are from 44546749693",
+    "native_acceptance_commit": "06b76fccf15d96e9bd0e14290c0be2f7a82afa41",
+    "native_acceptance_run": "44550496763",
     "native_acceptance_result": "6/6 jobs passed",
     "photo_content_is_synthetic": true,
     "full_application_screens_are_in_scope": false

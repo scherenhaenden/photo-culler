@@ -294,7 +294,6 @@ impl SlintDemoView {
                 .global::<crate::DesignTokens>()
                 .set_web_layout(web_layout);
             window.set_web_layout(web_layout);
-            window.set_gallery_smoke_fixture(smoke_fixture);
             #[cfg(target_arch = "wasm32")]
             if web_layout {
                 bind_browser_window_resize(window.as_weak());
@@ -578,15 +577,11 @@ fn refresh_library(
             })
         })
         .collect();
-    let camera_options: Vec<_> = state
-        .items
-        .iter()
-        .filter_map(|item| item.metadata.camera.as_ref())
-        .collect::<BTreeSet<_>>()
+    let camera_options: Vec<_> = ordered_camera_names(&state.items)
         .into_iter()
         .map(|camera| crate::CameraFilterOption {
             label: camera.clone().into(),
-            selected: state.filters.cameras.contains(camera),
+            selected: state.filters.cameras.contains(&camera),
         })
         .collect();
     let selected_visible_count = visible
@@ -941,6 +936,16 @@ impl UiDispatcher for SlintDispatcher {
     }
 }
 
+fn ordered_camera_names(items: &[GalleryItem]) -> Vec<String> {
+    let mut seen = HashSet::new();
+    items
+        .iter()
+        .filter_map(|item| item.metadata.camera.as_ref())
+        .filter(|camera| seen.insert((*camera).clone()))
+        .cloned()
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1024,6 +1029,14 @@ mod tests {
         assert_eq!(state.density, GridDensity::Large);
         assert!(state.selected.contains("photo-03"));
         assert_eq!(visible_ids(&state).len(), 10);
+    }
+
+    #[test]
+    fn camera_filter_order_matches_first_appearance_in_the_reference() {
+        assert_eq!(
+            ordered_camera_names(&records()),
+            ["NIKON Z9", "Sony A7R IV", "Canon EOS R5"]
+        );
     }
 
     #[test]

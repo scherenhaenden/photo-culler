@@ -1,10 +1,14 @@
 # S05 design capture evidence
 
 The paired images below use the same viewport, fixture JPEG, and card layout.
-The reference was rendered from the supplied `photo_culler_pro.zip` source. In a
-temporary extracted copy, only the remote photo URLs were changed to the bundled
-demo JPEG so the comparison is deterministic; the ZIP and application source
-were not modified.
+The supplied `photo_culler_pro.zip` contains the React source, but no reference
+screenshots, local photo files, lockfile, or installed dependencies. The PNG
+reference renders below were recorded in an earlier capture as renders of that
+source, with remote photo URLs replaced in a temporary extracted copy by the
+bundled demo JPEG. I could not reproduce that render during the current review
+because Node/npm and the source dependencies are unavailable here. Treat these
+PNGs as historical source-derived evidence, not a freshly reproduced capture;
+the ZIP and app source were not modified.
 
 | Viewport | Reference | S05 base | With PR #155 icons |
 |---|---|---|---|
@@ -13,13 +17,15 @@ were not modified.
 
 ## Native acceptance screenshots
 
-The final hosted native acceptance run [#44546749693](https://github.com/scherenhaenden/photo-culler/actions/runs/44546749693)
-passed all six CI jobs on commit `68959bf702c554839b720d80fd51bfbad6824317`.
-The screenshots below show the current Library window with the explicit ten-card
-fixture; each card repeats the bundled JPEG and uses synthetic metadata. The
-separate live smoke still verifies the one-photo REST gallery. Each native run
-also verified the owned server exits and releases its port after close, and an
-external server remains healthy.
+The rebased hosted native acceptance run [#44550496763](https://github.com/scherenhaenden/photo-culler/actions/runs/44550496763)
+passed all six CI jobs on head `06b76fccf15d96e9bd0e14290c0be2f7a82afa41`.
+The PNGs listed below are preserved captures from the earlier run
+[#44546749693](https://github.com/scherenhaenden/photo-culler/actions/runs/44546749693),
+not captures from #445504. Both runs use the explicit ten-card fixture, which
+repeats the bundled JPEG and uses synthetic metadata; the separate live smoke
+verifies the one-photo REST gallery. Native acceptance also verifies that the
+owned server exits and releases its port after close, while an external server
+remains healthy.
 
 | Platform | Native capture | Dimensions | SHA-256 |
 |---|---|---:|---|
@@ -50,33 +56,29 @@ The main composition is aligned: 46 px header and toolbar, 220 px navigation,
 column counts. The card crop, selected outline, decision badges, and overall dark
 palette are close at both viewports.
 
-The captures still show visible differences to resolve before claiming exact
-pixel parity:
+The captures are from earlier code and do not include the latest local S05
+adjustments. The current worktree now implements the watermark, camera order,
+ISO/sharpness slider details, and 1100 px header wrapping/visibility. Those
+changes pass the source-level parity checks and compile for native and WASM, but
+need fresh browser/native captures before they count as visually verified.
+
+Known design gaps before claiming exact pixel parity:
 
 - Header/sidebar icons are text stand-ins in the S05 base captures. Vector
   replacements render correctly in the separately captured PR #155 overlay but
   are not in the #154 base or the native acceptance stack yet.
-- The faint “CUL” watermark behind the reference's empty lower grid is absent.
-- At 1100 px the reference keeps BURSTS and DASHBOARD in the header while the
-  Slint capture drops them; the reference logo wraps `/01` and Slint keeps it in
-  one line. Both captures clip far-right header actions.
-- The camera filter order differs: reference NIKON Z9, Sony A7R IV, Canon EOS R5;
-  candidate Canon EOS R5, NIKON Z9, Sony A7R IV.
-- ISO shows `≤ 12800` and a clear right-end thumb in the reference; the candidate
-  shows `12800` without a visible thumb. The reference's teal sharpness thumb at
-  0% is also barely visible in Slint.
-- At 1100 px the smoke banner and READ ONLY label make the candidate toolbar clip
-  Select All and most density choices; the live single-photo layout should be
-  checked at that width separately.
-- The reference operator footer is a circular photo; the candidate uses `OP`
-  initials. Decision actions are disabled in the candidate by the read-only
-  Sprint 01 contract.
+- The reference operator footer is a circular photo; the candidate uses a
+  person-outline fallback because the source only points to an unavailable
+  remote avatar and supplies no local image.
+- The captured #154 candidate predates the latest local S05 adjustments. A fresh
+  1100 px capture must confirm the full toolbar, `/01` logo wrap, and menu
+  visibility after those changes.
 - The selected 10-record fixture repeats one JPEG and has synthetic metadata;
   only the normal single-photo REST route represents live data.
 
 The paired S05 reference/candidate images at the top are browser/WASM captures;
 the native-window captures are recorded separately above. S07 passed on Linux,
-macOS and Windows in run #44546749693. The icon overlay belongs to the separate
+macOS and Windows in run #44550496763. The icon overlay belongs to the separate
 PR #155 and is not in the #154 base. Scope remains the initial Library screen;
 Cinema, Compare, Bursts, Timeline, dashboard and remaining product dialogs are
 later design work.

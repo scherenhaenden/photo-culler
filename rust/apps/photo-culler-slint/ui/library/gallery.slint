@@ -268,7 +268,6 @@ export component LibraryGallery inherits Rectangle {
     in property <string> error-message: "No se pudo cargar la galería.";
     in property <int> selected-photo-count: 0;
     in property <bool> all-visible-selected: false;
-    in property <bool> smoke-fixture: false;
     in-out property <int> grid-density: 1; // 0 small, 1 medium, 2 large
     in-out property <bool> sort-descending: true;
     callback retry();
@@ -374,14 +373,6 @@ export component LibraryGallery inherits Rectangle {
                         }
                     }
                 }
-                if root.smoke-fixture: Text {
-                    text: "SMOKE FIXTURE · SYNTHETIC METADATA";
-                    color: #ff6b35;
-                    font-family: DesignTokens.body-mono-font;
-                    font-size: 7px;
-                    font-weight: 800;
-                    vertical-alignment: center;
-                }
                 Rectangle { horizontal-stretch: 1; background: transparent; }
                 if root.selected-count > 0: Rectangle {
                     height: 24px;
@@ -398,14 +389,6 @@ export component LibraryGallery inherits Rectangle {
                             color: #ffffff;
                             font-family: DesignTokens.body-font;
                             font-size: 8px;
-                            font-weight: 900;
-                            vertical-alignment: center;
-                        }
-                        Text {
-                            text: "READ ONLY";
-                            color: #ffffff66;
-                            font-family: DesignTokens.body-mono-font;
-                            font-size: 7px;
                             font-weight: 900;
                             vertical-alignment: center;
                         }
@@ -454,52 +437,81 @@ export component LibraryGallery inherits Rectangle {
             }
         }
 
-        if root.photos.length > 0: ScrollView {
+        Rectangle {
             vertical-stretch: 1;
-            width: parent.width;
-            content-width: parent.width;
-            content-height: root.grid-content-height + 32px;
-            horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
-            vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
+            background: #050505;
 
-            GridLayout {
-                x: 16px;
-                y: 16px;
-                width: parent.width - 32px;
-                spacing: 12px;
+            if root.photos.length > 0: ScrollView {
+                width: parent.width;
+                height: parent.height;
+                content-width: parent.width;
+                content-height: max(root.grid-content-height + 32px, parent.height);
+                horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+                vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
 
-                for photo[index] in root.photos: GalleryCard {
-                    row: index / root.grid-columns;
-                    col: Math.mod(index, root.grid-columns);
-                    photo: photo;
-                    selected: photo.selected;
-                    web-layout: root.web-layout;
-                    search-query: root.search-query;
-                    card-width: root.card-width;
-                    activated(id) => { root.select-photo(id); }
-                    selection-requested(id, multi) => { root.selection-requested(id, multi); }
+                Rectangle {
+                    width: parent.width;
+                    height: max(root.grid-content-height + 32px, root.height - 46px);
+                    background: transparent;
+
+                    // The original Library uses a very faint centered wordmark
+                    // behind its cards; keep it decorative and non-interactive.
+                    Text {
+                        x: 0px;
+                        y: max(0px, (parent.height - 220px) / 2);
+                        width: parent.width;
+                        height: 220px;
+                        text: "CULL";
+                        color: #ffffff04;
+                        font-family: DesignTokens.heading-font;
+                        font-size: 180px;
+                        font-weight: 900;
+                        font-italic: true;
+                        letter-spacing: -9px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    GridLayout {
+                        x: 16px;
+                        y: 16px;
+                        width: parent.width - 32px;
+                        spacing: 12px;
+
+                        for photo[index] in root.photos: GalleryCard {
+                            row: index / root.grid-columns;
+                            col: Math.mod(index, root.grid-columns);
+                            photo: photo;
+                            selected: photo.selected;
+                            web-layout: root.web-layout;
+                            search-query: root.search-query;
+                            card-width: root.card-width;
+                            activated(id) => { root.select-photo(id); }
+                            selection-requested(id, multi) => { root.selection-requested(id, multi); }
+                        }
+                    }
                 }
             }
-        }
 
-        if root.photos.length == 0: VerticalLayout {
-            vertical-stretch: 1;
-            alignment: center;
-            spacing: 6px;
-            Text {
-                text: "No photos match current filters.";
-                color: #ffffff66;
-                font-family: DesignTokens.body-font;
-                font-size: 14px;
-                font-weight: 800;
-                horizontal-alignment: center;
-            }
-            Text {
-                text: "Try resetting search or threshold limits.";
-                color: #ffffff4d;
-                font-family: DesignTokens.body-mono-font;
-                font-size: 10px;
-                horizontal-alignment: center;
+            if root.photos.length == 0: VerticalLayout {
+                vertical-stretch: 1;
+                alignment: center;
+                spacing: 6px;
+                Text {
+                    text: "No photos match current filters.";
+                    color: #ffffff66;
+                    font-family: DesignTokens.body-font;
+                    font-size: 14px;
+                    font-weight: 800;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: "Try resetting search or threshold limits.";
+                    color: #ffffff4d;
+                    font-family: DesignTokens.body-mono-font;
+                    font-size: 10px;
+                    horizontal-alignment: center;
+                }
             }
         }
     }

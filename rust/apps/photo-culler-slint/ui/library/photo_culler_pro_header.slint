@@ -170,11 +170,11 @@ export component PhotoCullerProHeader inherits Rectangle {
             spacing: 24px;
 
             Rectangle {
-                width: 108px;
+                width: root.width >= 1200px ? 108px : 60px;
                 height: parent.height;
                 background: transparent;
 
-                HorizontalLayout {
+                if root.width >= 1200px: HorizontalLayout {
                     spacing: 3px;
                     alignment: start;
 
@@ -194,6 +194,36 @@ export component PhotoCullerProHeader inherits Rectangle {
                         font-family: DesignTokens.heading-font;
                         font-size: 16px;
                         font-weight: 400;
+                        vertical-alignment: center;
+                    }
+                }
+
+                if root.width < 1200px: VerticalLayout {
+                    x: 0px;
+                    y: 3px;
+                    width: parent.width;
+                    height: 40px;
+                    spacing: 0px;
+                    alignment: start;
+
+                    Text {
+                        text: "CULLER";
+                        color: #ffffff;
+                        font-family: DesignTokens.heading-font;
+                        font-size: 16px;
+                        font-weight: 900;
+                        font-italic: true;
+                        letter-spacing: -0.5px;
+                        height: 20px;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: "/ 01";
+                        color: DesignTokens.accent;
+                        font-family: DesignTokens.heading-font;
+                        font-size: 16px;
+                        font-weight: 400;
+                        height: 18px;
                         vertical-alignment: center;
                     }
                 }
@@ -246,7 +276,7 @@ export component PhotoCullerProHeader inherits Rectangle {
                         root.navigate(view);
                     }
                 }
-                if root.width >= (root.web-layout ? 1220px : 1160px): PhotoCullerProTab {
+                if root.width >= 1100px: PhotoCullerProTab {
                     label: "BURSTS";
                     view: "bursts";
                     current-view: root.current-view;
@@ -256,7 +286,7 @@ export component PhotoCullerProHeader inherits Rectangle {
                         root.navigate(view);
                     }
                 }
-                if root.width >= (root.web-layout ? 1360px : 1280px): PhotoCullerProTab {
+                if root.width >= 1100px: PhotoCullerProTab {
                     label: "DASHBOARD";
                     view: "dashboard";
                     current-view: root.current-view;
@@ -301,13 +331,13 @@ export component PhotoCullerProHeader inherits Rectangle {
             }
         }
 
-        // Right-hand controls preserve the 208 px search width at reference
-        // desktop size and contract in a web viewport before tabs disappear.
+        // Keep every reference tab and system control visible at the supplied
+        // 1100 px comparison width by contracting the search field first.
         HorizontalLayout {
             spacing: 12px;
 
             if root.width >= 600px: Rectangle {
-                width: root.width >= 1200px ? 208px : (root.width >= 900px ? 160px : 128px);
+                width: root.width >= 1200px ? 208px : (root.width >= 900px ? 128px : 96px);
                 height: 28px;
                 background: #111111;
                 border-radius: 14px;
@@ -383,7 +413,7 @@ export component PhotoCullerProHeader inherits Rectangle {
                 }
             }
 
-            if root.width >= 1120px: Rectangle {
+            if root.width >= 1100px: Rectangle {
                 width: 1px;
                 height: 16px;
                 background: #ffffff1a;
@@ -392,7 +422,7 @@ export component PhotoCullerProHeader inherits Rectangle {
             HorizontalLayout {
                 spacing: 2px;
 
-                if root.width >= 1120px: PhotoCullerProControl {
+                if root.width >= 1100px: PhotoCullerProControl {
                     symbol: "P";
                     action: "performance";
                     requested(action) => {
@@ -409,7 +439,7 @@ export component PhotoCullerProHeader inherits Rectangle {
                         root.action-requested(action);
                     }
                 }
-                if root.width >= 1120px: PhotoCullerProControl {
+                if root.width >= 1100px: PhotoCullerProControl {
                     symbol: "?";
                     action: "shortcuts";
                     requested(action) => {
