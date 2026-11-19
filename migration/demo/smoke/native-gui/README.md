@@ -21,6 +21,13 @@ decoded and published `demo-001.jpg` to the Library view. It then:
    `PHOTO_CULLER_API_ORIGIN`; closing the app must leave that process and health
    endpoint running.
 
+The Windows hosted runner lacks a dependable OpenGL 2.0 driver. Its GUI smoke
+sets `SLINT_BACKEND=winit-software` to use Slint's software renderer with the
+same Winit window and UI. FemtoVG remains the normal default renderer, and the
+software renderer is also available as a fallback when no OpenGL driver exists.
+The Windows evidence records the selected backend; native GUI acceptance does
+not claim that FemtoVG/OpenGL was exercised on that runner.
+
 Screenshots, API logs, process IDs, binary hashes, origin, and exit outcomes
 are uploaded as `rust-slint-demo-native-gui-<platform>-<run-id>-<attempt>`.
 A runner that cannot create or capture a visible Slint window fails the GUI

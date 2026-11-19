@@ -306,6 +306,11 @@ def main():
     if os.name != "nt":
         client.chmod(0o755)
         service.chmod(0o755)
+    windows_backend = None
+    if args.platform == "windows":
+        windows_backend = os.environ.get("SLINT_BACKEND")
+        if windows_backend != "winit-software":
+            raise RuntimeError("the hosted Windows GUI smoke must select Slint's Winit software renderer")
 
     evidence = {
         "date_utc": datetime.now(timezone.utc).isoformat(),
@@ -315,6 +320,8 @@ def main():
         "desktop_sha256": sha(client),
         "server_sha256": sha(service),
     }
+    if windows_backend:
+        evidence["windows_slint_backend"] = windows_backend
     evidence["owned_first"] = owned_run(args.platform, client, out, "owned-first", True)
     evidence["owned_reopen"] = owned_run(args.platform, client, out, "owned-reopen")
 
