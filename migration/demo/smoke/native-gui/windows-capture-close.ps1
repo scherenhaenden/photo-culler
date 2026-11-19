@@ -14,10 +14,10 @@ public static class NativeWindow {
   }
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
-  [DllImport("user32.dll", SetLastError=true)] public static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+  [DllImport("user32.dll", SetLastError=true)] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr value);
+  [DllImport("user32.dll")] public static extern IntPtr GetThreadDpiAwarenessContext();
+  [DllImport("user32.dll")] public static extern int GetAwarenessFromDpiAwarenessContext(IntPtr value);
   [DllImport("user32.dll", SetLastError=true)] private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
-  [DllImport("kernel32.dll")] public static extern IntPtr GetCurrentProcess();
-  [DllImport("shcore.dll")] public static extern int GetProcessDpiAwareness(IntPtr process, out int awareness);
   public static int[] GetWindowBounds(IntPtr hWnd) {
     RECT rect;
     if (!GetWindowRect(hWnd, out rect)) return null;
@@ -26,13 +26,12 @@ public static class NativeWindow {
 }
 '@
 # GetWindowRect and CopyFromScreen must use the same physical-pixel coordinate
-# space. A DPI-unaware PowerShell host otherwise returns virtualized bounds,
-# which creates an oversized screenshot with black margins on hosted runners.
-[void][NativeWindow]::SetProcessDpiAwarenessContext([IntPtr](-4)) # PER_MONITOR_AWARE_V2
-$processDpiAwareness = -1
-$dpiQueryResult = [NativeWindow]::GetProcessDpiAwareness([NativeWindow]::GetCurrentProcess(), [ref]$processDpiAwareness)
-if ($dpiQueryResult -ne 0 -or $processDpiAwareness -ne 2) {
-  throw "PowerShell capture process is not per-monitor DPI aware (query=$dpiQueryResult awareness=$processDpiAwareness)."
+# space. A thread override works even when the PowerShell process manifest has
+# already fixed its process-wide DPI mode to system-aware.
+$previousDpiContext = [NativeWindow]::SetThreadDpiAwarenessContext([IntPtr](-4)) # PER_MONITOR_AWARE_V2
+$threadDpiAwareness = [NativeWindow]::GetAwarenessFromDpiAwarenessContext([NativeWindow]::GetThreadDpiAwarenessContext())
+if ($previousDpiContext -eq [IntPtr]::Zero -or $threadDpiAwareness -ne 2) {
+  throw "PowerShell capture thread is not per-monitor DPI aware (awareness=$threadDpiAwareness)."
 }
 $deadline = [DateTime]::UtcNow.AddSeconds(30)
 $process = $null
@@ -72,7 +71,7 @@ if ($Mode -eq 'Capture') {
     $bitmap.Dispose()
   }
   [ordered]@{
-    dpi_awareness = 'per-monitor-v2'
+    dpi_awareness = 'thread-per-monitor-v2'
     window_bounds = @($bounds.Left, $bounds.Top, $bounds.Right, $bounds.Bottom)
     virtual_screen_bounds = @($virtualScreen.Left, $virtualScreen.Top, $virtualScreen.Right, $virtualScreen.Bottom)
     screenshot_dimensions = @($bounds.Width, $bounds.Height)

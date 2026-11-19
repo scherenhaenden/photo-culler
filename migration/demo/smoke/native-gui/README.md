@@ -4,8 +4,8 @@ The GitHub Actions native matrix executes this smoke on macOS arm64, Linux
 x86-64, and Windows x86-64 using the staged desktop and sibling server
 binaries. Linux uses Xvfb plus Openbox; the other jobs use the hosted runner's
 native window server. Each screenshot is cropped to the Slint top-level window.
-No user desktop is involved. The Windows capture helper enables per-monitor
-DPI awareness before reading `GetWindowRect`, records the window and virtual
+No user desktop is involved. The Windows capture helper enables a per-monitor
+DPI-aware thread before reading `GetWindowRect`, records the window and virtual
 screen bounds, and verifies that the PNG dimensions match the on-screen window.
 
 The runner-side Python script does not ship in the application or become a

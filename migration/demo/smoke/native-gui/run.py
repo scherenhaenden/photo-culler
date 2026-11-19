@@ -273,7 +273,7 @@ def owned_run(platform_name, desktop, out, label, screenshot=False):
             if dimensions[0] < minimum[0] or dimensions[1] < minimum[1]:
                 raise RuntimeError(f"screenshot too small: {dimensions}")
             if platform_name == "windows":
-                if wid.get("dpi_awareness") != "per-monitor-v2":
+                if wid.get("dpi_awareness") != "thread-per-monitor-v2":
                     raise RuntimeError(f"Windows capture did not report per-monitor DPI awareness: {wid}")
                 physical_bounds = wid["window_bounds"]
                 screen_bounds = wid["virtual_screen_bounds"]
