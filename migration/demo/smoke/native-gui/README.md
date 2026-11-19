@@ -31,7 +31,12 @@ It then:
 3. Sends the platform window-close event and checks the app exits normally,
    the owned server child exits, and the assigned loopback port is released.
 4. Reopens the app and repeats the owned-server lifecycle.
-5. Starts a separate server and passes its origin with
+5. Starts one more owned app with `PHOTO_CULLER_GALLERY_SMOKE=1`. The Slint
+   view builds the ten-card synthetic-metadata fixture from the JPEG bytes
+   decoded from the same Rust REST response, then the smoke captures the
+   window and checks a normal close and owned-server release. This run does
+   not alter the preceding live one-photo capture.
+6. Starts a separate server and passes its origin with
    `PHOTO_CULLER_API_ORIGIN`; closing the app must leave that process and health
    endpoint running.
 
@@ -42,7 +47,8 @@ software renderer is also available as a fallback when no OpenGL driver exists.
 The Windows evidence records the selected backend; native GUI acceptance does
 not claim that FemtoVG/OpenGL was exercised on that runner.
 
-Screenshots, API logs, process IDs, binary hashes, origin, and exit outcomes
-are uploaded as `rust-slint-demo-native-gui-<platform>-<run-id>-<attempt>`.
+Both screenshots, per-capture pixel-readiness reports, API logs, process IDs,
+binary hashes, origin, and exit outcomes are uploaded as
+`rust-slint-demo-native-gui-<platform>-<run-id>-<attempt>`.
 A runner that cannot create or capture a visible Slint window fails the GUI
 acceptance job; a build or API test alone is not reported as graphical proof.

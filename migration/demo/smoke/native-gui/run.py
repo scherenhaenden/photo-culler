@@ -225,11 +225,11 @@ def capture_visible_gallery(platform_name, pid, image, timeout=15):
         latest["attempts"] = attempts
         if (latest["yellow_sun_pixels"] >= 20 and latest["blue_sky_pixels"] >= 100
                 and latest["sun_inside_thumbnail_region"]):
-            readiness = image.with_name("screenshot-content-readiness.json")
+            readiness = image.with_name(f"{image.stem}-content-readiness.json")
             readiness.write_text(json.dumps(latest, indent=2) + "\n")
             return latest_window, dimensions, latest
         time.sleep(.5)
-    readiness = image.with_name("screenshot-content-readiness.json")
+    readiness = image.with_name(f"{image.stem}-content-readiness.json")
     linux_debug = image.parent / "linux-window-debug.txt"
     platform_diagnostics = {"process_alive_at_timeout": alive(pid)}
     if platform_name == "linux" and linux_debug.exists():
@@ -450,11 +450,16 @@ end tell'''
               "-Mode", "Close", "-ProcessId", str(pid)], timeout=15)
 
 
-def launch(desktop, status, log, external=None):
+def launch(desktop, status, log, external=None, gallery_smoke=False):
     status.unlink(missing_ok=True)
     env = os.environ.copy()
     env["PHOTO_CULLER_SMOKE_STATUS_FILE"] = str(status)
     env.pop("PHOTO_CULLER_SERVER", None)
+    # Keep the live one-photo run deterministic even if the runner has this
+    # selector in its environment; enable it only for the explicit S05 run.
+    env.pop("PHOTO_CULLER_GALLERY_SMOKE", None)
+    if gallery_smoke:
+        env["PHOTO_CULLER_GALLERY_SMOKE"] = "1"
     if external:
         env["PHOTO_CULLER_API_ORIGIN"] = external
     else:
@@ -496,9 +501,9 @@ def sha(path):
     return h.hexdigest()
 
 
-def owned_run(platform_name, desktop, out, label, screenshot=False):
+def owned_run(platform_name, desktop, out, label, screenshot=False, gallery_smoke=False):
     status, log = out / f"{label}-status.tsv", out / f"{label}-desktop.log"
-    p = launch(desktop, status, log)
+    p = launch(desktop, status, log, gallery_smoke=gallery_smoke)
     child = None
     try:
         origin, child = ready(p, status)
@@ -538,6 +543,8 @@ def owned_run(platform_name, desktop, out, label, screenshot=False):
                 "probe": summary, "exit_code": exit_code, "port_released": True,
                 "screenshot": str(image) if screenshot else None, "dimensions": dimensions,
                 "screenshot_content": screenshot_content,
+                "gallery_smoke_fixture": gallery_smoke,
+                "screenshot_sha256": sha(image) if screenshot else None,
                 "window_capture": wid if isinstance(wid, dict) else None}
     except Exception:
         if p.poll() is None:
@@ -632,6 +639,9 @@ def main():
         evidence["windows_slint_backend"] = windows_backend
     evidence["owned_first"] = owned_run(args.platform, client, out, "owned-first", True)
     evidence["owned_reopen"] = owned_run(args.platform, client, out, "owned-reopen")
+    evidence["gallery_smoke"] = owned_run(
+        args.platform, client, out, "gallery-smoke", True, gallery_smoke=True
+    )
 
     external, origin = start_external(service, out / "external-server.log")
     try:
@@ -669,8 +679,11 @@ def main():
         f"UTC: {evidence['date_utc']}\nPlatform: {evidence['platform']} ({evidence['architecture']})\n"
         f"Desktop SHA-256: {evidence['desktop_sha256']}\nServer SHA-256: {evidence['server_sha256']}\n"
         "Visible demo-001.jpg; owned launch/normal close/process and port release: PASS\n"
-        "Reopen: PASS; PHOTO_CULLER_API_ORIGIN survives close: PASS\n"
+        "Reopen: PASS; 10-card synthetic metadata capture: PASS; "
+        "PHOTO_CULLER_API_ORIGIN survives close: PASS\n"
         f"Screenshot: {out / 'owned-first.png'} ({evidence['screenshot_sha256']})\n"
+        f"10-card capture: {out / 'gallery-smoke.png'} "
+        f"({evidence['gallery_smoke']['screenshot_sha256']})\n"
     )
     print(json.dumps(evidence, indent=2))
 
