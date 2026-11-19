@@ -2,7 +2,10 @@ name: Rust Slint demo artifacts
 
 on:
   pull_request:
-    branches: [feature/sprint-01-rust-foundation]
+    branches:
+      - feature/sprint-01-rust-foundation
+      - feature/sprint-01-completion
+      - feature/sprint-01-photo-culler-pro-design
     paths:
       - 'rust/Cargo.toml'
       - 'rust/Cargo.lock'
@@ -16,7 +19,10 @@ on:
       - 'migration/demo/smoke/**'
       - '.github/workflows/rust-slint-demo.yml'
   push:
-    branches: [feature/sprint-01-rust-foundation]
+    branches:
+      - feature/sprint-01-rust-foundation
+      - feature/sprint-01-completion
+      - feature/sprint-01-photo-culler-pro-design
     paths:
       - 'rust/Cargo.toml'
       - 'rust/Cargo.lock'
