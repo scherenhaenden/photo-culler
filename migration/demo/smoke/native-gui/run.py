@@ -486,8 +486,15 @@ def owned_run(platform_name, desktop, out, label, screenshot=False):
                     raise RuntimeError(f"Windows window bounds exceed physical-screen bounds: {wid}")
             if platform_name == "linux":
                 geometry = wid["geometry"]
-                if dimensions != (geometry.get("width"), geometry.get("height")):
-                    raise RuntimeError(f"Linux screenshot dimensions {dimensions} differ from X11 window geometry {geometry}")
+                window_dimensions = (geometry.get("width"), geometry.get("height"))
+                inset = (window_dimensions[0] - dimensions[0], window_dimensions[1] - dimensions[1])
+                wid["screenshot_dimensions"] = list(dimensions)
+                wid["screenshot_inset"] = list(inset)
+                if (inset[0] < -2 or inset[1] < -2 or inset[0] > 32 or inset[1] > 32):
+                    raise RuntimeError(
+                        f"Linux screenshot dimensions {dimensions} exceed the selected X11 window "
+                        f"or differ by more than the 32px frame allowance: geometry={geometry}, inset={inset}"
+                    )
         exit_code = close_app(p, platform_name, wid, child, origin)
         return {"desktop_pid": p.pid, "owned_server_pid": child, "origin": origin,
                 "probe": summary, "exit_code": exit_code, "port_released": True,
