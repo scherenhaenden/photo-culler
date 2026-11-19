@@ -13,7 +13,10 @@ The runner-side Python script does not ship in the application or become a
 descendant of the desktop. It copies both Rust executables into a temporary
 directory containing spaces, launches the actual Slint binary, and waits for
 its `PHOTO_CULLER_SMOKE_STATUS_FILE` event confirming that the REST client
-decoded and published `demo-001.jpg` to the Library view. It then:
+decoded and published `demo-001.jpg` to the Library view. The screenshot loop
+then retries for up to 20 seconds until it detects the fixture's yellow sun and
+blue sky together inside the gallery region, proving that Slint painted the
+thumbnail. It then:
 
 1. Probes health, gallery JSON, and the real JPEG content type.
 2. Captures the visible Slint window at the runner's native viewport.

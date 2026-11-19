@@ -8,6 +8,7 @@ import os
 import platform
 import queue
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -15,6 +16,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+import zlib
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -75,6 +77,141 @@ def probe(origin):
     if not data.startswith(b"\xff\xd8\xff"):
         raise RuntimeError("thumbnail is not a JPEG")
     return f"health=ready; gallery=demo-001.jpg; thumbnail=image/jpeg ({len(data)} bytes)"
+
+
+def gallery_fixture_pixels(path):
+    """Count the fixture thumbnail's yellow sun and blue sky in the gallery area."""
+    data = path.read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise RuntimeError(f"invalid screenshot PNG: {path}")
+    position = 8
+    width = height = bit_depth = color_type = interlace = None
+    compressed = bytearray()
+    while position + 12 <= len(data):
+        length = int.from_bytes(data[position:position + 4], "big")
+        chunk_type = data[position + 4:position + 8]
+        chunk_data = data[position + 8:position + 8 + length]
+        if len(chunk_data) != length:
+            raise RuntimeError(f"truncated PNG chunk in screenshot: {path}")
+        if chunk_type == b"IHDR":
+            width, height, bit_depth, color_type, compression, filter_method, interlace = struct.unpack(
+                ">IIBBBBB", chunk_data
+            )
+            if compression != 0 or filter_method != 0:
+                raise RuntimeError(f"unsupported PNG compression/filter in screenshot: {path}")
+        elif chunk_type == b"IDAT":
+            compressed.extend(chunk_data)
+        elif chunk_type == b"IEND":
+            break
+        position += length + 12
+    if not width or not height or bit_depth != 8 or color_type not in (2, 6) or interlace != 0:
+        raise RuntimeError(
+            f"unsupported screenshot PNG format: {path} ({width}x{height}, depth={bit_depth}, "
+            f"color_type={color_type}, interlace={interlace})"
+        )
+
+    channels = 4 if color_type == 6 else 3
+    stride = width * channels
+    pixels = zlib.decompress(compressed)
+    if len(pixels) != height * (stride + 1):
+        raise RuntimeError(f"unexpected decoded PNG size in screenshot: {path}")
+    gallery_left, gallery_top = int(width * 0.30), int(height * 0.18)
+    yellow_sun = blue_sky = 0
+    yellow_bounds = [width, height, -1, -1]
+    blue_bounds = [width, height, -1, -1]
+    previous = bytearray(stride)
+    cursor = 0
+
+    def paeth(left, above, upper_left):
+        estimate = left + above - upper_left
+        distances = (abs(estimate - left), abs(estimate - above), abs(estimate - upper_left))
+        return (left, above, upper_left)[distances.index(min(distances))]
+
+    for y in range(height):
+        filter_type = pixels[cursor]
+        cursor += 1
+        scanline = bytearray(pixels[cursor:cursor + stride])
+        cursor += stride
+        if filter_type == 1:
+            for index in range(stride):
+                scanline[index] = (scanline[index] + (scanline[index - channels] if index >= channels else 0)) & 255
+        elif filter_type == 2:
+            for index in range(stride):
+                scanline[index] = (scanline[index] + previous[index]) & 255
+        elif filter_type == 3:
+            for index in range(stride):
+                left = scanline[index - channels] if index >= channels else 0
+                scanline[index] = (scanline[index] + ((left + previous[index]) // 2)) & 255
+        elif filter_type == 4:
+            for index in range(stride):
+                left = scanline[index - channels] if index >= channels else 0
+                upper_left = previous[index - channels] if index >= channels else 0
+                scanline[index] = (scanline[index] + paeth(left, previous[index], upper_left)) & 255
+        elif filter_type != 0:
+            raise RuntimeError(f"unknown PNG row filter {filter_type} in screenshot: {path}")
+
+        if y >= gallery_top:
+            for x in range(gallery_left, width):
+                index = x * channels
+                red, green, blue = scanline[index:index + 3]
+                alpha = scanline[index + 3] if channels == 4 else 255
+                if alpha >= 200 and red >= 210 and green >= 155 and blue <= 145:
+                    yellow_sun += 1
+                    yellow_bounds = [min(yellow_bounds[0], x), min(yellow_bounds[1], y),
+                                     max(yellow_bounds[2], x), max(yellow_bounds[3], y)]
+                if alpha >= 200 and red <= 105 and green >= 85 and blue >= 145:
+                    blue_sky += 1
+                    blue_bounds = [min(blue_bounds[0], x), min(blue_bounds[1], y),
+                                   max(blue_bounds[2], x), max(blue_bounds[3], y)]
+        previous = scanline
+    yellow_pixel_bounds = yellow_bounds if yellow_sun else None
+    blue_pixel_bounds = blue_bounds if blue_sky else None
+    sun_inside_thumbnail = bool(
+        yellow_pixel_bounds and blue_pixel_bounds
+        and blue_pixel_bounds[0] <= yellow_pixel_bounds[0] <= yellow_pixel_bounds[2] <= blue_pixel_bounds[2]
+        and blue_pixel_bounds[1] <= yellow_pixel_bounds[1] <= yellow_pixel_bounds[3] <= blue_pixel_bounds[3]
+    )
+    return {
+        "dimensions": [width, height],
+        "gallery_region_origin": [gallery_left, gallery_top],
+        "yellow_sun_pixels": yellow_sun,
+        "blue_sky_pixels": blue_sky,
+        "yellow_pixel_bounds": yellow_pixel_bounds,
+        "blue_pixel_bounds": blue_pixel_bounds,
+        "sun_inside_thumbnail_region": sun_inside_thumbnail,
+    }
+
+
+def capture_visible_gallery(platform_name, pid, image, timeout=15):
+    deadline = time.monotonic() + timeout
+    attempts = 0
+    latest = None
+    latest_window = None
+    minimum = (800, 500) if platform_name == "windows" else (1000, 650)
+    while time.monotonic() < deadline:
+        attempts += 1
+        latest_window = capture(platform_name, pid, image)
+        header = image.read_bytes()[:24]
+        if (header[:8] != b"\x89PNG\r\n\x1a\n" or header[12:16] != b"IHDR"
+                or image.stat().st_size < 10000):
+            raise RuntimeError(f"empty or invalid screenshot: {image}")
+        dimensions = (int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big"))
+        if dimensions[0] < minimum[0] or dimensions[1] < minimum[1]:
+            raise RuntimeError(f"screenshot too small: {dimensions}")
+        latest = gallery_fixture_pixels(image)
+        latest["attempts"] = attempts
+        if (latest["yellow_sun_pixels"] >= 20 and latest["blue_sky_pixels"] >= 100
+                and latest["sun_inside_thumbnail_region"]):
+            readiness = image.with_name("screenshot-content-readiness.json")
+            readiness.write_text(json.dumps(latest, indent=2) + "\n")
+            return latest_window, dimensions, latest
+        time.sleep(.5)
+    readiness = image.with_name("screenshot-content-readiness.json")
+    readiness.write_text(json.dumps({"attempts": attempts, "last_capture": latest}, indent=2) + "\n")
+    raise RuntimeError(
+        f"Slint window never painted the demo fixture thumbnail after {attempts} captures; "
+        f"last gallery pixels={latest} (diagnostic: {readiness})"
+    )
 
 
 def released(origin):
@@ -262,16 +399,11 @@ def owned_run(platform_name, desktop, out, label, screenshot=False):
         image = out / f"{label}.png"
         wid = None
         dimensions = None
+        screenshot_content = None
         if screenshot:
-            time.sleep(1)
-            wid = capture(platform_name, p.pid, image)
-            header = image.read_bytes()[:24]
-            if header[:8] != b"\x89PNG\r\n\x1a\n" or header[12:16] != b"IHDR" or image.stat().st_size < 10000:
-                raise RuntimeError(f"empty or invalid screenshot: {image}")
-            dimensions = (int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big"))
-            minimum = (800, 500) if platform_name == "windows" else (1000, 650)
-            if dimensions[0] < minimum[0] or dimensions[1] < minimum[1]:
-                raise RuntimeError(f"screenshot too small: {dimensions}")
+            wid, dimensions, screenshot_content = capture_visible_gallery(
+                platform_name, p.pid, image, timeout=20
+            )
             if platform_name == "windows":
                 if wid.get("dpi_awareness") != "thread-per-monitor-v2":
                     raise RuntimeError(f"Windows capture did not report per-monitor DPI awareness: {wid}")
@@ -291,6 +423,7 @@ def owned_run(platform_name, desktop, out, label, screenshot=False):
         return {"desktop_pid": p.pid, "owned_server_pid": child, "origin": origin,
                 "probe": summary, "exit_code": exit_code, "port_released": True,
                 "screenshot": str(image) if screenshot else None, "dimensions": dimensions,
+                "screenshot_content": screenshot_content,
                 "window_capture": wid if isinstance(wid, dict) else None}
     except Exception:
         if p.poll() is None:
