@@ -521,12 +521,18 @@ def owned_run(platform_name, desktop, out, label, screenshot=False, gallery_smok
                     raise RuntimeError(f"Windows capture did not report per-monitor DPI awareness: {wid}")
                 physical_bounds = wid["window_bounds"]
                 screen_bounds = wid["physical_screen_bounds"]
+                work_area_bounds = wid.get("work_area_bounds")
                 expected_dimensions = wid["screenshot_dimensions"]
                 if dimensions != tuple(expected_dimensions):
                     raise RuntimeError(f"Windows screenshot dimensions {dimensions} differ from window bounds {expected_dimensions}")
                 if (physical_bounds[0] < screen_bounds[0] or physical_bounds[1] < screen_bounds[1]
                         or physical_bounds[2] > screen_bounds[2] or physical_bounds[3] > screen_bounds[3]):
                     raise RuntimeError(f"Windows window bounds exceed physical-screen bounds: {wid}")
+                if (not work_area_bounds or physical_bounds[0] < work_area_bounds[0]
+                        or physical_bounds[1] < work_area_bounds[1]
+                        or physical_bounds[2] > work_area_bounds[2]
+                        or physical_bounds[3] > work_area_bounds[3]):
+                    raise RuntimeError(f"Windows window is not fully within the usable work area: {wid}")
             if platform_name == "linux":
                 geometry = wid["geometry"]
                 window_dimensions = (geometry.get("width"), geometry.get("height"))

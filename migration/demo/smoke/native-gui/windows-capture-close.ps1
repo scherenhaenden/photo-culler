@@ -14,6 +14,8 @@ public static class NativeWindow {
   }
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+  [DllImport("user32.dll", SetLastError=true)] private static extern bool SetWindowPos(IntPtr hWnd, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
+  [DllImport("user32.dll", SetLastError=true)] private static extern bool SystemParametersInfo(uint action, uint parameter, out RECT value, uint flags);
   [DllImport("user32.dll", SetLastError=true)] public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr value);
   [DllImport("user32.dll")] public static extern IntPtr GetThreadDpiAwarenessContext();
   [DllImport("user32.dll")] public static extern int GetAwarenessFromDpiAwarenessContext(IntPtr value);
@@ -37,6 +39,18 @@ public static class NativeWindow {
     } finally {
       ReleaseDC(IntPtr.Zero, hdc);
     }
+  }
+  public static int[] GetPrimaryWorkAreaBounds() {
+    RECT rect;
+    if (!SystemParametersInfo(0x0030, 0, out rect, 0)) return null; // SPI_GETWORKAREA
+    return new int[] { rect.Left, rect.Top, rect.Right, rect.Bottom };
+  }
+  public static bool MoveWindowWithoutResize(IntPtr hWnd, int x, int y) {
+    const uint SWP_NOSIZE = 0x0001;
+    const uint SWP_NOZORDER = 0x0004;
+    const uint SWP_NOACTIVATE = 0x0010;
+    return SetWindowPos(hWnd, IntPtr.Zero, x, y, 0, 0,
+      SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
   }
 }
 '@
@@ -66,7 +80,30 @@ if ($Mode -eq 'Capture') {
   Add-Type -AssemblyName System.Drawing
   $windowRect = [NativeWindow]::GetWindowBounds($handle)
   if (-not $windowRect) { throw "Could not read bounds for Slint window $handle." }
+  $workArea = [NativeWindow]::GetPrimaryWorkAreaBounds()
+  if (-not $workArea) { throw 'Could not read physical primary work-area bounds.' }
+  $originalWidth = $windowRect[2] - $windowRect[0]
+  $originalHeight = $windowRect[3] - $windowRect[1]
+  $targetLeft = $workArea[0] + 8
+  $targetTop = $workArea[1] + 8
+  if ($targetLeft + $originalWidth -gt $workArea[2] -or
+      $targetTop + $originalHeight -gt $workArea[3]) {
+    throw "Slint window ${originalWidth}x${originalHeight} does not fit in the primary work area ($($workArea -join ','))."
+  }
+  if (-not [NativeWindow]::MoveWindowWithoutResize($handle, $targetLeft, $targetTop)) {
+    throw "Could not move Slint window $handle into the visible work area."
+  }
+  Start-Sleep -Milliseconds 300
+  $windowRect = [NativeWindow]::GetWindowBounds($handle)
+  if (-not $windowRect) { throw "Could not reread bounds for Slint window $handle after repositioning." }
   $bounds = [System.Drawing.Rectangle]::FromLTRB($windowRect[0], $windowRect[1], $windowRect[2], $windowRect[3])
+  if ($bounds.Width -ne $originalWidth -or $bounds.Height -ne $originalHeight) {
+    throw "Repositioning unexpectedly resized the Slint window from ${originalWidth}x${originalHeight} to $($bounds.Width)x$($bounds.Height)."
+  }
+  if ($bounds.Left -lt $workArea[0] -or $bounds.Top -lt $workArea[1] -or
+      $bounds.Right -gt $workArea[2] -or $bounds.Bottom -gt $workArea[3]) {
+    throw "Slint window bounds ($($bounds.Left),$($bounds.Top),$($bounds.Right),$($bounds.Bottom)) exceed the primary work area ($($workArea -join ','))."
+  }
   $physicalScreen = [NativeWindow]::GetPhysicalPrimaryScreenBounds()
   if (-not $physicalScreen) { throw 'Could not read physical primary-screen pixel bounds.' }
   if ($bounds.Left -lt $physicalScreen[0] -or $bounds.Top -lt $physicalScreen[1] -or
@@ -88,6 +125,7 @@ if ($Mode -eq 'Capture') {
   [ordered]@{
     dpi_awareness = 'thread-per-monitor-v2'
     window_bounds = @($bounds.Left, $bounds.Top, $bounds.Right, $bounds.Bottom)
+    work_area_bounds = @($workArea[0], $workArea[1], $workArea[2], $workArea[3])
     physical_screen_bounds = @($physicalScreen[0], $physicalScreen[1], $physicalScreen[2], $physicalScreen[3])
     screenshot_dimensions = @($bounds.Width, $bounds.Height)
   } | ConvertTo-Json -Compress
