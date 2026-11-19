@@ -44,6 +44,11 @@ impl DemoServer {
         self.address
     }
 
+    /// Returns the process ID only when this launcher owns the server child.
+    pub fn owned_process_id(&self) -> Option<u32> {
+        self._owned.as_ref().map(|owned| owned.child.id())
+    }
+
     fn connect_external(origin: &str) -> Result<Self, String> {
         let ready = validate_origin(origin)?;
         let host = origin
