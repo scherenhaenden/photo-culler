@@ -282,86 +282,124 @@ def stop_pid(pid):
                        check=False, capture_output=True, timeout=10)
 
 
+def discover_linux_window(pid, output_dir):
+    output_dir.mkdir(parents=True, exist_ok=True)
+    by_pid = call(["xdotool", "search", "--onlyvisible", "--pid", str(pid)], check=False)
+    all_visible = call(["xdotool", "search", "--onlyvisible", "--name", ".*"], check=False)
+    windows = []
+    for window_id in all_visible.stdout.split():
+        title = call(["xdotool", "getwindowname", window_id], check=False).stdout.strip()
+        window_pid_text = call(["xdotool", "getwindowpid", window_id], check=False).stdout.strip()
+        geometry_text = call(["xdotool", "getwindowgeometry", "--shell", window_id], check=False).stdout
+        geometry = {}
+        for line in geometry_text.splitlines():
+            key, separator, value = line.partition("=")
+            if separator and value.lstrip("-").isdigit():
+                geometry[key.lower()] = int(value)
+        windows.append({
+            "window_id": window_id,
+            "title": title,
+            "pid": int(window_pid_text) if window_pid_text.isdigit() else None,
+            "geometry": geometry,
+        })
+
+    xwininfo = call(["xwininfo", "-root", "-tree"], check=False)
+    x11_windows = []
+    window_pattern = re.compile(
+        r'^\s*(0x[0-9a-fA-F]+)\s+"([^"]*)":\s+\("([^"]*)"\s+"([^"]*)"\)\s+'
+        r'(\d+)x(\d+)\+(-?\d+)\+(-?\d+)'
+    )
+    for line in xwininfo.stdout.splitlines():
+        match = window_pattern.match(line)
+        if not match:
+            continue
+        xid, title, resource_name, class_name, width, height, x, y = match.groups()
+        window_id = str(int(xid, 16))
+        window_info = call(["xwininfo", "-id", xid], check=False)
+        window_pid_text = call(["xdotool", "getwindowpid", window_id], check=False).stdout.strip()
+        x11_windows.append({
+            "window_id": window_id,
+            "xid": xid,
+            "title": title,
+            "resource_name": resource_name,
+            "class_name": class_name,
+            "pid": int(window_pid_text) if window_pid_text.isdigit() else None,
+            "viewable": "Map State: IsViewable" in window_info.stdout,
+            "geometry": {"x": int(x), "y": int(y), "width": int(width), "height": int(height)},
+        })
+    debug_path = output_dir / "linux-window-debug.txt"
+    debug_lines = [
+        f"DISPLAY={os.environ.get('DISPLAY', '')}",
+        f"WAYLAND_DISPLAY={os.environ.get('WAYLAND_DISPLAY', '')}",
+        f"WAYLAND_SOCKET={os.environ.get('WAYLAND_SOCKET', '')}",
+        f"desktop_pid={pid}",
+        f"desktop_process_alive={alive(pid)}",
+        f"pid_search={by_pid.stdout.strip()!r}",
+        f"visible_search={all_visible.stdout.strip()!r}",
+        f"visible_windows={windows!r}",
+        f"xwininfo_windows={x11_windows!r}",
+        f"xwininfo_exit={xwininfo.returncode}",
+        xwininfo.stdout,
+        xwininfo.stderr,
+    ]
+    debug_path.write_text("\n".join(debug_lines))
+    candidates = [window for window in x11_windows
+                  if "photo culler" in window["title"].casefold()
+                  and "photo-culler-desktop" in window["resource_name"].casefold()
+                  and window["viewable"]
+                  and window["pid"] == pid
+                  and window["geometry"]["width"] >= 1000
+                  and window["geometry"]["height"] >= 650]
+    if not candidates:
+        raise WindowNotVisibleError(
+            f"no visible titled X11 Photo Culler child for desktop PID {pid}; "
+            f"pid-search={by_pid.stdout.strip()!r}; xwininfo-windows={x11_windows!r}",
+            {
+                "desktop_process_alive": alive(pid),
+                "xwininfo_exit": xwininfo.returncode,
+                "xwininfo_tree": xwininfo.stdout,
+                "xwininfo_stderr": xwininfo.stderr,
+                "linux_window_debug_path": str(debug_path),
+            },
+        )
+    return max(candidates, key=lambda window: window["geometry"]["width"]
+               * window["geometry"]["height"])
+
+
+def wait_for_linux_window(pid, output_dir, timeout=20):
+    deadline = time.monotonic() + timeout
+    attempts = 0
+    last_error = None
+    while time.monotonic() < deadline:
+        attempts += 1
+        try:
+            return discover_linux_window(pid, output_dir)
+        except WindowNotVisibleError as error:
+            last_error = error
+            time.sleep(.5)
+    debug_path = output_dir / "linux-window-debug.txt"
+    debug_text = debug_path.read_text(errors="replace") if debug_path.exists() else ""
+    diagnostics = {
+        "attempts": attempts,
+        "desktop_process_alive_at_timeout": alive(pid),
+        "last_window_error": str(last_error) if last_error else None,
+        "last_window_diagnostic": last_error.diagnostic if last_error else None,
+        "linux_window_debug_path": str(debug_path),
+        "linux_window_debug": debug_text,
+    }
+    (output_dir / "linux-window-close-discovery-timeout.json").write_text(
+        json.dumps(diagnostics, indent=2) + "\n"
+    )
+    raise RuntimeError(
+        f"no titled X11 Photo Culler window for desktop PID {pid} after {attempts} attempts; "
+        f"process_alive={diagnostics['desktop_process_alive_at_timeout']}; "
+        f"diagnostic={output_dir / 'linux-window-close-discovery-timeout.json'}"
+    ) from last_error
+
+
 def capture(platform_name, pid, output):
     if platform_name == "linux":
-        by_pid = call(["xdotool", "search", "--onlyvisible", "--pid", str(pid)], check=False)
-        all_visible = call(["xdotool", "search", "--onlyvisible", "--name", ".*"], check=False)
-        windows = []
-        for window_id in all_visible.stdout.split():
-            title = call(["xdotool", "getwindowname", window_id], check=False).stdout.strip()
-            window_pid_text = call(["xdotool", "getwindowpid", window_id], check=False).stdout.strip()
-            geometry_text = call(["xdotool", "getwindowgeometry", "--shell", window_id], check=False).stdout
-            geometry = {}
-            for line in geometry_text.splitlines():
-                key, separator, value = line.partition("=")
-                if separator and value.lstrip("-").isdigit():
-                    geometry[key.lower()] = int(value)
-            windows.append({
-                "window_id": window_id,
-                "title": title,
-                "pid": int(window_pid_text) if window_pid_text.isdigit() else None,
-                "geometry": geometry,
-            })
-        xwininfo = call(["xwininfo", "-root", "-tree"], check=False)
-        x11_windows = []
-        window_pattern = re.compile(
-            r'^\s*(0x[0-9a-fA-F]+)\s+"([^"]*)":\s+\("([^"]*)"\s+"([^"]*)"\)\s+'
-            r'(\d+)x(\d+)\+(-?\d+)\+(-?\d+)'
-        )
-        for line in xwininfo.stdout.splitlines():
-            match = window_pattern.match(line)
-            if not match:
-                continue
-            xid, title, resource_name, class_name, width, height, x, y = match.groups()
-            window_id = str(int(xid, 16))
-            window_info = call(["xwininfo", "-id", xid], check=False)
-            window_pid_text = call(["xdotool", "getwindowpid", window_id], check=False).stdout.strip()
-            x11_windows.append({
-                "window_id": window_id,
-                "xid": xid,
-                "title": title,
-                "resource_name": resource_name,
-                "class_name": class_name,
-                "pid": int(window_pid_text) if window_pid_text.isdigit() else None,
-                "viewable": "Map State: IsViewable" in window_info.stdout,
-                "geometry": {"x": int(x), "y": int(y), "width": int(width), "height": int(height)},
-            })
-        debug_lines = [
-            f"DISPLAY={os.environ.get('DISPLAY', '')}",
-            f"WAYLAND_DISPLAY={os.environ.get('WAYLAND_DISPLAY', '')}",
-            f"WAYLAND_SOCKET={os.environ.get('WAYLAND_SOCKET', '')}",
-            f"desktop_pid={pid}",
-            f"pid_search={by_pid.stdout.strip()!r}",
-            f"visible_search={all_visible.stdout.strip()!r}",
-            f"visible_windows={windows!r}",
-            f"xwininfo_windows={x11_windows!r}",
-            f"xwininfo_exit={xwininfo.returncode}",
-            xwininfo.stdout,
-            xwininfo.stderr,
-        ]
-        debug_path = output.parent / "linux-window-debug.txt"
-        debug_path.write_text("\n".join(debug_lines))
-        candidates = [window for window in x11_windows
-                      if "photo culler" in window["title"].casefold()
-                      and "photo-culler-desktop" in window["resource_name"].casefold()
-                      and window["viewable"]
-                      and (window["pid"] is None or window["pid"] == pid)
-                      and window["geometry"]["width"] >= 1000
-                      and window["geometry"]["height"] >= 650]
-        if not candidates:
-            raise WindowNotVisibleError(
-                f"no visible titled X11 Photo Culler child for desktop PID {pid}; "
-                f"pid-search={by_pid.stdout.strip()!r}; xwininfo-windows={x11_windows!r}",
-                {
-                    "desktop_process_alive": alive(pid),
-                    "xwininfo_exit": xwininfo.returncode,
-                    "xwininfo_tree": xwininfo.stdout,
-                    "xwininfo_stderr": xwininfo.stderr,
-                    "linux_window_debug_path": str(debug_path),
-                },
-            )
-        wid = max(candidates, key=lambda window: window["geometry"]["width"]
-                  * window["geometry"]["height"])
+        wid = discover_linux_window(pid, output.parent)
         window_id = wid["window_id"]
         call(["xdotool", "windowactivate", "--sync", window_id])
         time.sleep(.75)
@@ -390,14 +428,13 @@ end tell'''
     return evidence
 
 
-def close_window(platform_name, pid, wid):
+def close_window(platform_name, pid, wid, diagnostics_dir=None):
     if platform_name == "linux":
         window_id = wid["window_id"] if isinstance(wid, dict) else wid
         if not window_id:
-            ids = call(["xdotool", "search", "--onlyvisible", "--pid", str(pid)], check=False).stdout.split()
-            window_id = ids[-1] if ids else None
-        if not window_id:
-            raise RuntimeError(f"no X11 window to close for PID {pid}")
+            diagnostics_dir = diagnostics_dir or (Path(tempfile.gettempdir()) / f"photo-culler-window-close-{pid}")
+            wid = wait_for_linux_window(pid, diagnostics_dir)
+            window_id = wid["window_id"]
         call(["xdotool", "windowactivate", "--sync", window_id])
         call(["xdotool", "key", "--clearmodifiers", "Alt+F4"])
     elif platform_name == "macos":
@@ -428,8 +465,8 @@ def launch(desktop, status, log, external=None):
     return p
 
 
-def close_app(p, platform_name, wid, child_pid, origin, release_expected=True):
-    close_window(platform_name, p.pid, wid)
+def close_app(p, platform_name, wid, child_pid, origin, release_expected=True, diagnostics_dir=None):
+    close_window(platform_name, p.pid, wid, diagnostics_dir)
     try:
         code = p.wait(timeout=20)
     except subprocess.TimeoutExpired as e:
@@ -496,7 +533,7 @@ def owned_run(platform_name, desktop, out, label, screenshot=False):
                         f"Linux screenshot dimensions {dimensions} exceed the selected X11 window "
                         f"or differ by more than the 32px frame allowance: geometry={geometry}, inset={inset}"
                     )
-        exit_code = close_app(p, platform_name, wid, child, origin)
+        exit_code = close_app(p, platform_name, wid, child, origin, diagnostics_dir=out)
         return {"desktop_pid": p.pid, "owned_server_pid": child, "origin": origin,
                 "probe": summary, "exit_code": exit_code, "port_released": True,
                 "screenshot": str(image) if screenshot else None, "dimensions": dimensions,
@@ -605,7 +642,8 @@ def main():
             actual, child = ready(p, status)
             if actual != origin or child is not None:
                 raise RuntimeError("external mode must reuse the specified server without owning it")
-            code = close_app(p, args.platform, None, None, origin, release_expected=False)
+            code = close_app(p, args.platform, None, None, origin, release_expected=False,
+                             diagnostics_dir=out)
             if external.poll() is not None or json_get(origin + "/api/v1/health").get("status") != "ready":
                 raise RuntimeError("external service stopped when the desktop closed")
             evidence["external_survives_close"] = {

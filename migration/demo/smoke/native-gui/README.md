@@ -22,7 +22,9 @@ window discovery while the native window is being mapped. Timeout evidence
 includes process liveness and the final full X11 window tree. Linux records the
 selected child geometry and screenshot dimensions, allowing the small client
 area inset from the X11 window while rejecting captures larger than that
-window. It then:
+window. Reopen and external-server runs reuse the same title, resource class,
+PID, and viewability checks before sending Alt+F4 through the window manager.
+It then:
 
 1. Probes health, gallery JSON, and the real JPEG content type.
 2. Captures the visible Slint window at the runner's native viewport.
