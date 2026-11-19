@@ -1,8 +1,8 @@
 # Primera demo de Photo Culler en Rust y Slint
 
-**Estado:** borrador para aprobación. 34 fichas preparadas. El envío y la implementación empiezan tras la aprobación del usuario.
+**Estado:** D01–D33 integradas en `feature/sprint-01-rust-foundation`. La rama candidata `feature/sprint-01-completion` ensambla D34 y los ocho work items S01–S08; no se ha integrado en la rama base. El [estado del Sprint 01](SPRINT_01_REMAINING.md) separa implementación comprobada de aceptación pendiente.
 
-**Base revisada:** `db9a00723da400c479c09f8381657874d620e845` en `feature/sprint-01-rust-foundation`. Cargo incorpora core, motor de imágenes, CLI, egui y Tauri. El código de servidor, cliente REST y Slint existe por módulos. Todavía requiere registro en Cargo, ensamblaje y validación de arranque.
+**Base actual del sprint:** `153d04920220fb0c396dca571620c0921052ab1b` en `feature/sprint-01-rust-foundation`. El candidato integra el servidor ejecutable, el cliente compartido, el launcher de escritorio, el arranque WASM, los componentes visuales y el workflow. La ejecución real de CI y la revisión de paridad con capturas siguen siendo gates de aceptación.
 
 ## Resultado que se va a entregar
 
@@ -15,8 +15,10 @@ La demo trabaja con una galería incluida, por loopback y en modo de lectura. La
 | Documento | Decisión que permite revisar |
 |---|---|
 | [Arquitectura y contratos](ARCHITECTURE.md) | Límites de la demo, API, ciclo del servidor, interfaz compartida, build, artefactos y condiciones de aceptación. |
+| [Trabajo pendiente del Sprint 01](SPRINT_01_REMAINING.md) | Bloqueos actuales, dependencias, criterios de cierre y pruebas por plataforma. |
+| [Roadmap de paridad visual](DESIGN_PARITY_ROADMAP.md) | Referencias de escritorio y web, componentes a portar y criterios para aceptar el diseño en Slint. |
 | [Orden de envío y pipeline](PIPELINE.md) | Las 34 fichas en orden de despacho, cuándo se puede empezar, requisitos para integrar y quién escribe los archivos compartidos. |
-| [34 fichas listas para enviar](TASKS.md) | Cada ficha tiene alcance, rutas bajo su propiedad y pruebas que debe aportar. |
+| [34 fichas de implementación](TASKS.md) | Cada ficha tiene alcance, rutas bajo su propiedad y pruebas que debe aportar. |
 
 ## Alcance y origen del conteo
 

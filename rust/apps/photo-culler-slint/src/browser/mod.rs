@@ -20,6 +20,7 @@ pub enum StartupDiagnostic {
     ApiUnavailable,
 }
 
+#[allow(dead_code)] // The same recovery messages are rendered by the HTML bootstrap.
 impl StartupDiagnostic {
     pub fn title(&self) -> &'static str {
         match self {

@@ -6,7 +6,7 @@
 use std::{
     future::Future,
     io::{self, Write},
-    net::SocketAddr,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
 };
 
 use axum::Router;
@@ -72,7 +72,26 @@ where
     F: FnOnce(SocketAddr) -> Result<Router, E>,
     E: std::fmt::Display,
 {
-    let listener = TcpListener::bind(("127.0.0.1", port)).await?;
+    start_on(IpAddr::V4(Ipv4Addr::LOCALHOST), port, make_router).await
+}
+
+/// Start on the requested loopback address. Non-loopback binds are rejected
+/// here as well as by the demo CLI so future callers cannot expose this server.
+pub async fn start_on<F, E>(
+    bind_ip: IpAddr,
+    port: u16,
+    make_router: F,
+) -> Result<RunningServer, LifecycleError>
+where
+    F: FnOnce(SocketAddr) -> Result<Router, E>,
+    E: std::fmt::Display,
+{
+    if !bind_ip.is_loopback() {
+        return Err(LifecycleError(
+            "server bind address must be loopback".to_owned(),
+        ));
+    }
+    let listener = TcpListener::bind(SocketAddr::new(bind_ip, port)).await?;
     let address = listener.local_addr()?;
     let app = make_router(address)
         .map_err(|e| LifecycleError(format!("router preparation failed: {e}")))?;

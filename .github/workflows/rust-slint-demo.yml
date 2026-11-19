@@ -4,16 +4,30 @@ on:
   pull_request:
     branches: [feature/sprint-01-rust-foundation]
     paths:
+      - 'rust/Cargo.toml'
+      - 'rust/Cargo.lock'
+      - 'rust/crates/**'
+      - 'rust/apps/photo-culler-server/**'
       - 'rust/apps/photo-culler-slint/**'
-      - 'migration/demo/**'
-      - 'docs/rust-slint-demo/**'
+      - 'migration/demo/contract/**'
+      - 'migration/demo/fixture/**'
+      - 'migration/demo/harness/**'
+      - 'migration/demo/build/**'
+      - 'migration/demo/smoke/**'
       - '.github/workflows/rust-slint-demo.yml'
   push:
     branches: [feature/sprint-01-rust-foundation]
     paths:
+      - 'rust/Cargo.toml'
+      - 'rust/Cargo.lock'
+      - 'rust/crates/**'
+      - 'rust/apps/photo-culler-server/**'
       - 'rust/apps/photo-culler-slint/**'
-      - 'migration/demo/**'
-      - 'docs/rust-slint-demo/**'
+      - 'migration/demo/contract/**'
+      - 'migration/demo/fixture/**'
+      - 'migration/demo/harness/**'
+      - 'migration/demo/build/**'
+      - 'migration/demo/smoke/**'
       - '.github/workflows/rust-slint-demo.yml'
   workflow_dispatch:
 
@@ -21,163 +35,168 @@ permissions:
   contents: read
 
 jobs:
-  macos-arm64:
-    name: macOS arm64 build
-    runs-on: macos-14
+  native-build:
+    name: ${{ matrix.name }} compile and stage
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: macos-arm64
+            name: macOS arm64
+            runner: macos-15
+            target: aarch64-apple-darwin
+            server_binary: photo-culler-server
+          - key: linux-x64
+            name: Linux x86-64
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            server_binary: photo-culler-server
+          - key: windows-x64
+            name: Windows x86-64
+            runner: windows-2025
+            target: x86_64-pc-windows-msvc
+            server_binary: photo-culler-server.exe
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Run recipe when integrated
-        id: build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - if: runner.os == 'Linux'
+        name: Install Slint native build dependencies
         shell: bash
         run: |
-          mkdir -p artifacts/macos-arm64
-          recipe=migration/demo/build/macos/build.sh
-          if [[ -f "$recipe" ]]; then
-            bash "$recipe" --build artifacts/macos-arm64 "$PWD"
-            status=built
-          else
-            echo "D18 recipe is not integrated yet; artifact is a build-status manifest only."
-            status=blocked_missing_recipe
-          fi
-          rustc_version="$(rustc --version)"
-          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' rust/Cargo.toml | head -1)"
-          sha="$(git rev-parse HEAD)"
-          printf '{"schema_version":1,"visible_version":"%s","sha":"%s","toolchain":"%s","target":"aarch64-apple-darwin","status":"%s"}\n' "$version" "$sha" "$rustc_version" "$status" > artifacts/macos-arm64/artifact-manifest.json
-          : > artifacts/macos-arm64/checksums.sha256
-          while IFS= read -r -d '' file; do shasum -a 256 "$file" >> artifacts/macos-arm64/checksums.sha256; done < <(find artifacts/macos-arm64 -type f ! -name checksums.sha256 ! -name artifact-manifest.json -print0 | sort -z)
-      - uses: actions/upload-artifact@v4
-        with:
-          name: rust-slint-demo-macos-arm64-${{ github.run_id }}-${{ github.run_attempt }}
-          path: artifacts/macos-arm64/
-
-  linux-x64:
-    name: Linux x86-64 build
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Linux fontconfig system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev pkg-config
+          packages=(build-essential pkg-config libfontconfig1-dev libx11-dev libx11-xcb-dev libxcb1-dev libxcursor-dev libxkbcommon-dev libxkbcommon-x11-dev libinput-dev libgbm-dev libwayland-dev)
+          for attempt in 1 2 3; do
+            if sudo apt-get -o Acquire::Retries=3 update && sudo apt-get -o Acquire::Retries=3 install -y "${packages[@]}"; then
+              exit 0
+            fi
+            echo "Linux dependency install attempt $attempt failed; retrying apt downloads."
+            sleep "$attempt"
+          done
+          exit 1
       - uses: dtolnay/rust-toolchain@stable
-      - name: Run recipe when integrated
+        with:
+          targets: ${{ matrix.target }}
+      - name: Require and run native package build recipe
+        if: runner.os != 'Windows'
         shell: bash
         run: |
-          mkdir -p artifacts/linux-x64
-          recipe=migration/demo/build/linux/build.sh
-          if [[ -f "$recipe" ]]; then
-            bash "$recipe" --build artifacts/linux-x64 "$PWD"
-            status=built
-          else
-            echo "D29 recipe is not integrated yet; artifact is a build-status manifest only."
-            status=blocked_missing_recipe
-          fi
-          rustc_version="$(rustc --version)"
-          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' rust/Cargo.toml | head -1)"
-          sha="$(git rev-parse HEAD)"
-          printf '{"schema_version":1,"visible_version":"%s","sha":"%s","toolchain":"%s","target":"x86_64-unknown-linux-gnu","status":"%s"}\n' "$version" "$sha" "$rustc_version" "$status" > artifacts/linux-x64/artifact-manifest.json
-          : > artifacts/linux-x64/checksums.sha256
-          while IFS= read -r -d '' file; do sha256sum "$file" >> artifacts/linux-x64/checksums.sha256; done < <(find artifacts/linux-x64 -type f ! -name checksums.sha256 ! -name artifact-manifest.json -print0 | sort -z)
-      - uses: actions/upload-artifact@v4
-        with:
-          name: rust-slint-demo-linux-x64-${{ github.run_id }}-${{ github.run_attempt }}
-          path: artifacts/linux-x64/
-
-  windows-x64:
-    name: Windows x86-64 build
-    runs-on: windows-2025
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-msvc
-      - name: Run recipe when integrated and write manifest
+          test -x migration/demo/build/ci/build-native.sh
+          migration/demo/build/ci/build-native.sh '${{ matrix.target }}' "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}" "$GITHUB_WORKSPACE"
+      - name: Require and run Windows package build recipe
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force artifacts/windows-x64 | Out-Null
-          $recipe = 'migration/demo/build/windows/build.ps1'
-          if (Test-Path $recipe) {
-            & $recipe -Mode Build -OutputDirectory artifacts/windows-x64 -WorkspaceRoot $PWD
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            $status = 'built'
-          } else {
-            Write-Host 'D31 recipe is not integrated yet; artifact is a build-status manifest only.'
-            $status = 'blocked_missing_recipe'
-          }
-          $version = (Select-String -Path rust/Cargo.toml -Pattern '^version = "([^"]+)"').Matches[0].Groups[1].Value
-          $manifest = @{ schema_version = 1; visible_version = $version; sha = (git rev-parse HEAD); toolchain = (rustc --version); target = 'x86_64-pc-windows-msvc'; status = $status }
-          $manifest | ConvertTo-Json -Compress | Set-Content -Encoding utf8 artifacts/windows-x64/artifact-manifest.json
-          Get-ChildItem artifacts/windows-x64 -Recurse -File | Where-Object { $_.Name -ne 'checksums.sha256' -and $_.Name -ne 'artifact-manifest.json' } | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $($_.Path.Substring((Get-Location).Path.Length + 1))" } | Set-Content artifacts/windows-x64/checksums.sha256
+          if (-not (Test-Path -LiteralPath 'migration/demo/build/ci/build-native.ps1' -PathType Leaf)) { throw 'required Windows CI build recipe is missing' }
+          ./migration/demo/build/ci/build-native.ps1 -Target '${{ matrix.target }}' -OutputDirectory "$env:GITHUB_WORKSPACE/artifacts/${{ matrix.key }}" -WorkspaceRoot "$env:GITHUB_WORKSPACE"
+      - name: Test owned desktop server launch and shutdown
+        env:
+          PHOTO_CULLER_SERVER: ${{ github.workspace }}/rust/target/${{ matrix.target }}/release/${{ matrix.server_binary }}
+        run: cargo test --locked --manifest-path rust/Cargo.toml --release --target '${{ matrix.target }}' -p photo-culler-slint --lib owned_server::tests::owned_child_serves_the_gallery_and_releases_its_port_on_drop -- --ignored
       - uses: actions/upload-artifact@v4
         with:
-          name: rust-slint-demo-windows-x64-${{ github.run_id }}-${{ github.run_attempt }}
-          path: artifacts/windows-x64/
+          name: rust-slint-demo-${{ matrix.key }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/${{ matrix.key }}/
+          if-no-files-found: error
 
-  wasm32:
-    name: WASM build
+  wasm-build:
+    name: WASM compile and web bundle
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - name: Install locked wasm-bindgen CLI
+      - name: Install wasm-bindgen CLI locked to Cargo.lock
         shell: bash
         run: |
           version="$(awk '/^name = "wasm-bindgen"$/ { in_package=1; next } in_package && /^version = / { gsub(/"/, "", $3); print $3; exit } in_package && /^\[/ { in_package=0 }' rust/Cargo.lock)"
-          if [[ -z "$version" ]]; then echo 'wasm-bindgen is not pinned in Cargo.lock'; exit 2; fi
+          test -n "$version"
           cargo install wasm-bindgen-cli --version "$version" --locked
-      - name: Build the Slint WASM package when integrated
+      - name: Require and run WASM build recipe
         shell: bash
         run: |
-          mkdir -p artifacts/wasm32
-          if [[ -x migration/demo/build/wasm/build.sh ]]; then
-            WEB_OUT_DIR="$PWD/artifacts/wasm32" migration/demo/build/wasm/build.sh
-            status=built
-          else
-            echo 'D20 WASM recipe is not integrated yet; artifact is a build-status manifest only.'
-            status=blocked_missing_recipe
-          fi
-          rustc_version="$(rustc --version)"
-          bindgen_version="$(wasm-bindgen --version)"
-          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' rust/Cargo.toml | head -1)"
-          sha="$(git rev-parse HEAD)"
-          printf '{"schema_version":1,"visible_version":"%s","sha":"%s","toolchain":"%s","wasm_bindgen":"%s","target":"wasm32-unknown-unknown","status":"%s"}\n' "$version" "$sha" "$rustc_version" "$bindgen_version" "$status" > artifacts/wasm32/artifact-manifest.json
-          find artifacts/wasm32 -type f ! -name checksums.sha256 ! -name artifact-manifest.json -print0 | sort -z | xargs -0 -r sha256sum > artifacts/wasm32/checksums.sha256
+          test -x migration/demo/build/ci/build-wasm.sh
+          migration/demo/build/ci/build-wasm.sh "$GITHUB_WORKSPACE/artifacts/wasm32" "$GITHUB_WORKSPACE"
       - uses: actions/upload-artifact@v4
         with:
           name: rust-slint-demo-wasm32-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/wasm32/
+          if-no-files-found: error
 
-  browser-smoke:
-    name: Browser fixture smoke
+  recipe-contracts:
+    name: Build recipe and staging contract checks
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Validate registered packages and exact manifests
+        run: python3 migration/demo/build/ci/verify-packages.py "$GITHUB_WORKSPACE"
+      - name: Test WASM build preflight failure modes
+        run: bash migration/demo/build/wasm/test.sh
+      - name: Test web bundle staging and validation
+        run: bash migration/demo/build/web-dist/test.sh
+      - name: Test native staging on paths with spaces
+        run: |
+          bash migration/demo/build/macos/test-stage.sh
+          bash migration/demo/build/linux/test-stage.sh
+      - name: Test Windows staging contract
+        shell: pwsh
+        run: ./migration/demo/build/windows/test-stage.ps1
+      - name: Test no-Python process-tree contract
+        run: bash migration/demo/smoke/no-python/test.sh
+
+  browser-application-smoke:
+    name: Chromium and Firefox against Rust server and application WASM
+    runs-on: ubuntu-24.04
+    needs: wasm-build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: rust-slint-demo-wasm32-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/wasm32/
+      - name: Build the real Rust API server
+        run: cargo build --locked --manifest-path rust/Cargo.toml --release --package photo-culler-server
+      - name: Require live browser smoke recipes
+        run: |
+          test -f migration/demo/smoke/chromium/package.json
+          test -f migration/demo/smoke/chromium/smoke.mjs
+          test -f migration/demo/smoke/firefox/package.json
+          test -f migration/demo/smoke/firefox/smoke.mjs
+          test -f migration/demo/smoke/live-smoke.mjs
       - name: Install pinned browser test runner
         run: npm install --no-save --package-lock=false playwright@1.51.1
       - name: Install Chromium and Firefox
         run: npx playwright install --with-deps chromium firefox
-      - name: Run Chromium fixture smoke when integrated
-        shell: bash
+      - name: Run Chromium with real Axum and WASM artifacts
+        env:
+          PHOTO_CULLER_SERVER: ${{ github.workspace }}/rust/target/release/photo-culler-server
+          PHOTO_CULLER_WEB_ROOT: ${{ github.workspace }}/artifacts/wasm32/bundle
+          PHOTO_CULLER_SCREENSHOT: ${{ github.workspace }}/artifacts/browser-smoke/chromium.png
         run: |
-          if [[ -f migration/demo/smoke/chromium/package.json ]]; then
-            (cd migration/demo/smoke/chromium && npm test) | tee chromium-smoke.log
-          else
-            echo 'D24 smoke is not integrated yet.' | tee chromium-smoke.log
-          fi
-      - name: Run Firefox fixture smoke when integrated
-        shell: bash
-        run: |
-          if [[ -f migration/demo/smoke/firefox/package.json ]]; then
-            (cd migration/demo/smoke/firefox && npm test) | tee firefox-smoke.log
-          else
-            echo 'D25 smoke is not integrated yet.' | tee firefox-smoke.log
-          fi
+          mkdir -p artifacts/browser-smoke
+          (cd migration/demo/smoke/chromium && npm test)
+      - name: Run Firefox with real Axum and WASM artifacts
+        env:
+          PHOTO_CULLER_SERVER: ${{ github.workspace }}/rust/target/release/photo-culler-server
+          PHOTO_CULLER_WEB_ROOT: ${{ github.workspace }}/artifacts/wasm32/bundle
+          PHOTO_CULLER_SCREENSHOT: ${{ github.workspace }}/artifacts/browser-smoke/firefox.png
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1440x900x24" bash -c 'cd migration/demo/smoke/firefox && npm test'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: rust-slint-demo-browser-smoke-${{ github.run_id }}-${{ github.run_attempt }}
-          path: '*-smoke.log'
+          name: rust-slint-demo-browser-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/browser-smoke/
+          if-no-files-found: warn

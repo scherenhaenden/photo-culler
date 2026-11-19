@@ -1,14 +1,137 @@
-//! Minimal desktop binary entrypoint for the shared Slint demo package.
+//! Desktop entry point: own a sibling Axum service for the window lifetime and
+//! drive the Slint gallery through the shared REST controller.
 
+use photo_culler_slint::{
+    DemoWindow,
+    demo::{
+        controller::DemoController,
+        native_transport::NativeDemoTransport,
+        rest::DemoRestClient,
+        slint_view::{SlintDemoView, SlintDispatcher},
+    },
+    desktop::owned_server::DemoServer,
+};
 use slint::ComponentHandle;
+use std::{
+    cell::RefCell,
+    net::SocketAddr,
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
+
+type AppController = DemoController<SlintDemoView, SlintDispatcher>;
+type AppClient = DemoRestClient<NativeDemoTransport>;
 
 fn main() {
     if std::env::args().any(|arg| arg == "--version" || arg == "-V") {
         println!("photo-culler-desktop {}", env!("CARGO_PKG_VERSION"));
         return;
     }
-    if let Err(err) = photo_culler_slint::DemoScaffold::new().and_then(|w| w.run()) {
-        eprintln!("photo-culler-desktop failed: {err}");
+
+    if let Err(error) = run_application() {
+        eprintln!("photo-culler-desktop failed: {error}");
         std::process::exit(1);
+    }
+}
+
+fn run_application() -> Result<(), String> {
+    let window = DemoWindow::new().map_err(|error| error.to_string())?;
+    let endpoint = Arc::new(Mutex::new(None::<SocketAddr>));
+    let client = Arc::new(AppClient::new(NativeDemoTransport::new(endpoint.clone())));
+    let controller = Arc::new(DemoController::new(
+        Arc::new(SlintDemoView::new(window.as_weak(), false)),
+        Arc::new(SlintDispatcher),
+    ));
+    let server = Rc::new(RefCell::new(None));
+
+    start_load(
+        &window,
+        controller.clone(),
+        client.clone(),
+        endpoint.clone(),
+        server.clone(),
+        false,
+    );
+
+    let weak_window = window.as_weak();
+    let retry_controller = controller.clone();
+    let retry_client = client.clone();
+    let retry_endpoint = endpoint.clone();
+    let retry_server = server.clone();
+    window.on_retry(move || {
+        if let Some(window) = weak_window.upgrade() {
+            start_load(
+                &window,
+                retry_controller.clone(),
+                retry_client.clone(),
+                retry_endpoint.clone(),
+                retry_server.clone(),
+                true,
+            );
+        }
+    });
+    window.on_previous_photo(|| {});
+    window.on_next_photo(|| {});
+
+    let selected_window = window.as_weak();
+    window.on_select_photo(move |photo_id| {
+        if let Some(window) = selected_window.upgrade() {
+            window.set_selected_photo_id(photo_id);
+        }
+    });
+
+    let archive_controller = controller.clone();
+    let archive_client = client.clone();
+    window.on_select_archive(move |_| {
+        let ticket = archive_controller.retry("demo");
+        let controller = archive_controller.clone();
+        let client = archive_client.clone();
+        let _ = slint::spawn_local(async move {
+            let _ = controller.execute(client.as_ref(), ticket).await;
+        });
+    });
+
+    let result = window.run().map_err(|error| error.to_string());
+    drop(window);
+    drop(server);
+    result
+}
+
+fn start_load(
+    window: &DemoWindow,
+    controller: Arc<AppController>,
+    client: Arc<AppClient>,
+    endpoint: Arc<Mutex<Option<SocketAddr>>>,
+    server: Rc<RefCell<Option<DemoServer>>>,
+    retry: bool,
+) {
+    if server.borrow().is_none() {
+        match DemoServer::open() {
+            Ok(connection) => {
+                if let Ok(mut current) = endpoint.lock() {
+                    *current = Some(connection.address());
+                }
+                *server.borrow_mut() = Some(connection);
+            }
+            Err(error) => {
+                window.set_error_message(error.into());
+                window.set_service_status("Servicio local no disponible".into());
+                window.set_view_state(3);
+                return;
+            }
+        }
+    }
+
+    let ticket = if retry {
+        controller.retry("demo")
+    } else {
+        controller.begin_load("demo")
+    };
+    let task_controller = controller.clone();
+    if let Err(error) = slint::spawn_local(async move {
+        let _ = task_controller.execute(client.as_ref(), ticket).await;
+    }) {
+        window.set_error_message(format!("Could not start the gallery request: {error}").into());
+        window.set_view_state(3);
     }
 }

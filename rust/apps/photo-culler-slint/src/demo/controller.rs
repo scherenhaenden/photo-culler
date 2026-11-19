@@ -309,3 +309,7 @@ mod tests {
         assert!(matches!(c.snapshot(),ViewState::Ready{jpeg:Some(jpeg),..} if jpeg==vec![2]));
     }
 }
+
+#[cfg(test)]
+#[path = "controller_state_tests.rs"]
+mod state_flow_tests;

@@ -1,4 +1,7 @@
-use std::{io, net::SocketAddr};
+use std::{
+    io,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+};
 
 use axum::{Router, routing::get as get_route};
 use tokio::{
@@ -6,7 +9,16 @@ use tokio::{
     net::TcpStream,
 };
 
-use super::{start, start_and_announce};
+use super::{start, start_and_announce, start_on};
+
+#[tokio::test]
+async fn refuses_non_loopback_listener_addresses() {
+    let result = start_on(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0, |_| {
+        Ok::<_, &'static str>(Router::new())
+    })
+    .await;
+    assert!(result.is_err());
+}
 
 async fn http_get(addr: SocketAddr) -> String {
     let mut stream = TcpStream::connect(addr).await.unwrap();

@@ -1,0 +1,449 @@
+import { DesignTokens, PanelState, StatusPanel } from "../components/components.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export struct GalleryPhoto {
+    id: string,
+    filename: string,
+    decision: string,
+    quality: string,
+    score: string,
+    thumbnail: image,
+}
+
+component DecisionBadge inherits Rectangle {
+    in property <string> value: "UNRATED";
+    in property <bool> web-layout: false;
+    property <color> badge-color: root.value == "BEST" ? DesignTokens.best :
+        (root.value == "KEEP" ? DesignTokens.keep :
+        (root.value == "ALTERNATE" || root.value == "REVIEW" ? DesignTokens.alternate :
+        (root.value.starts-with("REJECT") ? (root.web-layout ? DesignTokens.web-rejected : DesignTokens.rejected) : DesignTokens.unrated)));
+    height: 20px;
+    min-width: 56px;
+    background: #ffffff10;
+    border-radius: 999px;
+    Text {
+        text: root.value;
+        color: root.badge-color;
+        font-family: DesignTokens.body-mono-font;
+        font-size: 9px;
+        font-weight: 700;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+component GalleryCard inherits Rectangle {
+    in property <GalleryPhoto> photo;
+    in property <bool> selected: false;
+    in property <bool> web-layout: false;
+    callback activated(string);
+
+    background: selected ? DesignTokens.card-hover : DesignTokens.surface;
+    border-radius: web-layout ? 12px : 8px;
+    min-width: web-layout ? 200px : 0px;
+    border-width: selected ? 2px : 1px;
+    border-color: selected ? DesignTokens.accent : DesignTokens.border;
+    clip: true;
+
+    if root.web-layout: VerticalLayout {
+        spacing: 0px;
+        Rectangle {
+            height: 180px;
+            background: DesignTokens.image-background;
+            clip: true;
+            Image {
+                source: root.photo.thumbnail;
+                image-fit: cover;
+                width: parent.width;
+                height: parent.height;
+            }
+        }
+        VerticalLayout {
+            padding: 12px;
+            spacing: 8px;
+            Text {
+                text: root.photo.filename;
+                color: DesignTokens.foreground;
+                font-family: DesignTokens.body-font;
+                font-size: 11px;
+                font-weight: 700;
+                overflow: elide;
+            }
+            HorizontalLayout {
+                spacing: 8px;
+                DecisionBadge { value: root.photo.decision; web-layout: true; }
+                Text {
+                    text: root.photo.quality + "  ·  " + root.photo.score;
+                    color: DesignTokens.muted;
+                    font-family: DesignTokens.body-mono-font;
+                    font-size: 9px;
+                    horizontal-alignment: right;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+    if !root.web-layout: HorizontalLayout {
+        spacing: 10px;
+        padding: 8px;
+        Rectangle {
+            width: 56px; height: 52px;
+            background: DesignTokens.image-background;
+            border-radius: 4px;
+            clip: true;
+            Image { source: root.photo.thumbnail; image-fit: cover; width: parent.width; height: parent.height; }
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 4px;
+            Text {
+                text: root.photo.filename;
+                color: DesignTokens.foreground;
+                font-family: DesignTokens.body-font;
+                font-size: 12px;
+                font-weight: 700;
+                overflow: elide;
+            }
+            HorizontalLayout {
+                spacing: 7px;
+                DecisionBadge { value: root.photo.decision; }
+                Text { text: root.photo.quality + "  ·  " + root.photo.score; color: DesignTokens.muted; font-size: 9px; vertical-alignment: center; }
+            }
+        }
+    }
+    focus_scope := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.activated(root.photo.id);
+                accept
+            } else { reject }
+        }
+        Rectangle {
+            x: 2px; y: 2px; width: parent.width - 4px; height: parent.height - 4px;
+            border-radius: 6px;
+            border-width: focus_scope.has-focus ? 2px : 0px;
+            border-color: DesignTokens.focus;
+            background: transparent;
+        }
+        TouchArea {
+            clicked => { focus_scope.focus(); root.activated(root.photo.id); }
+        }
+    }
+}
+
+component FilmstripCard inherits Rectangle {
+    in property <GalleryPhoto> photo;
+    in property <bool> selected: false;
+    callback activated(string);
+
+    width: 224px;
+    height: 74px;
+    property <color> decision-color: root.photo.decision == "keep" || root.photo.decision == "best" ? DesignTokens.best :
+        (root.photo.decision == "alternate" || root.photo.decision == "review" ? DesignTokens.alternate :
+        (root.photo.decision.starts-with("reject") ? DesignTokens.rejected : DesignTokens.unrated));
+    background: selected ? DesignTokens.card-hover : DesignTokens.surface;
+    border-radius: 8px;
+    border-width: selected ? 1.5px : 1px;
+    border-color: selected ? DesignTokens.accent : DesignTokens.border;
+    clip: true;
+
+    VerticalLayout {
+        padding: 10px;
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 5px;
+        Text {
+            text: root.photo.filename;
+            color: DesignTokens.foreground;
+            font-family: DesignTokens.body-font;
+            font-size: 12px;
+            font-weight: 700;
+            overflow: elide;
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            Rectangle { width: 8px; height: 8px; border-radius: 4px; background: root.decision-color; }
+            Text { text: root.photo.quality; color: DesignTokens.subdued; font-family: DesignTokens.body-font; font-size: 9px; vertical-alignment: center; }
+            Text { text: "·"; color: DesignTokens.muted; font-size: 9px; vertical-alignment: center; }
+            Text { text: "SCORE: " + root.photo.score; color: DesignTokens.best; font-family: DesignTokens.body-mono-font; font-size: 9px; vertical-alignment: center; }
+        }
+    }
+
+    focus_scope := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.activated(root.photo.id);
+                accept
+            } else { reject }
+        }
+        Rectangle {
+            x: 2px; y: 2px; width: parent.width - 4px; height: parent.height - 4px;
+            border-radius: 6px;
+            border-width: focus_scope.has-focus ? 2px : 0px;
+            border-color: DesignTokens.focus;
+            background: transparent;
+        }
+        TouchArea {
+            clicked => { focus_scope.focus(); root.activated(root.photo.id); }
+        }
+    }
+}
+
+component PhotoInspector inherits Rectangle {
+    in property <GalleryPhoto> photo;
+    in property <bool> web-layout: false;
+    background: root.web-layout ? DesignTokens.surface : DesignTokens.sidebar;
+    border-width: 1px;
+    border-color: DesignTokens.border;
+    border-radius: 12px;
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        Text {
+            text: "INSPECTOR";
+            color: DesignTokens.muted;
+            font-family: DesignTokens.body-mono-font;
+            font-size: 9px;
+            font-weight: 700;
+        }
+        if root.web-layout: Rectangle {
+            height: 200px;
+            background: DesignTokens.image-background;
+            border-radius: 8px;
+            clip: true;
+            Image { source: root.photo.thumbnail; image-fit: contain; width: parent.width; height: parent.height; }
+        }
+        Text {
+            text: root.photo.filename;
+            color: DesignTokens.foreground;
+            font-family: DesignTokens.heading-font;
+            font-size: 13px;
+            font-weight: 700;
+            wrap: word-wrap;
+        }
+        Text { text: "ANÁLISIS"; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 9px; font-weight: 700; }
+        Rectangle {
+            height: 76px;
+            background: DesignTokens.image-background;
+            border-radius: 8px;
+            border-width: 1px;
+            border-color: DesignTokens.border;
+            HorizontalLayout {
+                padding: 12px;
+                spacing: 10px;
+                Text { text: root.photo.score; color: DesignTokens.best; font-family: DesignTokens.body-mono-font; font-size: 28px; font-weight: 900; vertical-alignment: center; }
+                VerticalLayout {
+                    alignment: center;
+                    Text { text: "SCORE / 100"; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 8px; }
+                    Text { text: root.photo.quality; color: DesignTokens.foreground; font-size: 10px; font-weight: 700; }
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            DecisionBadge { value: root.photo.decision; web-layout: root.web-layout; }
+            Text { text: "Decisión actual"; color: DesignTokens.muted; font-size: 10px; vertical-alignment: center; }
+        }
+        Rectangle { height: 1px; background: DesignTokens.border; }
+        Text { text: "ORIGINAL"; color: DesignTokens.foreground; font-family: DesignTokens.body-mono-font; font-size: 9px; font-weight: 700; }
+        Text {
+            text: root.web-layout ? "Vista previa contenida · el original permanece sin cambios" : "La foto original permanece sin cambios";
+            color: DesignTokens.muted;
+            font-size: 11px;
+            wrap: word-wrap;
+        }
+    }
+}
+
+export component LibraryGallery inherits Rectangle {
+    in property <bool> web-layout: false;
+    in property <int> view-state: 1; // 0 loading, 1 ready, 2 empty, 3 error
+    in property <[GalleryPhoto]> photos: [];
+    in property <string> fallback-id: "demo-001";
+    in property <string> fallback-name: "demo-001.jpg";
+    in property <image> fallback-thumbnail;
+    in property <string> fallback-decision: "UNRATED";
+    in property <string> selected-id: "";
+    in property <string> error-message: "No se pudo cargar la galería.";
+    callback retry();
+    callback select-photo(string);
+
+    background: DesignTokens.canvas;
+    property <int> web-columns: root.width >= 680px ? (root.width < 860px ? 1 : (root.width < 1080px ? 2 : 3)) :
+        (root.width < 440px ? 1 : (root.width < 680px ? 2 : 3));
+    property <int> item-count: root.photos.length == 0 ? 1 : root.photos.length;
+    property <length> inspector-width: 280px;
+
+    if root.view-state == 0: StatusPanel {
+        state: PanelState.loading;
+        title: "Cargando galería";
+        detail: "Conectando con el catálogo local y preparando miniaturas.";
+        width: parent.width;
+        height: parent.height;
+    }
+    if root.view-state == 2: StatusPanel {
+        state: PanelState.empty;
+        title: "Tu catálogo aparecerá aquí";
+        detail: "Elige una galería del archivo o importa una carpeta para empezar.";
+        width: parent.width;
+        height: parent.height;
+    }
+    if root.view-state == 3: StatusPanel {
+        state: PanelState.error;
+        title: "Galería no disponible";
+        detail: root.error-message;
+        action-label: "Reintentar";
+        retry => { root.retry(); }
+        width: parent.width;
+        height: parent.height;
+    }
+
+    if root.view-state == 1 && !root.web-layout: HorizontalLayout {
+        spacing: 12px;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 12px;
+            Rectangle {
+                vertical-stretch: 1;
+                background: DesignTokens.image-background;
+                border-radius: 8px;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                clip: true;
+                if root.photos.length == 0: Image {
+                    source: root.fallback-thumbnail;
+                    image-fit: contain;
+                    width: parent.width;
+                    height: parent.height;
+                }
+                if root.photos.length > 0: VerticalLayout {
+                    for photo in root.photos: Image {
+                        visible: photo.id == root.selected-id;
+                        source: photo.thumbnail;
+                        image-fit: contain;
+                        width: parent.width;
+                        height: parent.height;
+                    }
+                }
+            }
+            VerticalLayout {
+                height: 110px;
+                spacing: 4px;
+                Text {
+                    text: "TIRA DE FOTOS";
+                    color: DesignTokens.muted;
+                    font-family: DesignTokens.body-mono-font;
+                    font-size: 9px;
+                    font-weight: 700;
+                }
+                ScrollView {
+                    height: 84px;
+                    horizontal-scrollbar-policy: ScrollBarPolicy.as-needed;
+                    vertical-scrollbar-policy: ScrollBarPolicy.always-off;
+                    content-width: 236px * root.item-count;
+                    content-height: 78px;
+                    HorizontalLayout {
+                        spacing: 12px;
+                        if root.photos.length == 0: FilmstripCard {
+                            photo: { id: root.fallback-id, filename: root.fallback-name, decision: root.fallback-decision, quality: "—", score: "—", thumbnail: root.fallback-thumbnail };
+                            selected: true;
+                            activated(id) => { root.select-photo(id); }
+                        }
+                        for photo in root.photos: FilmstripCard {
+                            photo: photo;
+                            selected: photo.id == root.selected-id;
+                            activated(id) => { root.select-photo(id); }
+                        }
+                    }
+                }
+            }
+        }
+        Rectangle {
+            width: 6px;
+            background: transparent;
+            Rectangle {
+                x: 2px;
+                width: 1px;
+                height: parent.height;
+                background: DesignTokens.border;
+            }
+            TouchArea {
+                mouse-cursor: ew-resize;
+                property <length> starting-width: root.inspector-width;
+                property <length> requested-width: self.starting-width - self.mouse-x + self.pressed-x;
+                pointer-event(event) => {
+                    if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                        self.starting-width = root.inspector-width;
+                    }
+                }
+                moved => {
+                    if (!self.pressed) { return; }
+                    root.inspector-width = self.requested-width < 260px ? 260px :
+                        (self.requested-width > 320px ? 320px : self.requested-width);
+                }
+            }
+        }
+        if root.photos.length == 0: PhotoInspector {
+            width: root.inspector-width; height: parent.height;
+            photo: { id: root.fallback-id, filename: root.fallback-name, decision: root.fallback-decision, quality: "—", score: "—", thumbnail: root.fallback-thumbnail };
+        }
+        if root.photos.length > 0: VerticalLayout {
+            width: root.inspector-width; height: parent.height;
+            for photo in root.photos: PhotoInspector {
+                visible: photo.id == root.selected-id;
+                width: parent.width; height: parent.height;
+                photo: photo;
+            }
+        }
+    }
+
+    if root.view-state == 1 && root.web-layout: HorizontalLayout {
+        spacing: 20px;
+        ScrollView {
+            width: parent.width - (root.width >= 680px ? 340px : 0px);
+            height: parent.height;
+            GridLayout {
+                width: parent.width;
+                spacing: 20px;
+                if root.photos.length == 0: GalleryCard {
+                    row: 0; col: 0;
+                    width: (parent.width - (root.web-columns - 1) * 20px) / root.web-columns;
+                    photo: { id: root.fallback-id, filename: root.fallback-name, decision: root.fallback-decision, quality: "—", score: "—", thumbnail: root.fallback-thumbnail };
+                    selected: true;
+                    web-layout: true;
+                    activated(id) => { root.select-photo(id); }
+                }
+                for photo[index] in root.photos: GalleryCard {
+                    row: index / root.web-columns;
+                    col: Math.mod(index, root.web-columns);
+                    width: (parent.width - (root.web-columns - 1) * 20px) / root.web-columns;
+                    photo: photo;
+                    selected: photo.id == root.selected-id;
+                    web-layout: true;
+                    activated(id) => { root.select-photo(id); }
+                }
+            }
+        }
+        if root.width >= 680px && root.photos.length > 0: VerticalLayout {
+            width: 320px; height: parent.height;
+            for photo in root.photos: PhotoInspector {
+                visible: photo.id == root.selected-id;
+                width: parent.width; height: parent.height;
+                web-layout: true;
+                photo: photo;
+            }
+        }
+        if root.width >= 680px && root.photos.length == 0: PhotoInspector {
+            width: 320px; height: parent.height;
+            web-layout: true;
+            photo: { id: root.fallback-id, filename: root.fallback-name, decision: root.fallback-decision, quality: "—", score: "—", thumbnail: root.fallback-thumbnail };
+        }
+    }
+}

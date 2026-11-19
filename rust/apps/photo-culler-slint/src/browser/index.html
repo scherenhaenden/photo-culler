@@ -13,6 +13,8 @@
       #diagnostic[hidden] { display: none; }
       a { color: #9acbff; }
       canvas { display: block; width: 100vw; height: 100vh; }
+      canvas[hidden] { display: none; }
+      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
     </style>
   </head>
   <body>
@@ -22,6 +24,7 @@
       <p>To continue, enable WebGL and reload this page, or start Photo Culler Desktop on this computer.</p>
     </main>
     <canvas id="canvas" aria-label="Photo Culler"></canvas>
+    <div id="application-status" class="sr-only" role="status" aria-live="polite" data-state="loading">Loading gallery</div>
     <script type="module" src="./bootstrap.js"></script>
   </body>
 </html>
