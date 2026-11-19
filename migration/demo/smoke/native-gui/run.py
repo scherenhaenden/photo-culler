@@ -398,7 +398,8 @@ def close_window(platform_name, pid, wid):
             window_id = ids[-1] if ids else None
         if not window_id:
             raise RuntimeError(f"no X11 window to close for PID {pid}")
-        call(["xdotool", "windowclose", window_id])
+        call(["xdotool", "windowactivate", "--sync", window_id])
+        call(["xdotool", "key", "--clearmodifiers", "Alt+F4"])
     elif platform_name == "macos":
         script = f'''tell application "System Events"
 set p to first process whose unix id is {pid}
