@@ -36,6 +36,11 @@ export async function runLiveSmoke(browserName) {
     const launchOptions = { headless: true };
     if (browserName === "chromium") {
       launchOptions.args = ["--enable-webgl", "--use-gl=angle", "--use-angle=swiftshader"];
+    } else {
+      launchOptions.firefoxUserPrefs = {
+        "webgl.disabled": false,
+        "webgl.force-enabled": true,
+      };
     }
     browser = await browserType.launch(launchOptions);
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 });
