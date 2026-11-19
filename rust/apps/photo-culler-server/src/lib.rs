@@ -1,15 +1,18 @@
-//! HTTP server package scaffold. D34 will connect the application router.
+//! Axum demo server. The HTTP modules are assembled around the actual loopback
+//! listener so its configured origin always contains the assigned port.
 
-pub mod demo_args;
+#[path = "http/runtime/lifecycle.rs"]
+pub mod lifecycle;
+#[path = "http/origin/mod.rs"]
+pub mod origin;
 
-/// Explicit result for an invocation that is valid but cannot be served yet.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RouterNotIntegrated;
-
-impl std::fmt::Display for RouterNotIntegrated {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str("server router is not integrated; service was not started")
-    }
+pub mod demo {
+    pub mod gallery;
+    pub mod health;
+    pub mod ingress;
+    pub mod runtime;
+    pub mod thumbnail;
+    pub mod web_assets;
 }
 
-impl std::error::Error for RouterNotIntegrated {}
+pub mod demo_args;

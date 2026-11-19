@@ -8,7 +8,8 @@ pub struct DemoArgs {
     pub bind: IpAddr,
     pub port: u16,
     pub data_dir: Option<PathBuf>,
-    pub static_dir: Option<PathBuf>,
+    pub web_root: Option<PathBuf>,
+    pub owned: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -49,7 +50,8 @@ Options:\n\
   --bind <IP>          Loopback address (default: 127.0.0.1)\n\
   --port <PORT>        TCP port (default: 8765)\n\
   --data-dir <PATH>    Writable catalog and cache directory\n\
-  --static-dir <PATH>  Generated Slint web assets directory\n\
+  --web-root <PATH>    Validated generated Slint web bundle directory\n\
+  --owned              Emit one JSON ready line; stdin EOF requests shutdown\n\
   -h, --help           Print this help\n";
 
 pub fn parse<I, S>(arguments: I) -> Result<ParseOutcome, ArgsError>
@@ -61,7 +63,8 @@ where
     let mut bind = IpAddr::from_str(DEFAULT_BIND).expect("default IP is valid");
     let mut port = DEFAULT_PORT;
     let mut data_dir = None;
-    let mut static_dir = None;
+    let mut web_root = None;
+    let mut owned = false;
 
     while let Some(option) = args.next() {
         if option == "-h" || option == "--help" {
@@ -87,7 +90,10 @@ where
                 })?;
             }
             "--data-dir" => data_dir = Some(PathBuf::from(args.next().ok_or_else(value)?)),
-            "--static-dir" => static_dir = Some(PathBuf::from(args.next().ok_or_else(value)?)),
+            "--web-root" | "--static-dir" => {
+                web_root = Some(PathBuf::from(args.next().ok_or_else(value)?))
+            }
+            "--owned" => owned = true,
             _ => return Err(ArgsError::UnknownOption(option)),
         }
     }
@@ -96,7 +102,8 @@ where
         bind,
         port,
         data_dir,
-        static_dir,
+        web_root,
+        owned,
     }))
 }
 
@@ -107,7 +114,7 @@ mod tests {
     #[test]
     fn help_lists_supported_flags() {
         assert_eq!(parse(["--help"]).unwrap(), ParseOutcome::Help);
-        for flag in ["--bind", "--port", "--data-dir", "--static-dir"] {
+        for flag in ["--bind", "--port", "--data-dir", "--web-root", "--owned"] {
             assert!(HELP.contains(flag));
         }
     }
@@ -134,12 +141,13 @@ mod tests {
         };
         assert_eq!(args.bind, IpAddr::from_str("::1").unwrap());
         assert_eq!(args.port, 9000);
+        assert!(!args.owned);
         assert_eq!(
             args.data_dir.as_deref(),
             Some(std::path::Path::new("/tmp/catalog"))
         );
         assert_eq!(
-            args.static_dir.as_deref(),
+            args.web_root.as_deref(),
             Some(std::path::Path::new("./web"))
         );
     }
@@ -159,5 +167,27 @@ mod tests {
             parse(["--bind", "0.0.0.0"]),
             Err(ArgsError::NonLoopbackBind(_))
         ));
+    }
+
+    #[test]
+    fn owned_mode_and_web_root_alias_are_parsed() {
+        let ParseOutcome::Run(args) =
+            parse(["--owned", "--port", "0", "--web-root", "./web"]).unwrap()
+        else {
+            panic!()
+        };
+        assert!(args.owned);
+        assert_eq!(args.port, 0);
+        assert_eq!(
+            args.web_root.as_deref(),
+            Some(std::path::Path::new("./web"))
+        );
+        let ParseOutcome::Run(alias) = parse(["--static-dir", "./old-name"]).unwrap() else {
+            panic!()
+        };
+        assert_eq!(
+            alias.web_root.as_deref(),
+            Some(std::path::Path::new("./old-name"))
+        );
     }
 }
