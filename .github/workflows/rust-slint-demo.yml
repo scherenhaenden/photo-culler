@@ -244,7 +244,7 @@ jobs:
           test -f rust/apps/photo-culler-slint/ui/library/capture_smoke.mjs
           test -f migration/demo/smoke/live-smoke.mjs
       - name: Install pinned browser test runner
-        run: npm install --no-save --package-lock=false playwright@1.51.1
+        run: npm install --no-save --package-lock=false playwright@1.51.1 pngjs@7.0.0
       - name: Install Chromium and Firefox
         run: |
           for attempt in 1 2 3; do

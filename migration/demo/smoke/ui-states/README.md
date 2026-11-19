@@ -21,10 +21,14 @@ The page's `#application-status` live region mirrors the state and provides a
 stable DOM assertion. Each screenshot also requires a visible Slint canvas and
 records its CSS/backing dimensions, viewport, state transition history, fixture
 responses, source SHA, browser version, and PNG SHA-256 in `manifest.json`.
+The harness decodes each PNG and requires rendered, non-dark pixels in the
+gallery region, so a blank canvas/state panel fails. For ready and retry-ready,
+it also verifies the real thumbnail response is HTTP 200 `image/jpeg`, begins
+with a JPEG SOI marker, and matches the bundled fixture SHA-256.
 
 ## Run from the repository root
 
-Use the same Rust server, WASM bundle, pinned Playwright install, and browser
+Use the same Rust server, WASM bundle, pinned Playwright/PNG decoder install, and browser
 installation already prepared by the `Chromium and Firefox against Rust server
 and application WASM` workflow job:
 

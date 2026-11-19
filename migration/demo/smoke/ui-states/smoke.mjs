@@ -5,6 +5,7 @@ import { access, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium, firefox } from "playwright";
+import { PNG } from "pngjs";
 
 const GALLERY_PATH = "/api/v1/galleries/demo/photos";
 const ERROR_BODY = {
@@ -12,6 +13,7 @@ const ERROR_BODY = {
   message: "The UI-state smoke fixture returned HTTP 503.",
   request_id: "s02-ui-state-retry",
 };
+const EXPECTED_THUMBNAIL_SHA256 = "cc20c24844d2fc6fca729fcb66cfe661960f7b56be41a3dd462a0f1b22cfb4f2";
 const EMPTY_BODY = {
   gallery_id: "demo",
   items: [],
@@ -46,6 +48,7 @@ let browser;
 let originForManifest = "not-ready";
 const captures = [];
 const scenarioResults = [];
+const thumbnailResponses = new WeakMap();
 try {
   const origin = await waitForOrigin(server);
   originForManifest = origin;
@@ -203,6 +206,7 @@ async function captureErrorAndRetry(browser, origin, viewport, outputDir) {
     const errorText = await statusTextOf(page);
     assert.match(errorText, /503/, "accessible status must expose the REST failure");
     assert.match(errorText, /ui_state_fixture/, "accessible status must preserve the typed REST error code");
+    assert.match(errorText, /s02-ui-state-retry/, "accessible status must preserve the REST request id");
     await assertCanvasVisible(page);
     const errorCapture = await saveState(page, viewport, outputDir, "error", {
       gallery_requests: galleryRequests,
@@ -255,6 +259,17 @@ async function newPage(browser, viewport) {
     deviceScaleFactor: 1,
   });
   page.setDefaultTimeout(15_000);
+  const observedThumbnails = [];
+  thumbnailResponses.set(page, observedThumbnails);
+  page.on("response", (response) => {
+    let pathname;
+    try {
+      pathname = new URL(response.url()).pathname;
+    } catch {
+      return;
+    }
+    if (pathname === "/api/v1/photos/demo-001/thumbnail/800") observedThumbnails.push(response);
+  });
   await page.addInitScript(() => {
     const states = [];
     Object.defineProperty(window, "__photoCullerStateHistory", { value: states });
@@ -304,8 +319,14 @@ async function saveState(page, viewport, outputDir, state, details) {
   await mkdir(dirname(path), { recursive: true });
   const png = await page.screenshot({ path, fullPage: false });
   assert.ok(png.length > 1024, `${filename} must contain the rendered Slint canvas`);
-  const dimensions = { width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
+  const decoded = PNG.sync.read(png);
+  const dimensions = { width: decoded.width, height: decoded.height };
   assert.deepEqual(dimensions, { width: viewport.width, height: viewport.height }, `${filename} must match its viewport`);
+  const gallerySignalPixels = countGallerySignalPixels(decoded, viewport.width, viewport.height);
+  assert.ok(
+    gallerySignalPixels >= 40,
+    `${filename} must contain visible Slint-rendered pixels in the gallery state region; found ${gallerySignalPixels} signal pixels`,
+  );
   const canvas = await page.locator("#canvas").evaluate((element) => {
     const rect = element.getBoundingClientRect();
     return {
@@ -327,7 +348,7 @@ async function saveState(page, viewport, outputDir, state, details) {
     canvas,
     aria_live_text: await statusTextOf(page),
     state_history: await stateHistory(page),
-    details,
+    details: { ...details, gallery_signal_pixels: gallerySignalPixels },
   };
 }
 
@@ -353,6 +374,35 @@ async function assertReadyTransport(page, origin) {
   assert.equal(state, "ready", "the app must reach ready after the retry/real response");
   const hasThumbnail = entries.some((entry) => entry.path === "/api/v1/photos/demo-001/thumbnail/800" && entry.origin === origin);
   assert.equal(hasThumbnail, true, "ready state must display the JPEG returned by the real Rust origin");
+  const response = thumbnailResponses.get(page)?.at(-1);
+  assert.ok(response, "the Rust thumbnail response must be observed by Playwright");
+  assert.equal(response.status(), 200, "the Rust thumbnail route must return HTTP 200");
+  assert.match(response.headers()["content-type"] ?? "", /^image\/jpeg(?:\s*;|$)/i, "the Rust thumbnail must use image/jpeg");
+  const jpeg = await response.body();
+  assert.ok(jpeg.length > 4, "the Rust thumbnail response must contain JPEG bytes");
+  assert.deepEqual([...jpeg.subarray(0, 2)], [0xff, 0xd8], "the thumbnail must start with the JPEG SOI marker");
+  assert.equal(
+    createHash("sha256").update(jpeg).digest("hex"),
+    EXPECTED_THUMBNAIL_SHA256,
+    "the retry-ready screenshot must use the bundled demo JPEG",
+  );
+}
+
+function countGallerySignalPixels(image, width, height) {
+  const xStart = Math.min(450, width - 1);
+  const xEnd = Math.max(xStart + 1, width - 16);
+  const yStart = Math.min(100, height - 1);
+  const yEnd = Math.max(yStart + 1, height - 80);
+  let count = 0;
+  for (let y = yStart; y < yEnd; y += 1) {
+    for (let x = xStart; x < xEnd; x += 1) {
+      const offset = (y * width + x) * 4;
+      if (image.data[offset + 3] > 240 && image.data[offset] + image.data[offset + 1] + image.data[offset + 2] >= 160) {
+        count += 1;
+      }
+    }
+  }
+  return count;
 }
 
 async function clickVisibleRetry(page, viewport) {
