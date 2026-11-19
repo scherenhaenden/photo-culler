@@ -1,13 +1,11 @@
-# Shared Slint components — task 41
+# Shared Slint components
 
-`components.slint` defines the shared theme and spacing/type tokens, focus policy, action and sidebar controls, and explicit loading, error, and empty states. `ComponentCatalog` is a compact smoke screen that exercises navigation callbacks, the retry action, and switching between light and dark themes. The controls use a focus outline in both themes; tab reaches each action and Enter/Space activates it.
+The semantic palette follows the dark reference at 3701bed: canvas #0F1012, card #111111, hover #1C1D21, sidebar #050505, orange active #FF6B35, and reference foreground #E3E2E4. Best/Keep/Alternate/Reject/Unrated remain separate semantic roles so web Keep/Reject can preserve their blue/orange badge colors while native uses teal/red.
 
-Run the source contract tests with:
+ActionButton and SidebarItem have visible keyboard focus and tab/Enter/Space behavior. StatusPanel distinguishes loading, empty and error and exposes retry only for an error. The gallery shell uses these tokens, but keeps the web card grid separate from the native list/preview.
 
-```sh
-python3 rust/apps/photo-culler-slint/ui/components/test_components.py
-```
+Run source contract checks:
 
-The current sprint base has no `photo-culler-slint` app, Slint dependency, or component aggregator. To preserve the assigned ownership boundary, this package does not add manifests or root registrations. The source checks cover the exported catalog and its state/focus contract; native and `wasm32` compilation and an interactive keyboard/focus smoke test remain integration checks once the Slint crate and pinned compiler are registered.
+    python3 rust/apps/photo-culler-slint/ui/components/test_components.py
 
-Integration: add the `components.slint` import to the shared Slint app, pin the agreed Slint toolchain in its own manifest, expose `ComponentCatalog` to native and browser smoke tests, and verify focus traversal with the real renderer in light and dark modes.
+Paired renderer captures for the egui and legacy web reference still require UX01 collection at 3701bed and UX04 side-by-side review. No screenshot files are included here.

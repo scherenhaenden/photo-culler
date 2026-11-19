@@ -1,34 +1,31 @@
-# Task 45: bounded library grid
+# Slint library gallery shell — Sprint 01 S05
 
-The sprint base does not yet contain the Slint application, shared UI
-components, REST client, or catalog read routes. This folder provides the
-transport-independent state contract for that screen. It does not render UI,
-decode thumbnails, or fetch network data by itself.
+This UI groundwork ports the first library view from the reference at 3701bed while retaining platform composition differences:
 
-`LibrarySource` is the adapter boundary. A REST implementation should request
-only `PageRequest.limit` rows from the catalog endpoint and apply the supplied
-query, session, and decision filters on the server. `LibraryGrid` clamps page
-size to 100 and thumbnail requests to 32 photo IDs at a time. The Slint view
-should render the current page and ask for thumbnail IDs for its visible range
-plus a small preload window; it must not create a request per gallery item.
+- Native: 220 px archive sidebar, compact photo list, contained selected-photo preview, 260 px inspector and status footer. The reference desktop window minimum is 1100 × 700 logical pixels.
+- Web: dark archive chrome, responsive gallery cards (200 px minimum, 180 px cover thumbnails, 20 px gaps), and a 320 px inspector once the content is wide enough. Narrow layouts drop the inspector to keep the grid usable.
+- Decision colors are semantic: desktop uses red rejection while the web reference uses orange; Keep uses teal on desktop and blue on web. Best, Alternate and Unrated retain their own reference colors.
 
-Navigation keys move focus across rows and columns; Enter records the active
-photo ID. Changing a JPEG/RAW representation updates the active row while
-keeping that same photo ID. Applying a filter resets to page zero. Page order
-is the stable order supplied by the source; the REST adapter should request the
-catalog's stable sort and cursor contract when it is available.
+gallery.slint exports GalleryPhoto and LibraryGallery. demo_window.slint keeps the existing runtime properties and callbacks (view-state, photo-name, error-message, photo-thumbnail, photo-index, photo-count, navigation-label, retry, previous-photo, and next-photo) and adds these inputs for the real gallery shell:
 
-When integrating, add `ui::library` to the Slint app and map the view callbacks
-to this state model. Keep thumbnail fetching asynchronous and bounded, and
-ignore late responses whose photo ID or representation no longer matches the
-visible row. No manifest or crate-root changes are made here because those
-files are outside this task's ownership and the app crate does not yet exist.
+- gallery-photos: [GalleryPhoto] supplies the current page and thumbnail images.
+- selected-photo-id, gallery-title, service-status and web-layout select visible state, archive label and platform composition.
+- kept-count, alternate-count, rejected-count and unrated-count feed the archive statistics.
+- select-photo(id) and select-archive(id) return list and archive actions.
 
-Run the self-contained acceptance tests with:
+When gallery-photos is empty, the existing photo-name and photo-thumbnail properties render a single-photo fallback; the host must still supply the thumbnail image. Loading, empty and connection-error states keep the archive shell visible; the error panel invokes retry. Selection and refresh callbacks must be wired by the host. Search and decision controls are displayed disabled until their state/action contract is integrated. Dashboard is shown as unavailable instead of pretending to switch screens.
 
-```sh
-rustc --edition=2024 --test \
-  rust/apps/photo-culler-slint/ui/library/mod.rs \
-  -o /tmp/photo-culler-task45-tests
-/tmp/photo-culler-task45-tests
-```
+The root crate currently compiles DemoScaffold from demo_scaffold.slint. DemoWindow is the primary screen; demo_window.slint also exports a DemoScaffold compatibility alias, so the existing desktop/browser Rust adapters keep their generated type when the build entry changes. The integrator must select demo_window.slint, add it and library/gallery.slint to build rerun tracking, and wire the added fields/callbacks before this becomes the live entry screen. This PR deliberately does not modify Rust entry points, manifests, or workspace registration.
+
+## Checks
+
+Run source-level UI contracts:
+
+    python3 rust/apps/photo-culler-slint/ui/library/test_gallery_parity.py
+    python3 rust/apps/photo-culler-slint/ui/components/test_components.py
+
+Compile the actual DemoWindow source with the locked Slint compiler without changing root registration:
+
+    PHOTO_CULLER_SLINT_ENTRY=ui/demo_window.slint cargo check --manifest-path rust/Cargo.toml -p photo-culler-slint --lib --locked
+
+This checks Slint parsing/type-checking and generated library code. The window binary check remains an integration gate until the Rust root selects DemoWindow.

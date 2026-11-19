@@ -1,6 +1,8 @@
-import { Sidebar, StatusPanel, PanelState, ActionButton, DesignTokens } from "./components/components.slint";
+import { ActionButton, DesignTokens, PanelState, SidebarItem, StatusPanel } from "./components/components.slint";
+import { GalleryPhoto, LibraryGallery } from "./library/gallery.slint";
 
 export component DemoWindow inherits Window {
+    // Keep this public runtime contract stable for the D34 integrator.
     in property <int> view-state: 0; // 0 loading, 1 ready, 2 empty, 3 error
     in property <string> photo-name: "demo-001.jpg";
     in property <string> error-message: "The local service could not be reached.";
@@ -12,47 +14,238 @@ export component DemoWindow inherits Window {
     callback previous-photo();
     callback next-photo();
 
-    title: "Photo Culler Demo";
-    preferred-width: 1080px;
-    preferred-height: 720px;
+    // Initial visual-parity inputs. The root adapter may populate these when the
+    // gallery/list contract is connected. Empty photos uses the legacy preview fields.
+    in property <[GalleryPhoto]> gallery-photos: [];
+    in property <string> selected-photo-id: "demo-001";
+    in property <string> gallery-title: "Sesión de muestra";
+    in property <string> service-status: "Esperando al servicio local…";
+    in property <bool> web-layout: false;
+    in property <int> kept-count: 0;
+    in property <int> alternate-count: 0;
+    in property <int> rejected-count: 0;
+    in property <int> unrated-count: 0;
+    callback select-photo(string);
+    callback select-archive(string);
+
+    title: "Photo Culler";
+    preferred-width: web-layout ? 1280px : 1440px;
+    preferred-height: web-layout ? 820px : 900px;
+    min-width: web-layout ? 360px : 1100px;
+    min-height: web-layout ? 480px : 700px;
     background: DesignTokens.canvas;
 
-    HorizontalLayout {
-        spacing: DesignTokens.space-medium;
-        padding: DesignTokens.space-medium;
-        Sidebar { width: 220px; current-index: 0; navigate(index) => { } }
-
-        VerticalLayout {
-            spacing: DesignTokens.space-medium;
-            Text { text: "Demo gallery"; color: DesignTokens.foreground; font-size: DesignTokens.text-heading; }
-
-            if root.view-state == 0: StatusPanel {
-                state: PanelState.loading;
-                title: "Loading gallery";
-                detail: "Connecting to the local Photo Culler service…";
-            }
-            if root.view-state == 2: StatusPanel {
-                state: PanelState.empty;
-                title: "No photos yet";
-                detail: "The selected gallery contains no photos.";
-            }
-            if root.view-state == 3: StatusPanel {
-                state: PanelState.error;
-                title: "Gallery unavailable";
-                detail: root.error-message;
-                retry => { root.retry(); }
-            }
-            if root.view-state == 1: VerticalLayout {
-                spacing: DesignTokens.space-small;
-                Text { text: root.photo-name; color: DesignTokens.foreground; font-size: DesignTokens.text-body; }
-                Image { source: root.photo-thumbnail; image-fit: contain; min-height: 420px; }
+    VerticalLayout {
+        spacing: 0px;
+        HorizontalLayout {
+            height: 56px;
+            spacing: 0px;
+            Rectangle {
+                width: 220px;
+                background: DesignTokens.sidebar;
+                border-width: 1px;
+                border-color: DesignTokens.border;
                 HorizontalLayout {
-                    ActionButton { label: "Previous"; enabled: root.photo-index > 0; clicked => { root.previous-photo(); } }
-                    Text { text: root.navigation-label; color: DesignTokens.muted; vertical-alignment: center; }
-                    ActionButton { label: "Next"; enabled: root.photo-index + 1 < root.photo-count; clicked => { root.next-photo(); } }
-                    ActionButton { label: "Retry"; primary: false; clicked => { root.retry(); } }
+                    padding: 18px;
+                    spacing: 5px;
+                    Text { text: "CULLER"; color: DesignTokens.foreground; font-family: DesignTokens.heading-font; font-size: 15px; font-weight: 900; vertical-alignment: center; }
+                    Text { text: "/ 01"; color: DesignTokens.accent; font-family: DesignTokens.heading-font; font-size: 15px; font-weight: 900; vertical-alignment: center; }
                 }
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+                background: DesignTokens.sidebar;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                HorizontalLayout {
+                    padding-left: 20px;
+                    padding-right: 16px;
+                    spacing: 10px;
+                    Text { text: "LIBRARY"; color: DesignTokens.foreground; font-family: DesignTokens.body-mono-font; font-size: 10px; font-weight: 800; vertical-alignment: center; }
+                    Rectangle { width: 1px; height: 20px; background: DesignTokens.border; }
+                    Text { text: "DASHBOARD"; color: DesignTokens.subdued; font-family: DesignTokens.body-mono-font; font-size: 10px; vertical-alignment: center; }
+                    Text { text: root.service-status; color: DesignTokens.muted; font-size: 11px; horizontal-stretch: 1; vertical-alignment: center; overflow: elide; }
+                    ActionButton {
+                        label: "↻ Actualizar";
+                        primary: false;
+                        width: 104px;
+                        clicked => { root.retry(); }
+                    }
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 0px;
+            vertical-stretch: 1;
+
+            Rectangle {
+                width: 220px;
+                background: DesignTokens.sidebar;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 6px;
+                    Rectangle {
+                        height: 50px;
+                        background: DesignTokens.surface;
+                        border-radius: 8px;
+                        border-width: 1px;
+                        border-color: DesignTokens.border;
+                        HorizontalLayout {
+                            padding: 8px;
+                            spacing: 8px;
+                            Rectangle {
+                                width: 30px; height: 30px;
+                                background: DesignTokens.card-hover;
+                                border-radius: 6px;
+                                Text { text: "📂"; color: DesignTokens.accent; font-size: 14px; horizontal-alignment: center; vertical-alignment: center; }
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                Text { text: "CATALOG_01"; color: DesignTokens.foreground; font-family: DesignTokens.body-mono-font; font-size: 10px; font-weight: 800; }
+                                Text { text: "LOCAL ARCHIVE"; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 8px; }
+                            }
+                        }
+                    }
+                    Text { text: "GALERÍAS"; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 9px; font-weight: 800; vertical-alignment: center; }
+                    SidebarItem {
+                        label: root.gallery-title;
+                        selected: true;
+                        activated => { root.select-archive(root.gallery-title); }
+                    }
+                    Text { text: "FILTROS"; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 9px; font-weight: 800; vertical-alignment: center; }
+                    Rectangle {
+                        height: 34px;
+                        background: DesignTokens.surface;
+                        border-radius: 6px;
+                        border-width: 1px;
+                        border-color: DesignTokens.border;
+                        Text { x: 10px; width: parent.width - 20px; text: "⌕  Buscar nombre o etiqueta"; color: DesignTokens.subdued; font-size: 10px; vertical-alignment: center; overflow: elide; }
+                    }
+                    Text { text: "DECISIÓN"; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 9px; font-weight: 800; vertical-alignment: center; }
+                    SidebarItem { label: "Todos"; selected: true; }
+                    SidebarItem { label: "BEST / KEEP"; enabled: false; }
+                    SidebarItem { label: "ALTERNATE"; enabled: false; }
+                    SidebarItem { label: "REJECT"; enabled: false; }
+                    Rectangle { height: 1px; background: DesignTokens.border; }
+                    Text { text: "SELECCIÓN"; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 9px; font-weight: 800; vertical-alignment: center; }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        Text { text: "KEPT"; color: DesignTokens.best; font-family: DesignTokens.body-mono-font; font-size: 9px; }
+                        Text { text: root.kept-count < 10 ? "0" + root.kept-count : "" + root.kept-count; color: DesignTokens.foreground; font-family: DesignTokens.body-mono-font; font-size: 10px; horizontal-alignment: right; horizontal-stretch: 1; }
+                    }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        Text { text: "ALTERNATE"; color: DesignTokens.alternate; font-family: DesignTokens.body-mono-font; font-size: 9px; }
+                        Text { text: root.alternate-count < 10 ? "0" + root.alternate-count : "" + root.alternate-count; color: DesignTokens.foreground; font-family: DesignTokens.body-mono-font; font-size: 10px; horizontal-alignment: right; horizontal-stretch: 1; }
+                    }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        Text { text: "REJECTED"; color: web-layout ? DesignTokens.web-rejected : DesignTokens.rejected; font-family: DesignTokens.body-mono-font; font-size: 9px; }
+                        Text { text: root.rejected-count < 10 ? "0" + root.rejected-count : "" + root.rejected-count; color: DesignTokens.foreground; font-family: DesignTokens.body-mono-font; font-size: 10px; horizontal-alignment: right; horizontal-stretch: 1; }
+                    }
+                    HorizontalLayout {
+                        spacing: 6px;
+                        Text { text: "UNRATED"; color: DesignTokens.unrated; font-family: DesignTokens.body-mono-font; font-size: 9px; }
+                        Text { text: root.unrated-count < 10 ? "0" + root.unrated-count : "" + root.unrated-count; color: DesignTokens.foreground; font-family: DesignTokens.body-mono-font; font-size: 10px; horizontal-alignment: right; horizontal-stretch: 1; }
+                    }
+                    Rectangle { vertical-stretch: 1; background: transparent; }
+                    Rectangle {
+                        height: 52px;
+                        background: #000000;
+                        border-width: 1px;
+                        border-color: DesignTokens.border;
+                        HorizontalLayout {
+                            padding: 8px;
+                            spacing: 8px;
+                            Rectangle {
+                                width: 30px; height: 30px; border-radius: 999px;
+                                background: DesignTokens.surface;
+                                border-width: 1px;
+                                border-color: DesignTokens.border;
+                                Text { text: "OP"; color: DesignTokens.foreground; font-family: DesignTokens.body-mono-font; font-size: 9px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                Text { text: "OPERATOR_01"; color: DesignTokens.foreground; font-family: DesignTokens.body-mono-font; font-size: 9px; font-weight: 800; }
+                                Text { text: "SESIÓN DE CATÁLOGO"; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 8px; }
+                            }
+                        }
+                    }
+                }
+            }
+
+            VerticalLayout {
+                padding: 16px;
+                spacing: 12px;
+                HorizontalLayout {
+                    spacing: 12px;
+                    Text { text: "Catálogo"; color: DesignTokens.foreground; font-family: DesignTokens.heading-font; font-size: DesignTokens.text-heading; font-weight: 700; vertical-alignment: center; }
+                    Text { text: root.gallery-title; color: DesignTokens.muted; font-size: 11px; vertical-alignment: center; horizontal-stretch: 1; }
+                    Text {
+                        text: "MOSTRANDO  " + (root.photo-index + 1) + "  DE  " + root.photo-count + "  FOTOS";
+                        color: DesignTokens.muted;
+                        font-family: DesignTokens.body-mono-font;
+                        font-size: 9px;
+                        vertical-alignment: center;
+                    }
+                }
+                if root.view-state == 0: StatusPanel {
+                    vertical-stretch: 1;
+                    state: PanelState.loading;
+                    title: "Cargando catálogo";
+                    detail: "Conectando con el archivo local y preparando las miniaturas.";
+                }
+                if root.view-state == 2: StatusPanel {
+                    vertical-stretch: 1;
+                    state: PanelState.empty;
+                    title: "Tu catálogo aparecerá aquí";
+                    detail: "Elige una galería del archivo. La importación se conectará al servicio del catálogo.";
+                }
+                if root.view-state == 3: StatusPanel {
+                    vertical-stretch: 1;
+                    state: PanelState.error;
+                    title: "No se pudo conectar con el servicio";
+                    detail: root.error-message;
+                    action-label: "Reintentar";
+                    retry => { root.retry(); }
+                }
+                if root.view-state == 1: LibraryGallery {
+                    vertical-stretch: 1;
+                    web-layout: root.web-layout;
+                    view-state: root.view-state;
+                    photos: root.gallery-photos;
+                    fallback-id: root.selected-photo-id;
+                    fallback-name: root.photo-name;
+                    fallback-thumbnail: root.photo-thumbnail;
+                    selected-id: root.selected-photo-id;
+                    error-message: root.error-message;
+                    retry => { root.retry(); }
+                    select-photo(id) => { root.select-photo(id); }
+                }
+            }
+        }
+
+        Rectangle {
+            height: 24px;
+            background: DesignTokens.sidebar;
+            border-width: 1px;
+            border-color: DesignTokens.border;
+            HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 14px;
+                spacing: 8px;
+                Text { text: "CATÁLOGO LOCAL"; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 8px; vertical-alignment: center; }
+                Text { text: root.view-state == 1 ? "●" : "○"; color: root.view-state == 3 ? DesignTokens.danger : (root.view-state == 1 ? DesignTokens.best : DesignTokens.alternate); font-size: 8px; vertical-alignment: center; }
+                Text { text: root.service-status; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 8px; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
+                Text { text: root.navigation-label; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 8px; vertical-alignment: center; }
             }
         }
     }
 }
+
+// Existing Rust adapters still name DemoScaffold. Keeping this UI alias lets the
+// integrator switch the Slint entry file without a simultaneous Rust rename.
+export component DemoScaffold inherits DemoWindow { }
