@@ -5,7 +5,7 @@ import { access, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium, firefox } from "playwright";
-import { PNG } from "pngjs";
+import pngjs from "pngjs";
 
 const GALLERY_PATH = "/api/v1/galleries/demo/photos";
 const ERROR_BODY = {
@@ -14,6 +14,7 @@ const ERROR_BODY = {
   request_id: "s02-ui-state-retry",
 };
 const EXPECTED_THUMBNAIL_SHA256 = "cc20c24844d2fc6fca729fcb66cfe661960f7b56be41a3dd462a0f1b22cfb4f2";
+const { PNG } = pngjs;
 const EMPTY_BODY = {
   gallery_id: "demo",
   items: [],
@@ -178,11 +179,15 @@ async function captureEmpty(browser, origin, viewport, outputDir) {
 async function captureErrorAndRetry(browser, origin, viewport, outputDir) {
   const page = await newPage(browser, viewport);
   let galleryRequests = 0;
+  const initialRequestSeen = deferred();
+  const releaseInitial = deferred();
   const retryRequestSeen = deferred();
   const releaseRetry = deferred();
   await page.route(`**${GALLERY_PATH}`, async (route) => {
     galleryRequests += 1;
     if (galleryRequests === 1) {
+      initialRequestSeen.resolve();
+      await releaseInitial.promise;
       await route.fulfill({
         status: 503,
         contentType: "application/json; charset=utf-8",
@@ -201,6 +206,9 @@ async function captureErrorAndRetry(browser, origin, viewport, outputDir) {
 
   try {
     await page.goto(origin, { waitUntil: "domcontentloaded" });
+    await withTimeout(initialRequestSeen.promise, 45_000, "WASM did not request the gallery for error/retry capture");
+    await waitForState(page, "loading");
+    releaseInitial.resolve();
     await waitForState(page, "error");
     assert.equal(galleryRequests, 1, "initial error state must use the fixture HTTP 503");
     const errorText = await statusTextOf(page);
@@ -248,6 +256,7 @@ async function captureErrorAndRetry(browser, origin, viewport, outputDir) {
       },
     };
   } finally {
+    releaseInitial.resolve();
     releaseRetry.resolve();
     await page.close();
   }
@@ -271,17 +280,7 @@ async function newPage(browser, viewport) {
     if (pathname === "/api/v1/photos/demo-001/thumbnail/800") observedThumbnails.push(response);
   });
   await page.addInitScript(() => {
-    const states = [];
-    Object.defineProperty(window, "__photoCullerStateHistory", { value: states });
-    const observe = () => {
-      const state = document.documentElement?.dataset.photoCullerState;
-      if (state && states[states.length - 1] !== state) states.push(state);
-    };
-    const observer = new MutationObserver(observe);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-photo-culler-state"],
-    });
+    Object.defineProperty(window, "__photoCullerStateHistory", { value: [] });
   });
   return page;
 }
@@ -295,6 +294,10 @@ async function waitForState(page, expected) {
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const status = page.locator("#application-status");
   assert.equal(await status.getAttribute("data-state"), expected, `aria-live state must be ${expected}`);
+  await page.evaluate((state) => {
+    const history = window.__photoCullerStateHistory;
+    if (history.at(-1) !== state) history.push(state);
+  }, expected);
   await assertCanvasVisible(page);
 }
 
