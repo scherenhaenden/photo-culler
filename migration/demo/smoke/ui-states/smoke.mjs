@@ -49,7 +49,6 @@ let browser;
 let originForManifest = "not-ready";
 const captures = [];
 const scenarioResults = [];
-const thumbnailResponses = new WeakMap();
 try {
   const origin = await waitForOrigin(server);
   originForManifest = origin;
@@ -268,17 +267,6 @@ async function newPage(browser, viewport) {
     deviceScaleFactor: 1,
   });
   page.setDefaultTimeout(15_000);
-  const observedThumbnails = [];
-  thumbnailResponses.set(page, observedThumbnails);
-  page.on("response", (response) => {
-    let pathname;
-    try {
-      pathname = new URL(response.url()).pathname;
-    } catch {
-      return;
-    }
-    if (pathname === "/api/v1/photos/demo-001/thumbnail/800") observedThumbnails.push(response);
-  });
   await page.addInitScript(() => {
     Object.defineProperty(window, "__photoCullerStateHistory", { value: [] });
   });
@@ -377,18 +365,23 @@ async function assertReadyTransport(page, origin) {
   assert.equal(state, "ready", "the app must reach ready after the retry/real response");
   const hasThumbnail = entries.some((entry) => entry.path === "/api/v1/photos/demo-001/thumbnail/800" && entry.origin === origin);
   assert.equal(hasThumbnail, true, "ready state must display the JPEG returned by the real Rust origin");
-  const response = thumbnailResponses.get(page)?.at(-1);
-  assert.ok(response, "the Rust thumbnail response must be observed by Playwright");
-  assert.equal(response.status(), 200, "the Rust thumbnail route must return HTTP 200");
-  assert.match(response.headers()["content-type"] ?? "", /^image\/jpeg(?:\s*;|$)/i, "the Rust thumbnail must use image/jpeg");
-  const jpeg = await response.body();
-  assert.ok(jpeg.length > 4, "the Rust thumbnail response must contain JPEG bytes");
-  assert.deepEqual([...jpeg.subarray(0, 2)], [0xff, 0xd8], "the thumbnail must start with the JPEG SOI marker");
-  assert.equal(
-    createHash("sha256").update(jpeg).digest("hex"),
-    EXPECTED_THUMBNAIL_SHA256,
-    "the retry-ready screenshot must use the bundled demo JPEG",
-  );
+  const thumbnail = await page.evaluate(async (path) => {
+    const response = await fetch(path, { cache: "no-store" });
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+    return {
+      status: response.status,
+      content_type: response.headers.get("content-type"),
+      byte_length: bytes.length,
+      prefix: [...bytes.slice(0, 2)],
+      sha256: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join(""),
+    };
+  }, "/api/v1/photos/demo-001/thumbnail/800");
+  assert.equal(thumbnail.status, 200, "the Rust thumbnail route must return HTTP 200");
+  assert.match(thumbnail.content_type ?? "", /^image\/jpeg(?:\s*;|$)/i, "the Rust thumbnail must use image/jpeg");
+  assert.ok(thumbnail.byte_length > 4, "the Rust thumbnail response must contain JPEG bytes");
+  assert.deepEqual(thumbnail.prefix, [0xff, 0xd8], "the thumbnail must start with the JPEG SOI marker");
+  assert.equal(thumbnail.sha256, EXPECTED_THUMBNAIL_SHA256, "the Rust origin must serve the bundled demo JPEG");
 }
 
 function countGallerySignalPixels(image, width, height) {
