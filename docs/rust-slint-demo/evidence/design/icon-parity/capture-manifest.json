@@ -1,0 +1,46 @@
+{
+  "mode": "explicit browser smoke fixture (?photo-culler-smoke=1)",
+  "browser": "Chromium 134.0.6998.35",
+  "server": "local Rust Axum; same-origin WASM/API/JPEG",
+  "synthetic_metadata": true,
+  "captures": [
+    {
+      "path": "/private/tmp/photo-culler-pro-icon-parity-captures/pro-library-1440x900.png",
+      "width": 1440,
+      "height": 900,
+      "browser_viewport": {
+        "inner_width": 1440,
+        "inner_height": 900,
+        "canvas_width": 1440,
+        "canvas_height": 900,
+        "canvas_backing_width": 1440,
+        "canvas_backing_height": 900
+      },
+      "device_scale_factor": 1,
+      "selected_fixture": "photo-01",
+      "photo_count": 10,
+      "image_sha256": "cc20c24844d2fc6fca729fcb66cfe661960f7b56be41a3dd462a0f1b22cfb4f2",
+      "screenshot_sha256": "b8de1b9bc2b3d49f2cbfca6d57aaef7dc8553f52e25e8474ab812d355a4c7f8a",
+      "screenshot_bytes": 126243
+    },
+    {
+      "path": "/private/tmp/photo-culler-pro-icon-parity-captures/pro-library-1100x700.png",
+      "width": 1100,
+      "height": 700,
+      "browser_viewport": {
+        "inner_width": 1100,
+        "inner_height": 700,
+        "canvas_width": 1100,
+        "canvas_height": 700,
+        "canvas_backing_width": 1100,
+        "canvas_backing_height": 700
+      },
+      "device_scale_factor": 1,
+      "selected_fixture": "photo-01",
+      "photo_count": 10,
+      "image_sha256": "cc20c24844d2fc6fca729fcb66cfe661960f7b56be41a3dd462a0f1b22cfb4f2",
+      "screenshot_sha256": "a605f26b4b844ce47aa1046735400ff16f90b79cbca095b2fb92927534f2ef63",
+      "screenshot_bytes": 118244
+    }
+  ]
+}

@@ -82,25 +82,32 @@ repite ambos sobre el bundle real, con MIME y miniatura.
 
 ## Evidencia CI vigente
 
-La [corrida #44508069950](https://github.com/scherenhaenden/photo-culler/actions/runs/44508069950)
-validó el código de diseño `14a4a6fc3371ee5d7ebc8fc3c303e2d7bfa93ceb` el
-2026-11-19. Pasaron staging contracts, build/staging Linux x86-64, macOS arm64,
-Windows x86-64, WASM y los flujos reales de Chromium/Firefox. El run conserva
-los cinco artefactos con sus manifests/checksums; los nombres, SHA-256 y estado
-de runtime están en [BUILDS.md](../BUILDS.md).
+La aceptación final [#44546749693](https://github.com/scherenhaenden/photo-culler/actions/runs/44546749693)
+pasó sus seis jobs en el head `68959bf702c554839b720d80fd51bfbad6824317`, basado
+en diseño `afe088242bdcf173eb8e83c9571bf598f52c4e86` y docs `51deca2`. Verificó
+contratos y staging, Linux x86-64, macOS arm64, Windows x86-64, WASM y
+Chromium/Firefox. En cada desktop runner ejecutó el flujo live de una foto, una
+captura separada del fixture de diez tarjetas, cierre/reapertura con liberación
+del puerto propio y supervivencia del servidor externo. Los hashes de las
+capturas nativas y los digests de artifacts están en
+[`evidence/design`](evidence/design/README.md) y [BUILDS.md](../BUILDS.md).
 
 Descarga local de toda la evidencia:
 
 ```sh
-gh run download 44508069950 --repo scherenhaenden/photo-culler --dir ./artifacts/run-44508069950
+gh run download 44546749693 --repo scherenhaenden/photo-culler --dir ./artifacts/run-44546749693
 ```
 
-Este run prueba el arranque/parada del hijo servidor en los tres runners y el
-flujo WASM visible en Chromium/Firefox. Los manifests nativos aún dicen
-`runtime_smoke: not_run`: el workflow todavía no abre ni captura la ventana
-Slint de escritorio. Esa evidencia debe completarse en la aceptación nativa;
-no interpretes un binario compilado o un servidor probado como ventana gráfica
-aceptada.
+El runner Windows captura el marco DWM visible a 1442×932; el tamaño real de la
+ventana se mantiene en 1456×939 y el recorte excluye taskbar y escritorio. El
+workflow usa `winit-software` en Windows alojado porque el runner no dispone de
+OpenGL 2.0 fiable; los paquetes normales conservan la selección estándar del
+renderizador.
+
+La corrida anterior [#44508069950](https://github.com/scherenhaenden/photo-culler/actions/runs/44508069950)
+validó una revisión anterior del diseño (`14a4a6fc3371ee5d7ebc8fc3c303e2d7bfa93ceb`).
+Sigue como evidencia histórica del build y browser flow; la evidencia nativa
+vigente es #44546749693.
 
 El código final del PR de diseño #154 es `afe088242bdcf173eb8e83c9571bf598f52c4e86`.
 En ese SHA pasaron localmente 33 pruebas Slint (una ignorada), 8 contratos de

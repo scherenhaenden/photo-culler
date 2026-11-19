@@ -4,7 +4,7 @@
 
 **Base actual del sprint:** `153d04920220fb0c396dca571620c0921052ab1b` en `feature/sprint-01-rust-foundation`. El candidato integra el servidor ejecutable, el cliente compartido, el launcher de escritorio, el arranque WASM, los componentes visuales y el workflow. La ejecución real de CI y la revisión de paridad con capturas siguen siendo gates de aceptación.
 
-**Diseño S05:** el PR [#154](https://github.com/scherenhaenden/photo-culler/pull/154) contiene el candidato Library en `afe088242bdcf173eb8e83c9571bf598f52c4e86`. En ese SHA pasaron localmente 33 pruebas del crate Slint (1 ignorada), 8 contratos de paridad, checks nativo/WASM y capturas de browser a 1440×900 y 1100×700. El CI de ese SHA y la ventana nativa siguen pendientes; las capturas pareadas, hashes y límites están en [evidencia visual S05](evidence/design/README.md).
+**Diseño S05:** el PR [#154](https://github.com/scherenhaenden/photo-culler/pull/154) contiene el candidato Library en `afe088242bdcf173eb8e83c9571bf598f52c4e86`; el commit de documentación actual es `51deca2f945bc9892b05fb51fcca9d09b326da3c`. En el SHA de código pasaron 33 pruebas Slint (1 ignorada), 8 contratos de paridad y checks nativo/WASM. El run [#44546749693](https://github.com/scherenhaenden/photo-culler/actions/runs/44546749693) pasó sus seis jobs en la pila actual y capturó la Library nativa en Linux, macOS y Windows. Las comparaciones, capturas, hashes y límites están en [evidencia visual S05](evidence/design/README.md). La iconografía vectorial está visualmente verificada en el PR apilado #155.
 
 ## Resultado que se va a entregar
 

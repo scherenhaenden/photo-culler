@@ -13,14 +13,29 @@ The earlier implementation at [`3701bed`](https://github.com/scherenhaenden/phot
 
 The Library view must not contain the Cinema inspector. It needs the prototype's top navigation/actions, primary sidebar, Library-only filter rail, 46 px grid toolbar and 4:3 cards with cover crops, decision/rating metadata and selection treatment. Keep counts and state labels tied to Rust data, not hard-coded to the screenshot.
 
+## Current status for the initial Library screen
+
+At code SHA `afe088242bdcf173eb8e83c9571bf598f52c4e86`, UX01 has paired,
+hash-identified reference/candidate captures at 1440×900 and 1100×700. The
+candidate has responsive 5×2 and 4×3 grids and local contract coverage for the
+smoke fixture. The native Library window was also accepted on Linux, macOS and
+Windows by run [#44546749693](https://github.com/scherenhaenden/photo-culler/actions/runs/44546749693),
+on a candidate based on this S05 code. UX02–UX04 are implemented in part: the
+main geometry and basic filters are present, but several control details still
+differ and the live REST response does not include Pro metadata. Vector icon
+paths are visually checked on the separate stacked PR #155 branch, but are not
+in the S05 base capture. See the [paired-image review](evidence/design/README.md)
+for the observed deltas. Remaining UX02–UX04 acceptance covers these visual
+details, live metadata, and state behavior.
+
 ## Remaining design milestones
 
 | ID | Milestone | Work | Acceptance |
 |---|---|---|---|
-| UX01 | Pin and capture the reference | Use the zip SHA from the design spec. Run the prototype only as a visual reference; capture its default Library state and selected-photo state at matched viewports with deterministic fixtures. | Reference and candidate captures identify source SHA/hash, viewport, scale, locale and fixture IDs. |
-| UX02 | Port the shared shell | Port the header tabs/actions, 220 px navigation, decision counts, operator footer and shared tokens into Slint. Keep labels, active state, focus and spacing aligned. | Side-by-side shell geometry and state colors match at native and web sizes. |
-| UX03 | Port Library filters and grid | Add the 230 px filter rail and grid toolbar. Implement the responsive 4:3 card grid, hover overlay, decision marker, rating, RAW badge, score and selection outline. | Same columns, card density, image crop, hover/selection states and filter affordances as the package. |
-| UX04 | Connect the live Sprint 01 controller | Feed the Library from the shared typed Rust REST client in native and WASM. Keep unavailable write actions visible in their original positions and clearly disabled in the read-only demo. | Both surfaces show the same API-loaded image and metadata. Loading, empty, error and retry preserve the shell. |
+| UX01 | Pin and capture the reference | **Complete for the initial state.** Paired deterministic captures at 1440×900 and 1100×700 use the same local JPEG and identify source ZIP, fixture and hashes. | Reproduce the paired captures from the recorded command and keep them versioned with the manifest. |
+| UX02 | Port the shared shell | **Partial.** Header, tabs, 220 px navigation, counters and footer are present. Vector icons are visually verified on PR #155; the S05 base still uses placeholders, and some spacing/typography remain. | Geometry, labels, icon states, color roles and active/inactive states match the package. |
+| UX03 | Port Library filters and grid | **Partial.** Separate 230 px filter rail, toolbar, responsive 4:3 grid, filter behaviors and selection are present. Some control affordances and icon details differ. | Matched captures show the same columns, crop, selected ring, badges, hover overlay, counts and filter controls. |
+| UX04 | Connect the live Sprint 01 controller | **Partial.** Shared REST data and same-origin WASM are connected. Pro metadata appears only in the explicit synthetic fixture; missing live fields remain unavailable. | The real Rust API thumbnail appears in the reference card layout; loading, empty, error and retry preserve the shell without fabricating metadata. |
 | UX05 | Port Cinema and Compare | Implement the package's separate Cinema viewer/inspector and synchronized 4-up comparison. | Each screen uses its own reference layout and supports its defined selection/navigation behavior. |
 | UX06 | Port Bursts, Timeline, Dashboard and dialogs | Port the remaining navigation destinations and import/export/settings/shortcuts surfaces, then connect operations as their Rust endpoints exist. | Layout matches the source; unavailable operations are explicit and recoverable. |
 | UX07 | Verify full design parity | Capture each view on native and web and record geometry, typography, cropping, focus, responsive behavior and platform differences. | Each screen has a reviewed pair and documented resolution or approval for every material difference. |

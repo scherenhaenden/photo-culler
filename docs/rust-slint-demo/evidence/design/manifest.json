@@ -17,6 +17,23 @@
     "capture_manifest_path": "candidate/capture-manifest.json",
     "capture_manifest_sha256": "2345323b0ac51f51be5fecc7eeab5e7764ac3ae9e051e3eef0119075ec533900"
   },
+  "icon_parity_overlay": {
+    "branch": "feature/sprint-01-pro-icon-parity",
+    "commit": "b53fe0c1c2e71ee23d94e8748291653c70d6fa7b",
+    "note": "Separate stacked PR #155; vector icons were visually inspected on the same ten-card fixture and are not part of the base S05 candidate images above.",
+    "capture_manifest_path": "icon-parity/capture-manifest.json",
+    "capture_manifest_sha256": "423f5dca4e7dd0e51ae35a59b9d77e67fcf2dcbc4bcd67ea468608a0641b3119",
+    "captures": [
+      {
+        "path": "icon-parity/pro-library-1440x900.png",
+        "sha256": "b8de1b9bc2b3d49f2cbfca6d57aaef7dc8553f52e25e8474ab812d355a4c7f8a"
+      },
+      {
+        "path": "icon-parity/pro-library-1100x700.png",
+        "sha256": "a605f26b4b844ce47aa1046735400ff16f90b79cbca095b2fb92927534f2ef63"
+      }
+    ]
+  },
   "viewports": [
     {
       "width": 1440,
@@ -53,7 +70,9 @@
   ],
   "acceptance_boundary": {
     "browser_capture_is_native_gui_evidence": false,
-    "native_window_capture": "pending S07 hosted acceptance",
+    "native_window_capture": "passed on Linux x86-64, macOS arm64, and Windows x86-64 in workflow 44546749693; see native/manifest.json",
+    "native_acceptance_commit": "68959bf702c554839b720d80fd51bfbad6824317",
+    "native_acceptance_result": "6/6 jobs passed",
     "photo_content_is_synthetic": true,
     "full_application_screens_are_in_scope": false
   }
