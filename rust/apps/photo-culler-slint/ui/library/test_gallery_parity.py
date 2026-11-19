@@ -7,6 +7,7 @@ TOKENS = (UI / "components" / "components.slint").read_text(encoding="utf-8")
 GALLERY = (UI / "library" / "gallery.slint").read_text(encoding="utf-8")
 WINDOW = (UI / "demo_window.slint").read_text(encoding="utf-8")
 SIDEBARS = (UI / "library" / "photo_culler_pro_sidebars.slint").read_text(encoding="utf-8")
+HEADER = (UI / "library" / "photo_culler_pro_header.slint").read_text(encoding="utf-8")
 
 
 class GalleryParityTests(unittest.TestCase):
@@ -132,8 +133,12 @@ class GalleryParityTests(unittest.TestCase):
         self.assertIn("PhotoCullerProFilterSidebar {", WINDOW)
         self.assertIn("width: 220px;", SIDEBARS)
         self.assertIn("width: 230px;", SIDEBARS)
+        self.assertIn("vertical-stretch: 0;", SIDEBARS)
         self.assertIn("viewport-width: root.width / 1px;", WINDOW)
         self.assertIn("search-query: root.search-query;", WINDOW)
+        for symbol in ('symbol: "P";', 'symbol: "Z";', 'symbol: "?";', 'symbol: "S";'):
+            with self.subTest(symbol=symbol):
+                self.assertIn(symbol, HEADER)
 
 
 if __name__ == "__main__":

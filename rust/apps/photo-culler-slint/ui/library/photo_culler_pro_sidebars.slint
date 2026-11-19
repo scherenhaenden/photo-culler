@@ -134,7 +134,7 @@ export component PhotoCullerProPrimarySidebar inherits Rectangle {
                     background: #111111;
                     border-width: 1px;
                     border-color: #ffffff26;
-                    Text { text: "▦"; color: #ff6b35; font-size: 16px; horizontal-alignment: center; vertical-alignment: center; }
+                Text { text: "DB"; color: #ff6b35; font-family: DesignTokens.body-mono-font; font-size: 9px; font-weight: 800; horizontal-alignment: center; vertical-alignment: center; }
                 }
                 VerticalLayout {
                     alignment: center;
@@ -153,12 +153,12 @@ export component PhotoCullerProPrimarySidebar inherits Rectangle {
             spacing: 4px;
             vertical-stretch: 1;
 
-            ProNavigationItem { icon: "▦"; label: "LIBRARY"; view: "library"; selected: root.active-view == "library"; activated(view) => { root.navigate(view); } }
-            ProNavigationItem { icon: "◫"; label: "COMPARE (4-UP)"; view: "compare"; selected: root.active-view == "compare"; activated(view) => { root.navigate(view); } }
-            ProNavigationItem { icon: "ϟ"; label: "BURSTS ENGINE"; view: "bursts"; selected: root.active-view == "bursts"; activated(view) => { root.navigate(view); } }
-            ProNavigationItem { icon: "◷"; label: "TIMELINE"; view: "timeline"; selected: root.active-view == "timeline"; activated(view) => { root.navigate(view); } }
-            ProNavigationItem { icon: "◉"; label: "CINEMA SPECS"; view: "cinema"; selected: root.active-view == "cinema"; activated(view) => { root.navigate(view); } }
-            ProNavigationItem { icon: "▤"; label: "SYSTEM OVERVIEW"; view: "dashboard"; selected: root.active-view == "dashboard"; activated(view) => { root.navigate(view); } }
+            ProNavigationItem { icon: "L"; label: "LIBRARY"; view: "library"; selected: root.active-view == "library"; activated(view) => { root.navigate(view); } }
+            ProNavigationItem { icon: "4"; label: "COMPARE (4-UP)"; view: "compare"; selected: root.active-view == "compare"; activated(view) => { root.navigate(view); } }
+            ProNavigationItem { icon: "B"; label: "BURSTS ENGINE"; view: "bursts"; selected: root.active-view == "bursts"; activated(view) => { root.navigate(view); } }
+            ProNavigationItem { icon: "T"; label: "TIMELINE"; view: "timeline"; selected: root.active-view == "timeline"; activated(view) => { root.navigate(view); } }
+            ProNavigationItem { icon: "C"; label: "CINEMA SPECS"; view: "cinema"; selected: root.active-view == "cinema"; activated(view) => { root.navigate(view); } }
+            ProNavigationItem { icon: "S"; label: "SYSTEM OVERVIEW"; view: "dashboard"; selected: root.active-view == "dashboard"; activated(view) => { root.navigate(view); } }
 
             HorizontalLayout {
                 height: 17px;
@@ -433,7 +433,7 @@ export component PhotoCullerProFilterSidebar inherits Rectangle {
                 padding-left: 12px;
                 padding-right: 10px;
                 spacing: 8px;
-                Text { text: "⏷"; color: #ff6b35; font-family: DesignTokens.body-font; font-size: 14px; vertical-alignment: center; }
+                Text { text: "F"; color: #ff6b35; font-family: DesignTokens.body-mono-font; font-size: 11px; font-weight: 800; vertical-alignment: center; }
                 Text { text: "FILTERS (" + root.result-count + ")"; color: #ffffff; font-family: DesignTokens.body-font; font-size: 10px; font-weight: 900; vertical-alignment: center; horizontal-stretch: 1; }
                 FocusScope {
                     width: 46px;
@@ -481,10 +481,12 @@ export component PhotoCullerProFilterSidebar inherits Rectangle {
         ScrollView {
             vertical-stretch: 1;
             VerticalLayout {
+                vertical-stretch: 0;
                 padding: 12px;
                 spacing: 18px;
 
                 VerticalLayout {
+                    vertical-stretch: 0;
                     spacing: 7px;
                     FilterSectionTitle { text: "CULL DECISION"; }
                     GridLayout {
@@ -498,6 +500,7 @@ export component PhotoCullerProFilterSidebar inherits Rectangle {
                 }
 
                 VerticalLayout {
+                    vertical-stretch: 0;
                     spacing: 6px;
                     FilterSectionTitle { text: "CAMERA BODY"; }
                     FilterToggle {
@@ -537,6 +540,7 @@ export component PhotoCullerProFilterSidebar inherits Rectangle {
                 }
 
                 VerticalLayout {
+                    vertical-stretch: 0;
                     spacing: 7px;
                     FilterSectionTitle { text: "MIN STAR RATING"; }
                     HorizontalLayout {

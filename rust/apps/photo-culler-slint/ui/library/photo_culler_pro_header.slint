@@ -393,7 +393,7 @@ export component PhotoCullerProHeader inherits Rectangle {
                 spacing: 2px;
 
                 if root.width >= 1120px: PhotoCullerProControl {
-                    symbol: "▣";
+                    symbol: "P";
                     action: "performance";
                     requested(action) => {
                         root.show-unavailable(action);
@@ -401,7 +401,7 @@ export component PhotoCullerProHeader inherits Rectangle {
                     }
                 }
                 if root.width >= 800px: PhotoCullerProControl {
-                    symbol: "ϟ";
+                    symbol: "Z";
                     action: "processing";
                     symbol-color: DesignTokens.accent;
                     requested(action) => {
@@ -418,7 +418,7 @@ export component PhotoCullerProHeader inherits Rectangle {
                     }
                 }
                 PhotoCullerProControl {
-                    symbol: "⚙";
+                    symbol: "S";
                     action: "settings";
                     requested(action) => {
                         root.show-unavailable(action);
