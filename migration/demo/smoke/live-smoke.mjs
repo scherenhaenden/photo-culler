@@ -33,7 +33,7 @@ export async function runLiveSmoke(browserName) {
   try {
     origin = await waitForOrigin(processState);
     const browserType = browserName === "chromium" ? chromium : firefox;
-    const launchOptions = { headless: true };
+    const launchOptions = { headless: browserName === "chromium" };
     if (browserName === "chromium") {
       launchOptions.args = ["--enable-webgl", "--use-gl=angle", "--use-angle=swiftshader"];
     } else {

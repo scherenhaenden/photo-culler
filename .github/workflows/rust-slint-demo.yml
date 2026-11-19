@@ -182,7 +182,8 @@ jobs:
           PHOTO_CULLER_SERVER: ${{ github.workspace }}/rust/target/release/photo-culler-server
           PHOTO_CULLER_WEB_ROOT: ${{ github.workspace }}/artifacts/wasm32/bundle
           PHOTO_CULLER_SCREENSHOT: ${{ github.workspace }}/artifacts/browser-smoke/firefox.png
-        run: (cd migration/demo/smoke/firefox && npm test)
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1440x900x24" bash -c 'cd migration/demo/smoke/firefox && npm test'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
