@@ -14,7 +14,10 @@ public static class NativeWindow {
   }
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+  [DllImport("user32.dll", SetLastError=true)] public static extern bool SetProcessDpiAwarenessContext(IntPtr value);
   [DllImport("user32.dll", SetLastError=true)] private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+  [DllImport("kernel32.dll")] public static extern IntPtr GetCurrentProcess();
+  [DllImport("shcore.dll")] public static extern int GetProcessDpiAwareness(IntPtr process, out int awareness);
   public static int[] GetWindowBounds(IntPtr hWnd) {
     RECT rect;
     if (!GetWindowRect(hWnd, out rect)) return null;
@@ -22,6 +25,15 @@ public static class NativeWindow {
   }
 }
 '@
+# GetWindowRect and CopyFromScreen must use the same physical-pixel coordinate
+# space. A DPI-unaware PowerShell host otherwise returns virtualized bounds,
+# which creates an oversized screenshot with black margins on hosted runners.
+[void][NativeWindow]::SetProcessDpiAwarenessContext([IntPtr](-4)) # PER_MONITOR_AWARE_V2
+$processDpiAwareness = -1
+$dpiQueryResult = [NativeWindow]::GetProcessDpiAwareness([NativeWindow]::GetCurrentProcess(), [ref]$processDpiAwareness)
+if ($dpiQueryResult -ne 0 -or $processDpiAwareness -ne 2) {
+  throw "PowerShell capture process is not per-monitor DPI aware (query=$dpiQueryResult awareness=$processDpiAwareness)."
+}
 $deadline = [DateTime]::UtcNow.AddSeconds(30)
 $process = $null
 do {
@@ -42,7 +54,12 @@ if ($Mode -eq 'Capture') {
   $windowRect = [NativeWindow]::GetWindowBounds($handle)
   if (-not $windowRect) { throw "Could not read bounds for Slint window $handle." }
   $bounds = [System.Drawing.Rectangle]::FromLTRB($windowRect[0], $windowRect[1], $windowRect[2], $windowRect[3])
-  if ($bounds.Width -lt 1000 -or $bounds.Height -lt 650) {
+  $virtualScreen = [System.Windows.Forms.SystemInformation]::VirtualScreen
+  if ($bounds.Left -lt $virtualScreen.Left -or $bounds.Top -lt $virtualScreen.Top -or
+      $bounds.Right -gt $virtualScreen.Right -or $bounds.Bottom -gt $virtualScreen.Bottom) {
+    throw "Slint window bounds ($($bounds.Left),$($bounds.Top),$($bounds.Right),$($bounds.Bottom)) exceed physical virtual-screen bounds ($($virtualScreen.Left),$($virtualScreen.Top),$($virtualScreen.Right),$($virtualScreen.Bottom))."
+  }
+  if ($bounds.Width -lt 800 -or $bounds.Height -lt 500) {
     throw "Slint window bounds are too small to capture: $($bounds.Width)x$($bounds.Height)."
   }
   $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
@@ -54,7 +71,12 @@ if ($Mode -eq 'Capture') {
     $graphics.Dispose()
     $bitmap.Dispose()
   }
-  Write-Output "Captured Slint desktop PID=$ProcessId window=$handle path=$OutputPath"
+  [ordered]@{
+    dpi_awareness = 'per-monitor-v2'
+    window_bounds = @($bounds.Left, $bounds.Top, $bounds.Right, $bounds.Bottom)
+    virtual_screen_bounds = @($virtualScreen.Left, $virtualScreen.Top, $virtualScreen.Right, $virtualScreen.Bottom)
+    screenshot_dimensions = @($bounds.Width, $bounds.Height)
+  } | ConvertTo-Json -Compress
 } else {
   if (-not [NativeWindow]::PostMessage($handle, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)) {
     throw "Could not send WM_CLOSE to desktop PID $ProcessId window $handle."

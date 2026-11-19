@@ -136,9 +136,13 @@ end tell'''
         call(["screencapture", "-x", "-l", wid, str(output)], timeout=20)
         return wid
     helper = Path(__file__).with_name("windows-capture-close.ps1")
-    call(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(helper),
-          "-Mode", "Capture", "-ProcessId", str(pid), "-OutputPath", str(output)], timeout=20)
-    return None
+    captured = call(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(helper),
+                     "-Mode", "Capture", "-ProcessId", str(pid), "-OutputPath", str(output)], timeout=20)
+    try:
+        evidence = json.loads(captured.stdout)
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"Windows capture helper returned invalid bounds evidence: {captured.stdout!r}") from error
+    return evidence
 
 
 def close_window(platform_name, pid, wid):
@@ -225,12 +229,25 @@ def owned_run(platform_name, desktop, out, label, screenshot=False):
             if header[:8] != b"\x89PNG\r\n\x1a\n" or header[12:16] != b"IHDR" or image.stat().st_size < 10000:
                 raise RuntimeError(f"empty or invalid screenshot: {image}")
             dimensions = (int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big"))
-            if dimensions[0] < 1000 or dimensions[1] < 650:
+            minimum = (800, 500) if platform_name == "windows" else (1000, 650)
+            if dimensions[0] < minimum[0] or dimensions[1] < minimum[1]:
                 raise RuntimeError(f"screenshot too small: {dimensions}")
+            if platform_name == "windows":
+                if wid.get("dpi_awareness") != "per-monitor-v2":
+                    raise RuntimeError(f"Windows capture did not report per-monitor DPI awareness: {wid}")
+                physical_bounds = wid["window_bounds"]
+                screen_bounds = wid["virtual_screen_bounds"]
+                expected_dimensions = wid["screenshot_dimensions"]
+                if dimensions != tuple(expected_dimensions):
+                    raise RuntimeError(f"Windows screenshot dimensions {dimensions} differ from window bounds {expected_dimensions}")
+                if (physical_bounds[0] < screen_bounds[0] or physical_bounds[1] < screen_bounds[1]
+                        or physical_bounds[2] > screen_bounds[2] or physical_bounds[3] > screen_bounds[3]):
+                    raise RuntimeError(f"Windows window bounds exceed virtual-screen bounds: {wid}")
         exit_code = close_app(p, platform_name, wid, child, origin)
         return {"desktop_pid": p.pid, "owned_server_pid": child, "origin": origin,
                 "probe": summary, "exit_code": exit_code, "port_released": True,
-                "screenshot": str(image) if screenshot else None, "dimensions": dimensions}
+                "screenshot": str(image) if screenshot else None, "dimensions": dimensions,
+                "window_capture": wid if isinstance(wid, dict) else None}
     except Exception:
         if p.poll() is None:
             p.terminate()
