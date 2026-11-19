@@ -59,11 +59,29 @@ export async function runLiveSmoke(browserName) {
     });
 
     await page.goto(origin, { waitUntil: "domcontentloaded" });
-    await page.waitForFunction(
-      () => document.documentElement.dataset.photoCullerState === "ready",
-      undefined,
-      { timeout: 45_000 },
-    );
+    try {
+      await page.waitForFunction(
+        () => document.documentElement.dataset.photoCullerState === "ready",
+        undefined,
+        { timeout: 45_000 },
+      );
+    } catch (error) {
+      const pageState = await page.evaluate(() => ({
+        state: document.documentElement.dataset.photoCullerState ?? null,
+        status: document.querySelector("#application-status")?.textContent ?? null,
+        diagnosticVisible: Boolean(document.querySelector("#diagnostic")?.getClientRects().length),
+        diagnosticTitle: document.querySelector("#diagnostic-title")?.textContent ?? null,
+        diagnosticMessage: document.querySelector("#diagnostic-message")?.textContent ?? null,
+      }));
+      if (process.env.PHOTO_CULLER_SCREENSHOT) {
+        await page.screenshot({ path: process.env.PHOTO_CULLER_SCREENSHOT, fullPage: true }).catch(() => {});
+      }
+      throw new Error(
+        `${error.message}; page-state=${JSON.stringify(pageState)}; ` +
+          `console=${JSON.stringify(consoleErrors)}; page-errors=${JSON.stringify(pageErrors)}; ` +
+          `responses=${JSON.stringify(responses)}`,
+      );
+    }
     const status = page.locator("#application-status");
     assert.equal(await status.getAttribute("data-state"), "ready");
     assert.match(await status.textContent(), /demo-001\.jpg/);
