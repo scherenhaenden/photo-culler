@@ -1,5 +1,6 @@
 import { ActionButton, DesignTokens, PanelState, SidebarItem, StatusPanel } from "./components/components.slint";
 import { GalleryPhoto, LibraryGallery } from "./library/gallery.slint";
+export { DesignTokens } from "./components/components.slint";
 
 export component DemoWindow inherits Window {
     // Keep this public runtime contract stable for the D34 integrator.
@@ -27,6 +28,7 @@ export component DemoWindow inherits Window {
     in property <int> unrated-count: 0;
     callback select-photo(string);
     callback select-archive(string);
+    property <length> sidebar-width: 220px;
 
     title: "Photo Culler";
     preferred-width: web-layout ? 1280px : 1440px;
@@ -41,7 +43,7 @@ export component DemoWindow inherits Window {
             height: 56px;
             spacing: 0px;
             Rectangle {
-                width: 220px;
+                width: root.sidebar-width;
                 background: DesignTokens.sidebar;
                 border-width: 1px;
                 border-color: DesignTokens.border;
@@ -80,7 +82,7 @@ export component DemoWindow inherits Window {
             vertical-stretch: 1;
 
             Rectangle {
-                width: 220px;
+                width: root.sidebar-width;
                 background: DesignTokens.sidebar;
                 border-width: 1px;
                 border-color: DesignTokens.border;
@@ -173,6 +175,32 @@ export component DemoWindow inherits Window {
                                 Text { text: "SESIÓN DE CATÁLOGO"; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 8px; }
                             }
                         }
+                    }
+                }
+            }
+
+            if !root.web-layout: Rectangle {
+                width: 6px;
+                background: transparent;
+                Rectangle {
+                    x: 2px;
+                    width: 1px;
+                    height: parent.height;
+                    background: DesignTokens.border;
+                }
+                TouchArea {
+                    mouse-cursor: ew-resize;
+                    property <length> starting-width: root.sidebar-width;
+                    property <length> requested-width: self.starting-width + self.mouse-x - self.pressed-x;
+                    pointer-event(event) => {
+                        if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                            self.starting-width = root.sidebar-width;
+                        }
+                    }
+                    moved => {
+                        if (!self.pressed) { return; }
+                        root.sidebar-width = self.requested-width < 200px ? 200px :
+                            (self.requested-width > 260px ? 260px : self.requested-width);
                     }
                 }
             }

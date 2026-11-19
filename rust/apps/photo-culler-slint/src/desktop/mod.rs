@@ -4,6 +4,10 @@
 //! sprint base. This module keeps their ownership contract testable without
 //! importing unregistered workspace crates; see README.md for adapters.
 
+pub mod demo_http;
+pub mod demo_launch;
+pub mod owned_server;
+
 use std::fmt;
 
 #[derive(Clone, Eq, PartialEq)]
@@ -173,7 +177,10 @@ impl<L: ServerLauncher> DesktopRuntime<L> {
         if self.kind != Some(ConnectionKind::OwnedLocal) {
             return Ok(self.connection.as_ref());
         }
-        let stopped = self.process.as_mut().is_some_and(|process| !process.is_running());
+        let stopped = self
+            .process
+            .as_mut()
+            .is_some_and(|process| !process.is_running());
         if !stopped {
             return Ok(self.connection.as_ref());
         }
@@ -230,11 +237,7 @@ fn valid_session(connection: &ApiConnection, now: u64) -> bool {
 /// Authorization header value; adapters must not place credentials in URLs.
 pub trait HttpTransport {
     type Error: fmt::Display;
-    fn send(
-        &mut self,
-        url: &str,
-        authorization: &str,
-    ) -> Result<Vec<u8>, Self::Error>;
+    fn send(&mut self, url: &str, authorization: &str) -> Result<Vec<u8>, Self::Error>;
 }
 
 pub struct DesktopApiClient<T> {
@@ -336,7 +339,8 @@ mod tests {
     impl HttpTransport for FakeTransport {
         type Error = &'static str;
         fn send(&mut self, url: &str, authorization: &str) -> Result<Vec<u8>, Self::Error> {
-            self.requests.push((url.to_owned(), authorization.to_owned()));
+            self.requests
+                .push((url.to_owned(), authorization.to_owned()));
             Ok(b"ok".to_vec())
         }
     }
@@ -351,15 +355,27 @@ mod tests {
         assert_ne!(conn.base_url, "http://127.0.0.1:0");
         let mut client = DesktopApiClient::new(FakeTransport::default());
         assert_eq!(client.get(&runtime, "/api/v1/health", 5).unwrap(), b"ok");
-        assert_eq!(client.transport.requests[0], ("http://127.0.0.1:43001/api/v1/health".into(), "Bearer local-session-1".into()));
+        assert_eq!(
+            client.transport.requests[0],
+            (
+                "http://127.0.0.1:43001/api/v1/health".into(),
+                "Bearer local-session-1".into()
+            )
+        );
         assert!(!client.transport.requests[0].0.contains("local-session-1"));
         assert!(!format!("{conn:?}").contains("local-session-1"));
     }
 
     #[test]
     fn startup_failure_is_recoverable_and_process_restart_is_controlled() {
-        let mut runtime = DesktopRuntime::new(FakeLauncher { fail_first: true, ..Default::default() });
-        assert_eq!(runtime.start_local(5), Err(DesktopError::Launcher("startup failed")));
+        let mut runtime = DesktopRuntime::new(FakeLauncher {
+            fail_first: true,
+            ..Default::default()
+        });
+        assert_eq!(
+            runtime.start_local(5),
+            Err(DesktopError::Launcher("startup failed"))
+        );
         assert_eq!(runtime.availability(), Availability::Unavailable);
         runtime.start_local(5).unwrap();
         let old_process = runtime.process.as_ref().unwrap().clone();
@@ -397,8 +413,14 @@ mod tests {
         let mut runtime = DesktopRuntime::new(FakeLauncher::default());
         runtime.start_local(5).unwrap();
         let mut client = DesktopApiClient::new(FakeTransport::default());
-        assert_eq!(client.get(&runtime, "/api/v1/health", 10_000), Err(DesktopError::SessionExpired));
-        assert_eq!(client.get(&runtime, "/other", 1), Err(DesktopError::InvalidApiPath));
+        assert_eq!(
+            client.get(&runtime, "/api/v1/health", 10_000),
+            Err(DesktopError::SessionExpired)
+        );
+        assert_eq!(
+            client.get(&runtime, "/other", 1),
+            Err(DesktopError::InvalidApiPath)
+        );
         assert!(client.transport.requests.is_empty());
     }
 }

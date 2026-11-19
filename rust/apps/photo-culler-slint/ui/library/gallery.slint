@@ -134,10 +134,71 @@ component GalleryCard inherits Rectangle {
     }
 }
 
+component FilmstripCard inherits Rectangle {
+    in property <GalleryPhoto> photo;
+    in property <bool> selected: false;
+    callback activated(string);
+
+    width: 224px;
+    height: 74px;
+    property <color> decision-color: root.photo.decision == "keep" || root.photo.decision == "best" ? DesignTokens.best :
+        (root.photo.decision == "alternate" || root.photo.decision == "review" ? DesignTokens.alternate :
+        (root.photo.decision.starts-with("reject") ? DesignTokens.rejected : DesignTokens.unrated));
+    background: selected ? DesignTokens.card-hover : DesignTokens.surface;
+    border-radius: 8px;
+    border-width: selected ? 1.5px : 1px;
+    border-color: selected ? DesignTokens.accent : DesignTokens.border;
+    clip: true;
+
+    VerticalLayout {
+        padding: 10px;
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 5px;
+        Text {
+            text: root.photo.filename;
+            color: DesignTokens.foreground;
+            font-family: DesignTokens.body-font;
+            font-size: 12px;
+            font-weight: 700;
+            overflow: elide;
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            Rectangle { width: 8px; height: 8px; border-radius: 4px; background: root.decision-color; }
+            Text { text: root.photo.quality; color: DesignTokens.subdued; font-family: DesignTokens.body-font; font-size: 9px; vertical-alignment: center; }
+            Text { text: "·"; color: DesignTokens.muted; font-size: 9px; vertical-alignment: center; }
+            Text { text: "SCORE: " + root.photo.score; color: DesignTokens.best; font-family: DesignTokens.body-mono-font; font-size: 9px; vertical-alignment: center; }
+        }
+    }
+
+    focus_scope := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.activated(root.photo.id);
+                accept
+            } else { reject }
+        }
+        Rectangle {
+            x: 2px; y: 2px; width: parent.width - 4px; height: parent.height - 4px;
+            border-radius: 6px;
+            border-width: focus_scope.has-focus ? 2px : 0px;
+            border-color: DesignTokens.focus;
+            background: transparent;
+        }
+        TouchArea {
+            clicked => { focus_scope.focus(); root.activated(root.photo.id); }
+        }
+    }
+}
+
 component PhotoInspector inherits Rectangle {
     in property <GalleryPhoto> photo;
     in property <bool> web-layout: false;
-    background: DesignTokens.surface;
+    background: root.web-layout ? DesignTokens.surface : DesignTokens.sidebar;
     border-width: 1px;
     border-color: DesignTokens.border;
     border-radius: 12px;
@@ -218,6 +279,7 @@ export component LibraryGallery inherits Rectangle {
     property <int> web-columns: root.width >= 680px ? (root.width < 860px ? 1 : (root.width < 1080px ? 2 : 3)) :
         (root.width < 440px ? 1 : (root.width < 680px ? 2 : 3));
     property <int> item-count: root.photos.length == 0 ? 1 : root.photos.length;
+    property <length> inspector-width: 280px;
 
     if root.view-state == 0: StatusPanel {
         state: PanelState.loading;
@@ -245,56 +307,95 @@ export component LibraryGallery inherits Rectangle {
 
     if root.view-state == 1 && !root.web-layout: HorizontalLayout {
         spacing: 12px;
-        ScrollView {
-            width: 290px;
-            height: parent.height;
-            VerticalLayout {
-                width: 270px;
-                spacing: 6px;
-                if root.photos.length == 0: GalleryCard {
-                    width: 270px;
-                    photo: { id: root.fallback-id, filename: root.fallback-name, decision: root.fallback-decision, quality: "—", score: "—", thumbnail: root.fallback-thumbnail };
-                    selected: true;
-                    activated(id) => { root.select-photo(id); }
-                }
-                for photo[index] in root.photos: GalleryCard {
-                    width: 270px;
-                    photo: photo;
-                    selected: photo.id == root.selected-id;
-                    activated(id) => { root.select-photo(id); }
-                }
-            }
-        }
-        Rectangle {
+        VerticalLayout {
             horizontal-stretch: 1;
-            height: parent.height;
-            background: DesignTokens.image-background;
-            border-radius: 12px;
-            border-width: 1px;
-            border-color: DesignTokens.border;
-            clip: true;
-            if root.photos.length == 0: Image {
-                source: root.fallback-thumbnail;
-                image-fit: contain;
-                width: parent.width;
-                height: parent.height;
-            }
-            if root.photos.length > 0: VerticalLayout {
-                for photo in root.photos: Image {
-                    visible: photo.id == root.selected-id;
-                    source: photo.thumbnail;
+            spacing: 12px;
+            Rectangle {
+                vertical-stretch: 1;
+                background: DesignTokens.image-background;
+                border-radius: 8px;
+                border-width: 1px;
+                border-color: DesignTokens.border;
+                clip: true;
+                if root.photos.length == 0: Image {
+                    source: root.fallback-thumbnail;
                     image-fit: contain;
                     width: parent.width;
                     height: parent.height;
                 }
+                if root.photos.length > 0: VerticalLayout {
+                    for photo in root.photos: Image {
+                        visible: photo.id == root.selected-id;
+                        source: photo.thumbnail;
+                        image-fit: contain;
+                        width: parent.width;
+                        height: parent.height;
+                    }
+                }
+            }
+            VerticalLayout {
+                height: 110px;
+                spacing: 4px;
+                Text {
+                    text: "TIRA DE FOTOS";
+                    color: DesignTokens.muted;
+                    font-family: DesignTokens.body-mono-font;
+                    font-size: 9px;
+                    font-weight: 700;
+                }
+                ScrollView {
+                    height: 84px;
+                    horizontal-scrollbar-policy: ScrollBarPolicy.as-needed;
+                    vertical-scrollbar-policy: ScrollBarPolicy.always-off;
+                    content-width: 236px * root.item-count;
+                    content-height: 78px;
+                    HorizontalLayout {
+                        spacing: 12px;
+                        if root.photos.length == 0: FilmstripCard {
+                            photo: { id: root.fallback-id, filename: root.fallback-name, decision: root.fallback-decision, quality: "—", score: "—", thumbnail: root.fallback-thumbnail };
+                            selected: true;
+                            activated(id) => { root.select-photo(id); }
+                        }
+                        for photo in root.photos: FilmstripCard {
+                            photo: photo;
+                            selected: photo.id == root.selected-id;
+                            activated(id) => { root.select-photo(id); }
+                        }
+                    }
+                }
+            }
+        }
+        Rectangle {
+            width: 6px;
+            background: transparent;
+            Rectangle {
+                x: 2px;
+                width: 1px;
+                height: parent.height;
+                background: DesignTokens.border;
+            }
+            TouchArea {
+                mouse-cursor: ew-resize;
+                property <length> starting-width: root.inspector-width;
+                property <length> requested-width: self.starting-width - self.mouse-x + self.pressed-x;
+                pointer-event(event) => {
+                    if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                        self.starting-width = root.inspector-width;
+                    }
+                }
+                moved => {
+                    if (!self.pressed) { return; }
+                    root.inspector-width = self.requested-width < 260px ? 260px :
+                        (self.requested-width > 320px ? 320px : self.requested-width);
+                }
             }
         }
         if root.photos.length == 0: PhotoInspector {
-            width: 260px; height: parent.height;
+            width: root.inspector-width; height: parent.height;
             photo: { id: root.fallback-id, filename: root.fallback-name, decision: root.fallback-decision, quality: "—", score: "—", thumbnail: root.fallback-thumbnail };
         }
         if root.photos.length > 0: VerticalLayout {
-            width: 260px; height: parent.height;
+            width: root.inspector-width; height: parent.height;
             for photo in root.photos: PhotoInspector {
                 visible: photo.id == root.selected-id;
                 width: parent.width; height: parent.height;

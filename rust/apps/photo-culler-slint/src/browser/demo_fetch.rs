@@ -22,6 +22,7 @@ pub struct HttpResponse {
 }
 
 impl HttpResponse {
+    #[allow(dead_code)] // Used by contract tests; production callers inspect typed statuses.
     pub fn is_success(&self) -> bool {
         (200..300).contains(&self.status)
     }
@@ -103,7 +104,7 @@ pub fn response(
 }
 
 #[cfg(target_arch = "wasm32")]
-pub async fn fetch(path: &str) -> Result<HttpResponse, TransportError> {
+pub async fn fetch(path: &str, max_response_bytes: usize) -> Result<HttpResponse, TransportError> {
     use wasm_bindgen::{JsCast, JsValue};
     use wasm_bindgen_futures::JsFuture;
     use web_sys::{
@@ -112,7 +113,7 @@ pub async fn fetch(path: &str) -> Result<HttpResponse, TransportError> {
     };
 
     validate_api_path(path)?;
-    let limit = request_limit(path)?;
+    let limit = request_limit(path)?.min(max_response_bytes);
     let window = window().ok_or(TransportError::Network)?;
     let init = RequestInit::new();
     init.set_method("GET");

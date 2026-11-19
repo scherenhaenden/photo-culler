@@ -123,7 +123,7 @@ pub fn decode_jpeg(bytes: &[u8], mime: &str) -> Result<slint::Image, ThumbnailEr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use image::{codecs::jpeg::JpegEncoder, ColorType};
+    use image::{ColorType, codecs::jpeg::JpegEncoder};
     // Minimal SOF0 frame header with 640x480 dimensions, followed by SOS/EOI.
     const JPEG_640X480: &[u8] = &[
         0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x01, 0xe0, 0x02, 0x80, 0x03, 0x01, 0x11, 0x00,
@@ -166,7 +166,10 @@ mod tests {
     }
     #[test]
     fn a_truncated_image_is_not_available() {
-        assert_eq!(decode_jpeg(&JPEG_640X480[..JPEG_640X480.len()-1], "image/jpeg"), Err(ThumbnailError::InvalidJpeg));
+        assert_eq!(
+            decode_jpeg(&JPEG_640X480[..JPEG_640X480.len() - 1], "image/jpeg"),
+            Err(ThumbnailError::InvalidJpeg)
+        );
     }
     #[test]
     fn rejects_dimensions_before_decode() {

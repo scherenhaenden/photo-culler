@@ -1,5 +1,5 @@
 {
-  "name": "photo-culler-demo-smoke-chromium",
+  "name": "photo-culler-demo-smoke-firefox",
   "private": true,
   "type": "module",
   "scripts": { "test": "node smoke.mjs" },

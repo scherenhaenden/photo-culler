@@ -243,7 +243,7 @@ fn parse_json_string(value: &str) -> Option<String> {
     Some(inner.to_owned())
 }
 
-fn validate_origin(origin: &str) -> Result<ReadyMessage, String> {
+pub(crate) fn validate_origin(origin: &str) -> Result<ReadyMessage, String> {
     let authority = origin
         .strip_prefix("http://")
         .ok_or("origin must use http")?;

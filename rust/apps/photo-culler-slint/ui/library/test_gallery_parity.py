@@ -25,14 +25,18 @@ class GalleryParityTests(unittest.TestCase):
             with self.subTest(role=role):
                 self.assertIn(f"out property <color> {role}: dark-mode ? {color}", TOKENS)
         self.assertIn("in-out property <bool> dark-mode: true;", TOKENS)
+        self.assertIn("web-layout ? #ffffff19 : #191919", TOKENS)
         self.assertIn("root.web-layout ? DesignTokens.web-rejected : DesignTokens.rejected", GALLERY)
 
-    def test_native_list_preview_inspector_and_web_responsive_grid(self):
+    def test_native_preview_filmstrip_inspector_and_web_responsive_grid(self):
         self.assertIn("if root.view-state == 1 && !root.web-layout: HorizontalLayout", GALLERY)
         self.assertIn("if root.view-state == 1 && root.web-layout: HorizontalLayout", GALLERY)
-        self.assertIn("width: 290px;", GALLERY)
-        self.assertIn("width: 260px; height: parent.height;", GALLERY)
+        self.assertIn('text: "TIRA DE FOTOS";', GALLERY)
+        self.assertIn("horizontal-scrollbar-policy: ScrollBarPolicy.as-needed;", GALLERY)
+        self.assertIn("content-width: 236px * root.item-count;", GALLERY)
+        self.assertIn("property <length> inspector-width: 280px;", GALLERY)
         self.assertIn("width: 320px; height: parent.height;", GALLERY)
+        self.assertIn("root.inspector-width = self.requested-width < 260px ? 260px", GALLERY)
         self.assertIn("min-width: web-layout ? 200px : 0px;", GALLERY)
         self.assertIn("height: 180px;", GALLERY)
         self.assertIn("image-fit: cover;", GALLERY)
@@ -68,6 +72,8 @@ class GalleryParityTests(unittest.TestCase):
             self.assertIn(state, WINDOW)
         self.assertIn("retry => { root.retry(); }", WINDOW)
         self.assertIn("select-photo(id) => { root.select-photo(id); }", WINDOW)
+        self.assertIn("property <length> sidebar-width: 220px;", WINDOW)
+        self.assertIn("root.sidebar-width = self.requested-width < 200px ? 200px", WINDOW)
 
 
 if __name__ == "__main__":

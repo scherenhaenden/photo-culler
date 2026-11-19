@@ -3,15 +3,16 @@
 export global DesignTokens {
     // The reference product is dark by default; light remains available to host previews.
     in-out property <bool> dark-mode: true;
+    in-out property <bool> web-layout: false;
 
     out property <color> canvas: dark-mode ? #0f1012 : #f5f6f8;
     out property <color> surface: dark-mode ? #111111 : #ffffff;
     out property <color> card-hover: dark-mode ? #1c1d21 : #f0f2f5;
     out property <color> sidebar: dark-mode ? #050505 : #f0f2f5;
     out property <color> foreground: dark-mode ? #e3e2e4 : #20242a;
-    out property <color> muted: dark-mode ? #999999 : #5f6875;
-    out property <color> subdued: dark-mode ? #595959 : #7b8490;
-    out property <color> border: dark-mode ? #1b1b1b : #d8dde5;
+    out property <color> muted: dark-mode ? (web-layout ? #ffffff40 : #505050) : #5f6875;
+    out property <color> subdued: dark-mode ? (web-layout ? #ffffff66 : #969696) : #7b8490;
+    out property <color> border: dark-mode ? (web-layout ? #ffffff19 : #191919) : #d8dde5;
     out property <color> accent: dark-mode ? #ff6b35 : #285fca;
     out property <color> focus: dark-mode ? #ff9b73 : #174ea6;
     out property <color> danger: dark-mode ? #e63946 : #a4262c;
@@ -21,7 +22,7 @@ export global DesignTokens {
     out property <color> alternate: dark-mode ? #f7c59f : #956012;
     out property <color> rejected: dark-mode ? #e63946 : #a4262c;
     out property <color> web-rejected: dark-mode ? #ff6b35 : #a4262c;
-    out property <color> unrated: dark-mode ? #777777 : #727b86;
+    out property <color> unrated: dark-mode ? (web-layout ? #ffffff99 : #505050) : #727b86;
     out property <color> image-background: #050505;
 
     out property <string> body-font: "Inter";

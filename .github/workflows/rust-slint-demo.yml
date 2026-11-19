@@ -45,14 +45,17 @@ jobs:
             name: macOS arm64
             runner: macos-14
             target: aarch64-apple-darwin
+            server_binary: photo-culler-server
           - key: linux-x64
             name: Linux x86-64
             runner: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
+            server_binary: photo-culler-server
           - key: windows-x64
             name: Windows x86-64
             runner: windows-2025
             target: x86_64-pc-windows-msvc
+            server_binary: photo-culler-server.exe
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -77,6 +80,10 @@ jobs:
         run: |
           if (-not (Test-Path -LiteralPath 'migration/demo/build/ci/build-native.ps1' -PathType Leaf)) { throw 'required Windows CI build recipe is missing' }
           ./migration/demo/build/ci/build-native.ps1 -Target '${{ matrix.target }}' -OutputDirectory "$env:GITHUB_WORKSPACE/artifacts/${{ matrix.key }}" -WorkspaceRoot "$env:GITHUB_WORKSPACE"
+      - name: Test owned desktop server launch and shutdown
+        env:
+          PHOTO_CULLER_SERVER: ${{ github.workspace }}/rust/target/${{ matrix.target }}/release/${{ matrix.server_binary }}
+        run: cargo test --locked --manifest-path rust/Cargo.toml --release --target '${{ matrix.target }}' -p photo-culler-slint --lib owned_server::tests::owned_child_serves_the_gallery_and_releases_its_port_on_drop -- --ignored
       - uses: actions/upload-artifact@v4
         with:
           name: rust-slint-demo-${{ matrix.key }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -135,27 +142,50 @@ jobs:
       - name: Test no-Python process-tree contract
         run: bash migration/demo/smoke/no-python/test.sh
 
-  browser-fixture-smoke:
-    name: Browser fixture smoke (not application WASM)
+  browser-application-smoke:
+    name: Chromium and Firefox against Rust server and application WASM
     runs-on: ubuntu-24.04
+    needs: wasm-build
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Require browser smoke recipes
+      - uses: actions/download-artifact@v4
+        with:
+          name: rust-slint-demo-wasm32-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/wasm32/
+      - name: Build the real Rust API server
+        run: cargo build --locked --manifest-path rust/Cargo.toml --release --package photo-culler-server
+      - name: Require live browser smoke recipes
         run: |
           test -f migration/demo/smoke/chromium/package.json
           test -f migration/demo/smoke/chromium/smoke.mjs
-          test -f migration/demo/smoke/chromium/tiny.jpg
           test -f migration/demo/smoke/firefox/package.json
           test -f migration/demo/smoke/firefox/smoke.mjs
-          test -f migration/demo/smoke/firefox/tiny.jpg
+          test -f migration/demo/smoke/live-smoke.mjs
       - name: Install pinned browser test runner
         run: npm install --no-save --package-lock=false playwright@1.51.1
       - name: Install Chromium and Firefox
         run: npx playwright install --with-deps chromium firefox
-      - name: Run Chromium synthetic fixture
-        run: (cd migration/demo/smoke/chromium && npm test)
-      - name: Run Firefox synthetic fixture
+      - name: Run Chromium with real Axum and WASM artifacts
+        env:
+          PHOTO_CULLER_SERVER: ${{ github.workspace }}/rust/target/release/photo-culler-server
+          PHOTO_CULLER_WEB_ROOT: ${{ github.workspace }}/artifacts/wasm32/bundle
+          PHOTO_CULLER_SCREENSHOT: ${{ github.workspace }}/artifacts/browser-smoke/chromium.png
+        run: |
+          mkdir -p artifacts/browser-smoke
+          (cd migration/demo/smoke/chromium && npm test)
+      - name: Run Firefox with real Axum and WASM artifacts
+        env:
+          PHOTO_CULLER_SERVER: ${{ github.workspace }}/rust/target/release/photo-culler-server
+          PHOTO_CULLER_WEB_ROOT: ${{ github.workspace }}/artifacts/wasm32/bundle
+          PHOTO_CULLER_SCREENSHOT: ${{ github.workspace }}/artifacts/browser-smoke/firefox.png
         run: (cd migration/demo/smoke/firefox && npm test)
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rust-slint-demo-browser-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/browser-smoke/
+          if-no-files-found: warn
