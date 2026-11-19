@@ -60,6 +60,7 @@ impl DemoView for SlintDemoView {
                 let decision = photo.decision;
                 window.set_photo_name(filename.clone().into());
                 window.set_gallery_title("Sesión de muestra".into());
+                window.set_fallback_photo_id(photo_id.clone().into());
                 window.set_selected_photo_id(photo_id.clone().into());
                 window.set_photo_index(0);
                 window.set_photo_count(1);
@@ -83,6 +84,9 @@ impl DemoView for SlintDemoView {
                                     quality: "—".into(),
                                     score: "—".into(),
                                     thumbnail: image,
+                                    rating: 0,
+                                    iso: 0,
+                                    is_raw: false,
                                 }],
                             )));
                             window.set_kept_count(if decision == "keep" { 1 } else { 0 });
