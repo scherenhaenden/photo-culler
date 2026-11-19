@@ -70,7 +70,16 @@ jobs:
           python-version: '3.13'
       - if: runner.os == 'Linux'
         name: Install Slint native build dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libfontconfig1-dev libx11-dev libx11-xcb-dev libxcb1-dev xinput libxcursor-dev libxkbcommon-dev libxkbcommon-x11-dev libinput-dev libgbm-dev libwayland-dev xvfb openbox xdotool imagemagick
+        run: |
+          packages=(build-essential pkg-config libfontconfig1-dev libx11-dev libx11-xcb-dev libxcb1-dev xinput libxcursor-dev libxkbcommon-dev libxkbcommon-x11-dev libinput-dev libgbm-dev libwayland-dev xvfb openbox xdotool x11-utils imagemagick)
+          for attempt in 1 2 3; do
+            if sudo apt-get update && sudo apt-get install -y "${packages[@]}"; then
+              exit 0
+            fi
+            echo "Linux dependency install attempt $attempt failed; refreshing package indexes before retry."
+            sleep $((attempt * 10))
+          done
+          exit 1
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -100,6 +109,14 @@ jobs:
             window_manager_pid=$!
             trap "kill $window_manager_pid 2>/dev/null || true" EXIT
             sleep 1
+            if ! kill -0 "$window_manager_pid" 2>/dev/null; then
+              cat /tmp/photo-culler-openbox.log
+              exit 1
+            fi
+            xprop -root _NET_SUPPORTING_WM_CHECK
+            unset WAYLAND_DISPLAY WAYLAND_SOCKET
+            printf "Linux GUI smoke environment:\n"
+            env | grep -E "^(DISPLAY|WAYLAND_DISPLAY|WAYLAND_SOCKET)=" || true
             python3 migration/demo/smoke/native-gui/run.py \
               --platform linux \
               --desktop "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-desktop" \

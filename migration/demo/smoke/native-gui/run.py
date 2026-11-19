@@ -20,7 +20,13 @@ from pathlib import Path
 
 
 def call(args, timeout=15, check=True):
-    return subprocess.run(args, check=check, capture_output=True, text=True, timeout=timeout)
+    result = subprocess.run(args, check=False, capture_output=True, text=True, timeout=timeout)
+    if check and result.returncode:
+        raise RuntimeError(
+            f"command {args!r} exited with {result.returncode}; "
+            f"stdout={result.stdout!r}; stderr={result.stderr!r}"
+        )
+    return result
 
 
 def events(path):
@@ -105,22 +111,55 @@ def stop_pid(pid):
 def capture(platform_name, pid, output):
     if platform_name == "linux":
         by_pid = call(["xdotool", "search", "--onlyvisible", "--pid", str(pid)], check=False)
-        ids = by_pid.stdout.split()
-        if not ids:
-            by_title = call(
-                ["xdotool", "search", "--onlyvisible", "--name", "^Photo Culler Pro$"],
-                check=False,
-            )
-            ids = by_title.stdout.split()
-        if not ids:
+        all_visible = call(["xdotool", "search", "--onlyvisible", "--name", ".*"], check=False)
+        windows = []
+        for window_id in all_visible.stdout.split():
+            title = call(["xdotool", "getwindowname", window_id], check=False).stdout.strip()
+            window_pid_text = call(["xdotool", "getwindowpid", window_id], check=False).stdout.strip()
+            geometry_text = call(["xdotool", "getwindowgeometry", "--shell", window_id], check=False).stdout
+            geometry = {}
+            for line in geometry_text.splitlines():
+                key, separator, value = line.partition("=")
+                if separator and value.lstrip("-").isdigit():
+                    geometry[key.lower()] = int(value)
+            windows.append({
+                "window_id": window_id,
+                "title": title,
+                "pid": int(window_pid_text) if window_pid_text.isdigit() else None,
+                "geometry": geometry,
+            })
+        xwininfo = call(["xwininfo", "-root", "-tree"], check=False)
+        debug_lines = [
+            f"DISPLAY={os.environ.get('DISPLAY', '')}",
+            f"WAYLAND_DISPLAY={os.environ.get('WAYLAND_DISPLAY', '')}",
+            f"WAYLAND_SOCKET={os.environ.get('WAYLAND_SOCKET', '')}",
+            f"desktop_pid={pid}",
+            f"pid_search={by_pid.stdout.strip()!r}",
+            f"visible_search={all_visible.stdout.strip()!r}",
+            f"visible_windows={windows!r}",
+            f"xwininfo_exit={xwininfo.returncode}",
+            xwininfo.stdout,
+            xwininfo.stderr,
+        ]
+        (output.parent / "linux-window-debug.txt").write_text("\n".join(debug_lines))
+        title_candidates = [window for window in windows
+                            if "photo culler" in window["title"].casefold()]
+        pid_candidates = [window for window in title_candidates if window["pid"] == pid]
+        candidates = pid_candidates or title_candidates
+        candidates = [window for window in candidates
+                      if window["geometry"].get("width", 0) >= 1000
+                      and window["geometry"].get("height", 0) >= 650]
+        if not candidates:
             raise RuntimeError(
-                f"no visible X11 Photo Culler Pro window for PID {pid}; "
-                f"pid-search={by_pid.stderr.strip()!r}"
+                f"no visible X11 Photo Culler window for desktop PID {pid}; "
+                f"pid-search={by_pid.stdout.strip()!r}; visible-windows={windows!r}"
             )
-        wid = ids[-1]
-        call(["xdotool", "windowactivate", "--sync", wid])
+        wid = max(candidates, key=lambda window: window["geometry"].get("width", 0)
+                  * window["geometry"].get("height", 0))
+        window_id = wid["window_id"]
+        call(["xdotool", "windowactivate", "--sync", window_id])
         time.sleep(.75)
-        call(["import", "-window", wid, str(output)], timeout=20)
+        call(["import", "-window", window_id, str(output)], timeout=20)
         return wid
     if platform_name == "macos":
         script = f'''tell application "System Events"
@@ -147,12 +186,13 @@ end tell'''
 
 def close_window(platform_name, pid, wid):
     if platform_name == "linux":
-        if not wid:
-            ids = call(["xdotool", "search", "--pid", str(pid)]).stdout.split()
-            wid = ids[-1] if ids else None
-        if not wid:
+        window_id = wid["window_id"] if isinstance(wid, dict) else wid
+        if not window_id:
+            ids = call(["xdotool", "search", "--onlyvisible", "--pid", str(pid)], check=False).stdout.split()
+            window_id = ids[-1] if ids else None
+        if not window_id:
             raise RuntimeError(f"no X11 window to close for PID {pid}")
-        call(["xdotool", "windowclose", wid])
+        call(["xdotool", "windowclose", window_id])
     elif platform_name == "macos":
         script = f'''tell application "System Events"
 set p to first process whose unix id is {pid}
@@ -243,6 +283,10 @@ def owned_run(platform_name, desktop, out, label, screenshot=False):
                 if (physical_bounds[0] < screen_bounds[0] or physical_bounds[1] < screen_bounds[1]
                         or physical_bounds[2] > screen_bounds[2] or physical_bounds[3] > screen_bounds[3]):
                     raise RuntimeError(f"Windows window bounds exceed virtual-screen bounds: {wid}")
+            if platform_name == "linux":
+                geometry = wid["geometry"]
+                if dimensions != (geometry.get("width"), geometry.get("height")):
+                    raise RuntimeError(f"Linux screenshot dimensions {dimensions} differ from X11 window geometry {geometry}")
         exit_code = close_app(p, platform_name, wid, child, origin)
         return {"desktop_pid": p.pid, "owned_server_pid": child, "origin": origin,
                 "probe": summary, "exit_code": exit_code, "port_released": True,
