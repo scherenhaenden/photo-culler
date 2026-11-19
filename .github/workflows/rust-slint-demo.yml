@@ -56,6 +56,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Install Linux fontconfig system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev pkg-config
       - uses: dtolnay/rust-toolchain@stable
       - name: Run recipe when integrated
         shell: bash
@@ -104,7 +106,7 @@ jobs:
           $version = (Select-String -Path rust/Cargo.toml -Pattern '^version = "([^"]+)"').Matches[0].Groups[1].Value
           $manifest = @{ schema_version = 1; visible_version = $version; sha = (git rev-parse HEAD); toolchain = (rustc --version); target = 'x86_64-pc-windows-msvc'; status = $status }
           $manifest | ConvertTo-Json -Compress | Set-Content -Encoding utf8 artifacts/windows-x64/artifact-manifest.json
-          Get-ChildItem artifacts/windows-x64 -Recurse -File | Where-Object Name -ne 'checksums.sha256' -and Name -ne 'artifact-manifest.json' | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $($_.Path.Substring((Get-Location).Path.Length + 1))" } | Set-Content artifacts/windows-x64/checksums.sha256
+          Get-ChildItem artifacts/windows-x64 -Recurse -File | Where-Object { $_.Name -ne 'checksums.sha256' -and $_.Name -ne 'artifact-manifest.json' } | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $($_.Path.Substring((Get-Location).Path.Length + 1))" } | Set-Content artifacts/windows-x64/checksums.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: rust-slint-demo-windows-x64-${{ github.run_id }}-${{ github.run_attempt }}
