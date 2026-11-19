@@ -9,6 +9,8 @@ WINDOW = (UI / "demo_window.slint").read_text(encoding="utf-8")
 SIDEBARS = (UI / "library" / "photo_culler_pro_sidebars.slint").read_text(encoding="utf-8")
 VIEW = (UI / "../src/demo/slint_view.rs").resolve().read_text(encoding="utf-8")
 CAPTURE = (UI / "library" / "capture_smoke.mjs").read_text(encoding="utf-8")
+HEADER = (UI / "library" / "photo_culler_pro_header.slint").read_text(encoding="utf-8")
+ICONS = (UI / "library" / "photo_culler_pro_icon.slint").read_text(encoding="utf-8")
 
 
 class GalleryParityTests(unittest.TestCase):
@@ -157,6 +159,81 @@ class GalleryParityTests(unittest.TestCase):
         self.assertIn("max-iso <=> root.max-iso;", WINDOW)
         self.assertIn("grid-density <=> root.grid-density;", WINDOW)
         self.assertIn("selection-requested(id, multi) => { root.selection-requested(id, multi); }", WINDOW)
+        for state in ("PanelState.loading", "PanelState.empty", "PanelState.error"):
+            self.assertIn(state, GALLERY)
+        self.assertIn("retry => { root.retry(); }", WINDOW)
+        self.assertIn("select-photo(id) => { root.select-photo(id); }", WINDOW)
+        self.assertIn('import { PhotoCullerProHeader } from "./library/photo_culler_pro_header.slint";', WINDOW)
+        self.assertIn('import { CameraFilterOption, PhotoCullerProPrimarySidebar, PhotoCullerProFilterSidebar } from "./library/photo_culler_pro_sidebars.slint";', WINDOW)
+        self.assertIn("PhotoCullerProPrimarySidebar {", WINDOW)
+        self.assertIn("PhotoCullerProFilterSidebar {", WINDOW)
+        self.assertIn("width: 220px;", SIDEBARS)
+        self.assertIn("width: 230px;", SIDEBARS)
+        self.assertIn("vertical-stretch: 0;", SIDEBARS)
+        self.assertIn("viewport-width: root.width / 1px;", WINDOW)
+        self.assertIn("search-query: root.search-query;", WINDOW)
+
+    def test_shell_icons_use_native_vector_paths_for_reference_controls(self):
+        expected = (
+            "database", "layout-grid", "layers", "zap", "calendar", "activity",
+            "hard-drive", "circle-check", "tag", "circle-x", "circle-help",
+            "search", "cpu", "settings", "upload", "download", "filter",
+            "rotate-ccw", "check", "user-round",
+        )
+        for icon_name in expected:
+            with self.subTest(icon_name=icon_name):
+                self.assertIn(f'root.name == "{icon_name}"', ICONS)
+
+        self.assertIn("export component PhotoCullerProIcon inherits Rectangle", ICONS)
+        self.assertIn("Path {", ICONS)
+        self.assertIn("commands: root.path-data();", ICONS)
+        self.assertIn("stroke: root.tint;", ICONS)
+        self.assertIn("stroke-line-cap: round;", ICONS)
+        self.assertIn("stroke-line-join: round;", ICONS)
+        self.assertIn('name: "search";', HEADER)
+        self.assertIn('icon-name: "upload";', HEADER)
+        self.assertIn('icon-name: "download";', HEADER)
+        self.assertIn('icon-name: "cpu";', HEADER)
+        self.assertIn('icon-name: "zap";', HEADER)
+        self.assertIn('icon-name: "circle-help";', HEADER)
+        self.assertIn('icon-name: "settings";', HEADER)
+        for icon_name in expected[:11]:
+            with self.subTest(sidebar_icon=icon_name):
+                self.assertIn(f'"{icon_name}"', SIDEBARS)
+
+    def test_icon_letter_and_unicode_proxies_are_absent_from_shell(self):
+        for obsolete in (
+            'symbol: "P";',
+            'symbol: "Z";',
+            'symbol: "?";',
+            'symbol: "S";',
+            'text: "DB";',
+            'text: "⌕";',
+            'text: "↑";',
+            'text: "↓";',
+            'text: "↺ RESET";',
+            'icon: "L";',
+            'icon: "4";',
+            'icon: "B";',
+            'icon: "T";',
+            'icon: "C";',
+            'icon: "S";',
+            'icon: "✓";',
+            'icon: "◆";',
+            'icon: "×";',
+            'icon: "?";',
+            'text: "F";',
+            'text: root.checked ? "✓" : "";',
+            'text: "OP";',
+            'icon: "F";',
+            'icon: "L";',
+        ):
+            with self.subTest(obsolete=obsolete):
+                self.assertNotIn(obsolete, HEADER + SIDEBARS)
+        self.assertIn('name: "check";', SIDEBARS)
+        self.assertIn('name: "user-round";', SIDEBARS)
+        self.assertIn("accessible-role: button;", HEADER)
+        self.assertIn("accessible-label:", HEADER)
 
 
 if __name__ == "__main__":

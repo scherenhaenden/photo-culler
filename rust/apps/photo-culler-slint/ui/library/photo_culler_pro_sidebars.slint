@@ -1,5 +1,6 @@
 // Photo Culler Pro navigation and Library filter rails.
 import { DesignTokens } from "../components/components.slint";
+import { PhotoCullerProIcon } from "./photo_culler_pro_icon.slint";
 import { ScrollView } from "std-widgets.slint";
 
 export struct CameraFilterOption {
@@ -8,7 +9,7 @@ export struct CameraFilterOption {
 }
 
 component ProNavigationItem inherits Rectangle {
-    in property <string> icon;
+    in property <string> icon-name;
     in property <string> label;
     in property <string> view;
     in property <bool> selected: false;
@@ -33,14 +34,10 @@ component ProNavigationItem inherits Rectangle {
             padding-left: 12px;
             padding-right: 8px;
             spacing: 10px;
-            Text {
-                text: root.icon;
-                color: root.selected ? #ffffff : #ffffffb3;
-                font-family: DesignTokens.body-font;
-                font-size: 14px;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-                width: 16px;
+            PhotoCullerProIcon {
+                name: root.icon-name;
+                tint: root.selected ? #ffffff : #ffffffb3;
+                size: 16px;
             }
             Text {
                 text: root.label;
@@ -70,7 +67,7 @@ component ProNavigationItem inherits Rectangle {
 }
 
 component DecisionStat inherits Rectangle {
-    in property <string> icon;
+    in property <string> icon-name;
     in property <string> label;
     in property <int> count;
     in property <color> tint;
@@ -85,7 +82,7 @@ component DecisionStat inherits Rectangle {
         padding-left: 9px;
         padding-right: 9px;
         spacing: 6px;
-        Text { text: root.icon; color: root.tint; font-size: 13px; vertical-alignment: center; }
+        PhotoCullerProIcon { name: root.icon-name; tint: root.tint; size: 14px; }
         Text {
             text: root.label;
             color: #ffffff99;
@@ -139,7 +136,7 @@ export component PhotoCullerProPrimarySidebar inherits Rectangle {
                     background: #111111;
                     border-width: 1px;
                     border-color: #ffffff26;
-                Text { text: "DB"; color: #ff6b35; font-family: DesignTokens.body-mono-font; font-size: 9px; font-weight: 800; horizontal-alignment: center; vertical-alignment: center; }
+                PhotoCullerProIcon { x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; name: "database"; tint: #ff6b35; size: 16px; }
                 }
                 VerticalLayout {
                     alignment: center;
@@ -158,12 +155,12 @@ export component PhotoCullerProPrimarySidebar inherits Rectangle {
             spacing: 4px;
             vertical-stretch: 1;
 
-            ProNavigationItem { icon: "L"; label: "LIBRARY"; view: "library"; selected: root.active-view == "library"; activated(view) => { root.navigate(view); } }
-            ProNavigationItem { icon: "4"; label: "COMPARE (4-UP)"; view: "compare"; selected: root.active-view == "compare"; activated(view) => { root.navigate(view); } }
-            ProNavigationItem { icon: "B"; label: "BURSTS ENGINE"; view: "bursts"; selected: root.active-view == "bursts"; activated(view) => { root.navigate(view); } }
-            ProNavigationItem { icon: "T"; label: "TIMELINE"; view: "timeline"; selected: root.active-view == "timeline"; activated(view) => { root.navigate(view); } }
-            ProNavigationItem { icon: "C"; label: "CINEMA SPECS"; view: "cinema"; selected: root.active-view == "cinema"; activated(view) => { root.navigate(view); } }
-            ProNavigationItem { icon: "S"; label: "SYSTEM OVERVIEW"; view: "dashboard"; selected: root.active-view == "dashboard"; activated(view) => { root.navigate(view); } }
+            ProNavigationItem { icon-name: "layout-grid"; label: "LIBRARY"; view: "library"; selected: root.active-view == "library"; activated(view) => { root.navigate(view); } }
+            ProNavigationItem { icon-name: "layers"; label: "COMPARE (4-UP)"; view: "compare"; selected: root.active-view == "compare"; activated(view) => { root.navigate(view); } }
+            ProNavigationItem { icon-name: "zap"; label: "BURSTS ENGINE"; view: "bursts"; selected: root.active-view == "bursts"; activated(view) => { root.navigate(view); } }
+            ProNavigationItem { icon-name: "calendar"; label: "TIMELINE"; view: "timeline"; selected: root.active-view == "timeline"; activated(view) => { root.navigate(view); } }
+            ProNavigationItem { icon-name: "activity"; label: "CINEMA SPECS"; view: "cinema"; selected: root.active-view == "cinema"; activated(view) => { root.navigate(view); } }
+            ProNavigationItem { icon-name: "hard-drive"; label: "SYSTEM OVERVIEW"; view: "dashboard"; selected: root.active-view == "dashboard"; activated(view) => { root.navigate(view); } }
 
             HorizontalLayout {
                 height: 17px;
@@ -183,10 +180,10 @@ export component PhotoCullerProPrimarySidebar inherits Rectangle {
             }
             VerticalLayout {
                 spacing: 5px;
-                DecisionStat { icon: "✓"; label: "KEPT"; count: root.keep-count; tint: #25a18e; }
-                DecisionStat { icon: "◆"; label: "ALT (PICK)"; count: root.alt-count; tint: #f7c59f; }
-                DecisionStat { icon: "×"; label: "REJECTED"; count: root.reject-count; tint: #ff6b35; }
-                DecisionStat { icon: "?"; label: "UNRATED"; count: root.unrated-count; tint: #ffffff99; }
+                DecisionStat { icon-name: "circle-check"; label: "KEPT"; count: root.keep-count; tint: #25a18e; }
+                DecisionStat { icon-name: "tag"; label: "ALT (PICK)"; count: root.alt-count; tint: #f7c59f; }
+                DecisionStat { icon-name: "circle-x"; label: "REJECTED"; count: root.reject-count; tint: #ff6b35; }
+                DecisionStat { icon-name: "circle-help"; label: "UNRATED"; count: root.unrated-count; tint: #ffffff99; }
             }
             Rectangle { vertical-stretch: 1; background: transparent; }
         }
@@ -206,7 +203,7 @@ export component PhotoCullerProPrimarySidebar inherits Rectangle {
                     background: #111111;
                     border-width: 1px;
                     border-color: #ffffff33;
-                    Text { text: "OP"; color: #ffffffcc; font-family: DesignTokens.body-mono-font; font-size: 9px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                PhotoCullerProIcon { x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2; name: "user-round"; tint: #ffffffcc; size: 16px; }
                 }
                 VerticalLayout {
                     alignment: center;
@@ -410,7 +407,13 @@ component FilterToggle inherits Rectangle {
                 background: root.checked ? #ff6b35 : #111111;
                 border-width: 1px;
                 border-color: root.checked ? #ff6b35 : #ffffff33;
-                Text { text: root.checked ? "✓" : ""; color: #ffffff; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                if root.checked: PhotoCullerProIcon {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    name: "check";
+                    tint: #ffffff;
+                    size: 10px;
+                }
             }
             Text {
                 text: root.label;
@@ -467,7 +470,7 @@ export component PhotoCullerProFilterSidebar inherits Rectangle {
                 padding-left: 12px;
                 padding-right: 10px;
                 spacing: 8px;
-                Text { text: "F"; color: #ff6b35; font-family: DesignTokens.body-mono-font; font-size: 11px; font-weight: 800; vertical-alignment: center; }
+                PhotoCullerProIcon { name: "filter"; tint: #ff6b35; size: 14px; }
                 Text { text: "FILTERS (" + root.result-count + ")"; color: #ffffff; font-family: DesignTokens.body-font; font-size: 10px; font-weight: 900; vertical-alignment: center; horizontal-stretch: 1; }
                 FocusScope {
                     width: 46px;
@@ -484,7 +487,12 @@ export component PhotoCullerProFilterSidebar inherits Rectangle {
                             accept
                         } else { reject }
                     }
-                    Text { text: "↺ RESET"; color: #ff6b35; font-family: DesignTokens.body-font; font-size: 9px; font-weight: 700; horizontal-alignment: right; vertical-alignment: center; }
+                    HorizontalLayout {
+                        spacing: 3px;
+                        alignment: end;
+                        PhotoCullerProIcon { name: "rotate-ccw"; tint: #ff6b35; size: 11px; }
+                        Text { text: "RESET"; color: #ff6b35; font-family: DesignTokens.body-font; font-size: 9px; font-weight: 700; vertical-alignment: center; }
+                    }
                     Rectangle {
                         x: 1px;
                         y: 1px;

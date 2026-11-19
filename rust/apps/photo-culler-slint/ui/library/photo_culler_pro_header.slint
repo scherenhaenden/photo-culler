@@ -1,4 +1,5 @@
 import { DesignTokens } from "../components/components.slint";
+import { PhotoCullerProIcon } from "./photo_culler_pro_icon.slint";
 
 // One compact tab in the pro header. Fixed widths preserve the supplied
 // reference geometry while the parent decides which tabs fit at each width.
@@ -36,7 +37,7 @@ component PhotoCullerProTab inherits Rectangle {
 // Compact action pill shared by Import and Export.
 component PhotoCullerProAction inherits Rectangle {
     in property <string> label;
-    in property <string> symbol;
+    in property <string> icon-name;
     in property <string> action;
     in property <bool> primary: false;
     in property <bool> compact: false;
@@ -55,14 +56,10 @@ component PhotoCullerProAction inherits Rectangle {
         padding-right: root.compact ? 0px : 10px;
         alignment: center;
 
-        Text {
-            text: root.symbol;
-            color: root.primary ? #050505 : (root.action == "export" ? DesignTokens.best : #ffffff);
-            font-family: DesignTokens.body-font;
-            font-size: 14px;
-            font-weight: 700;
-            horizontal-alignment: center;
-            vertical-alignment: center;
+        PhotoCullerProIcon {
+            name: root.icon-name;
+            size: 14px;
+            tint: root.primary ? #050505 : (root.action == "export" ? DesignTokens.best : #ffffff);
         }
         if !root.compact: Text {
             text: root.label;
@@ -81,11 +78,11 @@ component PhotoCullerProAction inherits Rectangle {
 }
 
 // Icon-only system control used for performance, processing, shortcuts and
-// settings. Text symbols keep this component asset-free and work in WASM.
+// settings. The shared path icons render consistently in native and WASM.
 component PhotoCullerProControl inherits Rectangle {
-    in property <string> symbol;
+    in property <string> icon-name;
     in property <string> action;
-    in property <color> symbol-color: #ffffff99;
+    in property <color> icon-color: #ffffff99;
     callback requested(action: string);
 
     width: 28px;
@@ -93,16 +90,17 @@ component PhotoCullerProControl inherits Rectangle {
     background: transparent;
     border-radius: 14px;
 
-    Text {
-        width: parent.width;
-        height: parent.height;
-        text: root.symbol;
-        color: root.symbol-color;
-        font-family: DesignTokens.body-font;
-        font-size: root.action == "settings" ? 16px : 14px;
-        font-weight: root.action == "processing" ? 700 : 500;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    accessible-role: button;
+    accessible-label: root.action == "performance" ? "GPU and system performance" :
+        (root.action == "processing" ? "Processing engine" :
+        (root.action == "shortcuts" ? "Keyboard shortcuts" : "App settings"));
+
+    PhotoCullerProIcon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        name: root.icon-name;
+        size: 16px;
+        tint: root.icon-color;
     }
 
     TouchArea {
@@ -349,14 +347,7 @@ export component PhotoCullerProHeader inherits Rectangle {
                     padding-left: 10px;
                     padding-right: 10px;
 
-                    Text {
-                        text: "⌕";
-                        color: #ffffff66;
-                        font-family: DesignTokens.body-font;
-                        font-size: 16px;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
+                    PhotoCullerProIcon { name: "search"; size: 14px; tint: #ffffff66; }
 
                     search-input := TextInput {
                         horizontal-stretch: 1;
@@ -393,7 +384,7 @@ export component PhotoCullerProHeader inherits Rectangle {
                 spacing: 8px;
                 PhotoCullerProAction {
                     label: "Import";
-                    symbol: "↑";
+                    icon-name: "upload";
                     action: "import";
                     primary: true;
                     compact: root.width < 900px;
@@ -404,7 +395,7 @@ export component PhotoCullerProHeader inherits Rectangle {
                 }
                 if root.width >= 900px: PhotoCullerProAction {
                     label: "Export";
-                    symbol: "↓";
+                    icon-name: "download";
                     action: "export";
                     requested(action) => {
                         root.show-unavailable(action);
@@ -423,7 +414,7 @@ export component PhotoCullerProHeader inherits Rectangle {
                 spacing: 2px;
 
                 if root.width >= 1100px: PhotoCullerProControl {
-                    symbol: "P";
+                    icon-name: "cpu";
                     action: "performance";
                     requested(action) => {
                         root.show-unavailable(action);
@@ -431,16 +422,16 @@ export component PhotoCullerProHeader inherits Rectangle {
                     }
                 }
                 if root.width >= 800px: PhotoCullerProControl {
-                    symbol: "Z";
+                    icon-name: "zap";
                     action: "processing";
-                    symbol-color: DesignTokens.accent;
+                    icon-color: DesignTokens.accent;
                     requested(action) => {
                         root.show-unavailable(action);
                         root.action-requested(action);
                     }
                 }
                 if root.width >= 1100px: PhotoCullerProControl {
-                    symbol: "?";
+                    icon-name: "circle-help";
                     action: "shortcuts";
                     requested(action) => {
                         root.show-unavailable(action);
@@ -448,7 +439,7 @@ export component PhotoCullerProHeader inherits Rectangle {
                     }
                 }
                 PhotoCullerProControl {
-                    symbol: "S";
+                    icon-name: "settings";
                     action: "settings";
                     requested(action) => {
                         root.show-unavailable(action);
