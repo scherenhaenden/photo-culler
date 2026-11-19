@@ -7,6 +7,7 @@ on:
       - feature/sprint-01-completion
       - feature/sprint-01-photo-culler-pro-design
       - feature/sprint-01-pro-icon-parity
+      - feature/sprint-01-native-acceptance
     paths:
       - 'rust/Cargo.toml'
       - 'rust/Cargo.lock'
@@ -25,6 +26,7 @@ on:
       - feature/sprint-01-completion
       - feature/sprint-01-photo-culler-pro-design
       - feature/sprint-01-native-acceptance
+      - feature/sprint-01-ui-state-acceptance
     paths:
       - 'rust/Cargo.toml'
       - 'rust/Cargo.lock'
@@ -237,9 +239,12 @@ jobs:
           test -f migration/demo/smoke/chromium/smoke.mjs
           test -f migration/demo/smoke/firefox/package.json
           test -f migration/demo/smoke/firefox/smoke.mjs
+          test -f migration/demo/smoke/ui-states/README.md
+          test -f migration/demo/smoke/ui-states/smoke.mjs
+          test -f rust/apps/photo-culler-slint/ui/library/capture_smoke.mjs
           test -f migration/demo/smoke/live-smoke.mjs
       - name: Install pinned browser test runner
-        run: npm install --no-save --package-lock=false playwright@1.51.1
+        run: npm install --no-save --package-lock=false playwright@1.51.1 pngjs@7.0.0
       - name: Install Chromium and Firefox
         run: |
           for attempt in 1 2 3; do
@@ -258,6 +263,18 @@ jobs:
         run: |
           mkdir -p artifacts/browser-smoke
           (cd migration/demo/smoke/chromium && npm test)
+      - name: Capture Chromium loading, empty, error, and retry states
+        env:
+          PHOTO_CULLER_SERVER: ${{ github.workspace }}/rust/target/release/photo-culler-server
+          PHOTO_CULLER_WEB_ROOT: ${{ github.workspace }}/artifacts/wasm32/bundle
+          PHOTO_CULLER_UI_STATES_CAPTURE_DIR: ${{ github.workspace }}/artifacts/ui-states/chromium
+        run: node migration/demo/smoke/ui-states/smoke.mjs chromium
+      - name: Capture current S05 Pro Library design at both reference viewports
+        env:
+          PHOTO_CULLER_SERVER: ${{ github.workspace }}/rust/target/release/photo-culler-server
+          PHOTO_CULLER_WEB_ROOT: ${{ github.workspace }}/artifacts/wasm32/bundle
+          PHOTO_CULLER_GALLERY_CAPTURE_DIR: ${{ github.workspace }}/artifacts/s05-gallery
+        run: node rust/apps/photo-culler-slint/ui/library/capture_smoke.mjs
       - name: Run Firefox with real Axum and WASM artifacts
         env:
           PHOTO_CULLER_SERVER: ${{ github.workspace }}/rust/target/release/photo-culler-server
@@ -265,9 +282,19 @@ jobs:
           PHOTO_CULLER_SCREENSHOT: ${{ github.workspace }}/artifacts/browser-smoke/firefox.png
           LIBGL_ALWAYS_SOFTWARE: "1"
         run: xvfb-run --auto-servernum --server-args="-screen 0 1440x900x24" bash -c 'cd migration/demo/smoke/firefox && npm test'
+      - name: Capture Firefox loading, empty, error, and retry states
+        env:
+          PHOTO_CULLER_SERVER: ${{ github.workspace }}/rust/target/release/photo-culler-server
+          PHOTO_CULLER_WEB_ROOT: ${{ github.workspace }}/artifacts/wasm32/bundle
+          PHOTO_CULLER_UI_STATES_CAPTURE_DIR: ${{ github.workspace }}/artifacts/ui-states/firefox
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1440x900x24" node migration/demo/smoke/ui-states/smoke.mjs firefox
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: rust-slint-demo-browser-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
-          path: artifacts/browser-smoke/
+          path: |
+            artifacts/browser-smoke/
+            artifacts/ui-states/
+            artifacts/s05-gallery/
           if-no-files-found: warn

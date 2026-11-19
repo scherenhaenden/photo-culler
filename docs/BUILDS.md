@@ -10,11 +10,39 @@ ran or passed.
 
 | Date (UTC) | Commit | Platform / runner | Command | Result | Artifact / hash | Startup / product flow |
 |---|---|---|---|---|---|---|
+| 2026-11-19 | [`59cb9f01746b4f66f180f8c9c2927489a8f7e5e7`](https://github.com/scherenhaenden/photo-culler/commit/59cb9f01746b4f66f180f8c9c2927489a8f7e5e7) | GitHub Actions `ubuntu-24.04`, `macos-15`, `windows-2025` | [Integrated Rust/Slint acceptance #44563618333](https://github.com/scherenhaenden/photo-culler/actions/runs/44563618333), stacked PR #157 | **6/6 jobs passed:** build/staging contracts, Linux x86-64, macOS arm64, Windows x86-64, WASM, Chromium/Firefox. | Eight artifacts; GitHub archive SHA-256 values and screenshot hashes are listed below. S05 browser captures: 1440×900 `20483b0f82004ffcebdcf332323264bbd591324c25a0bfc4bd896c3a0db7065d`; 1100×700 `240cc1bc576a71f4a737b8e2e1ce51873ccf3af546d74aaa505003b97e827d01`. | All five targets passed. The browsers captured loading, empty, typed 503, retry-loading and retry-ready at both viewports; native runners displayed live one-photo and ten-card synthetic Library screens, then verified owned server close/reopen and external-server survival. |
 | 2026-11-19 | [`68959bf702c554839b720d80fd51bfbad6824317`](https://github.com/scherenhaenden/photo-culler/commit/68959bf702c554839b720d80fd51bfbad6824317) | GitHub Actions `ubuntu-24.04`, `macos-15`, `windows-2025` | [Native S01 acceptance #44546749693](https://github.com/scherenhaenden/photo-culler/actions/runs/44546749693), PR #156 based on design/docs `51deca2` | 6/6 jobs passed: contracts, Linux, macOS arm64, Windows x86-64, WASM, Chromium/Firefox. | Three platform package artifacts, three native GUI evidence artifacts, WASM and browser artifacts; GitHub SHA-256 digests are recorded below. Native PNG SHA-256: Linux `8ddf029db66049b8fa3d338c317869c833c38abd9612e6a87c302695a9aa9996`; macOS `dfb10ff595c3b75c5fbd3f93cce8e5b398b57f4310ccd5e2000e2d322fe1832f`; Windows `1b563e43abc74cbc52c709f89072131e2e73f6cc2383324de7f2aa27a489173e`. | Each desktop runner displayed the live one-photo JPEG and separately the ten-card synthetic Pro fixture; first launch/reopen closed cleanly and released the owned port, while an explicit external server remained healthy. Windows DWM crop excludes taskbar and desktop margins. |
 | 2026-11-19 | [`afe088242bdcf173eb8e83c9571bf598f52c4e86`](https://github.com/scherenhaenden/photo-culler/commit/afe088242bdcf173eb8e83c9571bf598f52c4e86) | Darwin 26.6.2 arm64, local host; Chromium 134.0.6998.35 | `cargo test --offline --locked -p photo-culler-slint --lib`; native and WASM `cargo check`; Python parity contract; Node capture smoke | 33 passed, 0 failed, 1 ignored; 8/8 parity assertions; native/WASM checks, formatting, syntax and diff checks passed. No Actions run was visible yet for this SHA. | Paired deterministic reference/candidate captures and SHA-256 manifest are committed in [`evidence/design`](rust-slint-demo/evidence/design/README.md). Candidate hashes: `a7ae64afa5b73abda9e0e4b4e96e2cfd2f23d062f664ad66bf11ff1ea6847714` (1440×900), `d99f55a69872fc0b8ec96046313dd70f34b66c0374467a8c1461c9759dab8b2f` (1100×700). | The Slint WASM screen rendered ten smoke records at 5×2 and 4×3 layouts. All records reuse one bundled JPEG and explicit synthetic metadata. This is not native-window evidence. |
 | 2026-11-19 | [`14a4a6fc3371ee5d7ebc8fc3c303e2d7bfa93ceb`](https://github.com/scherenhaenden/photo-culler/commit/14a4a6fc3371ee5d7ebc8fc3c303e2d7bfa93ceb) | GitHub Actions `ubuntu-24.04`, `macos-15`, `windows-2025` | [Rust Slint demo artifacts #44508069950](https://github.com/scherenhaenden/photo-culler/actions/runs/44508069950), workflow dispatch on `feature/sprint-01-photo-culler-pro-design` | All 6 jobs passed: staging contracts, Linux, macOS arm64, Windows x86-64, WASM, Chromium/Firefox. | Five artifacts; GitHub SHA-256 digests and binary hashes are listed below. | Native packages build/stage and the owned server child starts, serves gallery/JPEG and exits in lifecycle tests. Native `runtime_smoke` remains `not_run`; no packaged Slint window was opened. Chromium and Firefox ran the actual Axum+WASM Library flow and produced reviewed 1440×900 screenshots. |
 | 2026-11-19 | [`202baa2c3efb8a4fa81a20d02c06af6322da1bc4`](https://github.com/scherenhaenden/photo-culler/commit/202baa2c3efb8a4fa81a20d02c06af6322da1bc4) | Darwin 26.6.2 arm64, local host | `cargo test --offline --locked --manifest-path rust/Cargo.toml -p photo-culler-server --test s01_runtime` | 4 passed, 0 failed. | Local test binary only; no package artifact created. | Health, gallery, JPEG, allowlisted bundle/MIME and standalone/owned shutdown tests ran. This is API/process evidence, not native GUI evidence. |
 | 2026-11-19 | [`98d9b6af7ac31dd807ddf1a4d204dae0df07a212`](https://github.com/scherenhaenden/photo-culler/commit/98d9b6af7ac31dd807ddf1a4d204dae0df07a212) | Darwin 26.6.2 arm64, local host | `cargo test --offline --locked --manifest-path rust/Cargo.toml -p photo-culler-slint --lib` | 26 passed, 0 failed, 1 ignored (the ignored test requires a staged server executable). | Local test binary only; no package artifact created. | Controller loading/ready/empty/error/retry and native transport/owned-server behaviors passed; this is not a GUI capture. |
+
+### Workflow artifacts for integrated run #44563618333
+
+All eight artifacts were produced from source SHA
+`59cb9f01746b4f66f180f8c9c2927489a8f7e5e7`. Artifact hashes below are the
+GitHub SHA-256 digest of each uploaded archive. The current native GUI
+`gallery-smoke.png` images use the ten-card synthetic fixture; dimensions and
+PNG hashes are recorded in the adjacent design evidence README.
+
+| Artifact | GitHub artifact SHA-256 | Contents / SHA-256 |
+|---|---|---|
+| `rust-slint-demo-linux-x64-44563618333-1` | `3ff8c0416bf2ba61cbad7cd21feef070099bc801347464e7b29e2ef952876759` | Linux desktop/server package and checksums. |
+| `rust-slint-demo-macos-arm64-44563618333-1` | `b2d5bf59276917675cd279ce5d094261fac0f07fb10697a4ba279e059e302741` | macOS arm64 desktop/server package and checksums. |
+| `rust-slint-demo-windows-x64-44563618333-1` | `5c96f818731da5f7bcd01a7a462125bbd026bc3d1a5ee1b863bbaf87626bb698` | Windows x86-64 desktop/server package and checksums. |
+| `rust-slint-demo-wasm32-44563618333-1` | `2471b22d37f72a491614678372a1e28fe64a3d67af8783b8d5bf6c794bd8829d` | WASM bundle, manifest and checksums. |
+| `rust-slint-demo-browser-acceptance-44563618333-1` | `4533c63f6935aecdcf6acb7a74b536c1d4edfd85b8f60ee23083c32a6c3ca3cb` | 20 Chromium/Firefox UI-state screenshots, two S05 design screenshots, manifests and hashes. |
+| `rust-slint-demo-native-gui-linux-x64-44563618333-1` | `90ff19b24b6379950749a0ac7779144dc4cade75735bc0b89219f30d31492693` | Linux live and synthetic gallery screenshots, readiness/lifecycle reports and logs. |
+| `rust-slint-demo-native-gui-macos-arm64-44563618333-1` | `0cd28a1c7dc31aaace2d3ebc7453163a113c2463851ab154b4c8a0c1a0ff8d51` | macOS live and synthetic gallery screenshots, readiness/lifecycle reports and logs. |
+| `rust-slint-demo-native-gui-windows-x64-44563618333-1` | `cbe97bd4a13b2e31bb9ea3f8457e6551120d9cf642395a7b7b70d5f8cf07d4ff` | Windows live and synthetic gallery screenshots, readiness/lifecycle reports and logs. |
+
+Native `gallery-smoke.png` SHA-256 and dimensions: Linux x86-64 1439×880
+`d193b2a17eb9d0667fe121928eaaacdc2b255c68f63d06f77cf31fd57d93224d`;
+macOS arm64 1212×840
+`3aff5ce1cc4690a5febf2dfcd53c54b82ef76928fe75e4356975a8c4101225b0`;
+Windows x86-64 1442×932
+`22ce0f81c5bbc9e36db2d6e876213966521b706cd6fbf0e4c588f97fbae8779f`.
+The workflow page links to all artifacts and their expiration dates.
 
 ### Workflow artifacts for run #44508069950
 
