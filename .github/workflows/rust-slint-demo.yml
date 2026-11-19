@@ -2,7 +2,11 @@ name: Rust Slint demo artifacts
 
 on:
   pull_request:
-    branches: [feature/sprint-01-rust-foundation]
+    branches:
+      - feature/sprint-01-rust-foundation
+      - feature/sprint-01-completion
+      - feature/sprint-01-photo-culler-pro-design
+      - feature/sprint-01-pro-icon-parity
     paths:
       - 'rust/Cargo.toml'
       - 'rust/Cargo.lock'
@@ -16,7 +20,11 @@ on:
       - 'migration/demo/smoke/**'
       - '.github/workflows/rust-slint-demo.yml'
   push:
-    branches: [feature/sprint-01-rust-foundation]
+    branches:
+      - feature/sprint-01-rust-foundation
+      - feature/sprint-01-completion
+      - feature/sprint-01-photo-culler-pro-design
+      - feature/sprint-01-native-acceptance
     paths:
       - 'rust/Cargo.toml'
       - 'rust/Cargo.lock'
@@ -64,7 +72,16 @@ jobs:
           python-version: '3.13'
       - if: runner.os == 'Linux'
         name: Install Slint native build dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libfontconfig1-dev libx11-dev libx11-xcb-dev libxcb1-dev xinput libxcursor-dev libxkbcommon-dev libxkbcommon-x11-dev libinput-dev libgbm-dev libwayland-dev
+        run: |
+          packages=(build-essential pkg-config libfontconfig1-dev libx11-dev libx11-xcb-dev libxcb1-dev libxcursor-dev libxkbcommon-dev libxkbcommon-x11-dev libinput-dev libgbm-dev libwayland-dev xvfb openbox xdotool x11-utils imagemagick)
+          for attempt in 1 2 3; do
+            if sudo apt-get -o Acquire::Retries=3 update && sudo apt-get -o Acquire::Retries=3 install -y "${packages[@]}"; then
+              exit 0
+            fi
+            echo "Linux dependency install attempt $attempt failed; refreshing package indexes before retry."
+            sleep $((attempt * 10))
+          done
+          exit 1
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -80,10 +97,66 @@ jobs:
         run: |
           if (-not (Test-Path -LiteralPath 'migration/demo/build/ci/build-native.ps1' -PathType Leaf)) { throw 'required Windows CI build recipe is missing' }
           ./migration/demo/build/ci/build-native.ps1 -Target '${{ matrix.target }}' -OutputDirectory "$env:GITHUB_WORKSPACE/artifacts/${{ matrix.key }}" -WorkspaceRoot "$env:GITHUB_WORKSPACE"
+      - name: Test complete S01 Axum runtime contract
+        run: cargo test --locked --manifest-path rust/Cargo.toml --release --target '${{ matrix.target }}' -p photo-culler-server --test s01_runtime
       - name: Test owned desktop server launch and shutdown
         env:
           PHOTO_CULLER_SERVER: ${{ github.workspace }}/rust/target/${{ matrix.target }}/release/${{ matrix.server_binary }}
         run: cargo test --locked --manifest-path rust/Cargo.toml --release --target '${{ matrix.target }}' -p photo-culler-slint --lib owned_server::tests::owned_child_serves_the_gallery_and_releases_its_port_on_drop -- --ignored
+      - name: Run packaged Linux Slint desktop smoke
+        if: runner.os == 'Linux'
+        run: |
+          xvfb-run --auto-servernum --server-args="-screen 0 1440x900x24" bash -c '
+            openbox --sm-disable >/tmp/photo-culler-openbox.log 2>&1 &
+            window_manager_pid=$!
+            trap "kill $window_manager_pid 2>/dev/null || true" EXIT
+            sleep 1
+            if ! kill -0 "$window_manager_pid" 2>/dev/null; then
+              cat /tmp/photo-culler-openbox.log
+              exit 1
+            fi
+            xprop -root _NET_SUPPORTING_WM_CHECK
+            unset WAYLAND_DISPLAY WAYLAND_SOCKET
+            printf "Linux GUI smoke environment:\n"
+            env | grep -E "^(DISPLAY|WAYLAND_DISPLAY|WAYLAND_SOCKET)=" || true
+            python3 migration/demo/smoke/native-gui/run.py \
+              --platform linux \
+              --desktop "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-desktop" \
+              --server "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-server" \
+              --output "$GITHUB_WORKSPACE/artifacts/native-gui/${{ matrix.key }}"
+          '
+      - name: Run packaged macOS Slint desktop smoke
+        if: runner.os == 'macOS'
+        run: >-
+          python3 migration/demo/smoke/native-gui/run.py
+          --platform macos
+          --desktop "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-desktop"
+          --server "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-server"
+          --output "$GITHUB_WORKSPACE/artifacts/native-gui/${{ matrix.key }}"
+      - name: Set hosted Windows display resolution for GUI smoke
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command Set-DisplayResolution -ErrorAction SilentlyContinue)) { throw 'Set-DisplayResolution is unavailable on this hosted Windows runner' }
+          Set-DisplayResolution -Width 1920 -Height 1080 -Force
+          Start-Sleep -Seconds 2
+      - name: Run packaged Windows Slint desktop smoke
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          SLINT_BACKEND: winit-software
+        run: >-
+          py -3 migration/demo/smoke/native-gui/run.py
+          --platform windows
+          --desktop "$env:GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-desktop.exe"
+          --server "$env:GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-server.exe"
+          --output "$env:GITHUB_WORKSPACE/artifacts/native-gui/${{ matrix.key }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rust-slint-demo-native-gui-${{ matrix.key }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/native-gui/${{ matrix.key }}/
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
           name: rust-slint-demo-${{ matrix.key }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -168,7 +241,15 @@ jobs:
       - name: Install pinned browser test runner
         run: npm install --no-save --package-lock=false playwright@1.51.1
       - name: Install Chromium and Firefox
-        run: npx playwright install --with-deps chromium firefox
+        run: |
+          for attempt in 1 2 3; do
+            if npx playwright install --with-deps chromium firefox; then
+              exit 0
+            fi
+            echo "Playwright browser dependency install attempt $attempt failed; retrying."
+            sleep $((attempt * 10))
+          done
+          exit 1
       - name: Run Chromium with real Axum and WASM artifacts
         env:
           PHOTO_CULLER_SERVER: ${{ github.workspace }}/rust/target/release/photo-culler-server

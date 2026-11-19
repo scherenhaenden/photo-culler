@@ -14,7 +14,10 @@ use photo_culler_slint::{
 use slint::ComponentHandle;
 use std::{
     cell::RefCell,
+    fs::OpenOptions,
+    io::Write,
     net::SocketAddr,
+    path::PathBuf,
     rc::Rc,
     sync::{Arc, Mutex},
 };
@@ -36,6 +39,7 @@ fn main() {
 
 fn run_application() -> Result<(), String> {
     let window = DemoWindow::new().map_err(|error| error.to_string())?;
+    write_smoke_event("desktop-starting", &std::process::id().to_string(), "");
     let endpoint = Arc::new(Mutex::new(None::<SocketAddr>));
     let client = Arc::new(AppClient::new(NativeDemoTransport::new(endpoint.clone())));
     let controller = Arc::new(DemoController::new(
@@ -111,9 +115,17 @@ fn start_load(
                 if let Ok(mut current) = endpoint.lock() {
                     *current = Some(connection.address());
                 }
+                write_smoke_event(
+                    "server-ready",
+                    &connection.origin,
+                    &connection
+                        .owned_process_id()
+                        .map_or_else(|| "external".to_owned(), |pid| pid.to_string()),
+                );
                 *server.borrow_mut() = Some(connection);
             }
             Err(error) => {
+                write_smoke_event("gallery-error", &error, "");
                 window.set_error_message(error.into());
                 window.set_service_status("Servicio local no disponible".into());
                 window.set_view_state(3);
@@ -128,10 +140,65 @@ fn start_load(
         controller.begin_load("demo")
     };
     let task_controller = controller.clone();
+    let smoke_context = server.borrow().as_ref().map(|connection| {
+        (
+            connection.origin.clone(),
+            connection
+                .owned_process_id()
+                .map_or_else(|| "external".to_owned(), |pid| pid.to_string()),
+        )
+    });
     if let Err(error) = slint::spawn_local(async move {
         let _ = task_controller.execute(client.as_ref(), ticket).await;
+        if let (Some(status_file), Some((origin, server_pid))) =
+            (smoke_status_file(), smoke_context)
+        {
+            let controller = task_controller.clone();
+            let _ = slint::invoke_from_event_loop(move || match controller.snapshot() {
+                photo_culler_slint::demo::controller::ViewState::Ready { photo, .. } => {
+                    write_smoke_event_to(
+                        &status_file,
+                        "gallery-ready",
+                        &photo.photo_id,
+                        &format!("{}\t{origin}\t{server_pid}", photo.filename),
+                    );
+                }
+                photo_culler_slint::demo::controller::ViewState::Empty => {
+                    write_smoke_event_to(&status_file, "gallery-empty", "", "");
+                }
+                photo_culler_slint::demo::controller::ViewState::Error { message } => {
+                    write_smoke_event_to(&status_file, "gallery-error", &message, "");
+                }
+                photo_culler_slint::demo::controller::ViewState::Loading => {
+                    write_smoke_event_to(&status_file, "gallery-loading", "", "");
+                }
+            });
+        }
     }) {
+        write_smoke_event("gallery-error", &error.to_string(), "");
         window.set_error_message(format!("Could not start the gallery request: {error}").into());
         window.set_view_state(3);
+    }
+}
+
+fn smoke_status_file() -> Option<PathBuf> {
+    std::env::var_os("PHOTO_CULLER_SMOKE_STATUS_FILE").map(PathBuf::from)
+}
+
+fn write_smoke_event(event: &str, first: &str, second: &str) {
+    let Some(path) = smoke_status_file() else {
+        return;
+    };
+    write_smoke_event_to(&path, event, first, second);
+}
+
+fn write_smoke_event_to(path: &std::path::Path, event: &str, first: &str, second: &str) {
+    match OpenOptions::new().create(true).append(true).open(path) {
+        Ok(mut file) => {
+            if let Err(error) = writeln!(file, "{event}\t{first}\t{second}") {
+                eprintln!("could not record native smoke event: {error}");
+            }
+        }
+        Err(error) => eprintln!("could not open native smoke status file: {error}"),
     }
 }

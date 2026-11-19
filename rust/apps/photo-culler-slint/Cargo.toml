@@ -9,7 +9,7 @@ build = "build.rs"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-slint = { version = "=1.19.0", default-features = false, features = ["std", "compat-1-18", "backend-winit", "renderer-femtovg"] }
+slint = { version = "=1.19.0", default-features = false, features = ["std", "compat-1-18", "backend-winit", "renderer-femtovg", "renderer-software"] }
 image = { version = "=0.25.10", default-features = false, features = ["jpeg"] }
 photo-culler-api = { path = "../../crates/photo-culler-api" }
 photo-culler-client = { path = "../../crates/photo-culler-client" }
