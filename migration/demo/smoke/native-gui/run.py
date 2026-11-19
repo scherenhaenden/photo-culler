@@ -45,7 +45,7 @@ def ready(process, status):
             server = next((r for r in rows if r[0] == "server-ready"), None)
             if not server or len(server) < 3 or server[1] != row[3] or server[2] != row[4]:
                 raise RuntimeError(f"server and rendered-gallery events disagree: {server}, {row}")
-            return row[3], row[4] if row[4].isdigit() else None
+            return row[3], int(row[4]) if row[4].isdigit() else None
         time.sleep(.1)
     raise TimeoutError("Slint did not report the visible demo gallery")
 
@@ -104,9 +104,19 @@ def stop_pid(pid):
 
 def capture(platform_name, pid, output):
     if platform_name == "linux":
-        ids = call(["xdotool", "search", "--pid", str(pid)]).stdout.split()
+        by_pid = call(["xdotool", "search", "--onlyvisible", "--pid", str(pid)], check=False)
+        ids = by_pid.stdout.split()
         if not ids:
-            raise RuntimeError(f"no X11 window for PID {pid}")
+            by_title = call(
+                ["xdotool", "search", "--onlyvisible", "--name", "^Photo Culler Pro$"],
+                check=False,
+            )
+            ids = by_title.stdout.split()
+        if not ids:
+            raise RuntimeError(
+                f"no visible X11 Photo Culler Pro window for PID {pid}; "
+                f"pid-search={by_pid.stderr.strip()!r}"
+            )
         wid = ids[-1]
         call(["xdotool", "windowactivate", "--sync", wid])
         time.sleep(.75)
