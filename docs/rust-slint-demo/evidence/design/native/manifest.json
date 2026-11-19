@@ -1,0 +1,44 @@
+{
+  "workflow": "https://github.com/scherenhaenden/photo-culler/actions/runs/44546749693",
+  "workflow_run": 44546749693,
+  "commit": "68959bf702c554839b720d80fd51bfbad6824317",
+  "pull_request": 156,
+  "base_design_commit": "51deca2f945bc9892b05fb51fcca9d09b326da3c",
+  "result": "6/6 jobs passed",
+  "acceptance": {
+    "live_demo_gallery": "demo-001.jpg visible in a separate one-photo smoke",
+    "pro_gallery_smoke": "10 synthetic records rendered; every card uses the same bundled demo JPEG",
+    "owned_first_and_reopen": "exit code 0; owned server port released after each close",
+    "external_server": "health remained ready after the desktop window closed",
+    "windows_renderer": "winit-software"
+  },
+  "captures": [
+    {
+      "platform": "Linux x86-64",
+      "path": "linux-x86_64-445467.png",
+      "width": 1439,
+      "height": 880,
+      "sha256": "8ddf029db66049b8fa3d338c317869c833c38abd9612e6a87c302695a9aa9996",
+      "github_artifact": "rust-slint-demo-native-gui-linux-x64-44546749693-1",
+      "artifact_sha256": "75fa527f3eae5bb9e76840103b24b4aba36116550b7deb92896dd1319fb1ee73"
+    },
+    {
+      "platform": "macOS arm64",
+      "path": "macos-arm64-445467.png",
+      "width": 1212,
+      "height": 840,
+      "sha256": "dfb10ff595c3b75c5fbd3f93cce8e5b398b57f4310ccd5e2000e2d322fe1832f",
+      "github_artifact": "rust-slint-demo-native-gui-macos-arm64-44546749693-1",
+      "artifact_sha256": "f5f2c1fa203bb9309b8aab26bbbd912cd8e38f57f4737d597cd8d0eaa22c0d5a"
+    },
+    {
+      "platform": "Windows x86-64",
+      "path": "windows-x86_64-445467.png",
+      "width": 1442,
+      "height": 932,
+      "sha256": "1b563e43abc74cbc52c709f89072131e2e73f6cc2383324de7f2aa27a489173e",
+      "github_artifact": "rust-slint-demo-native-gui-windows-x64-44546749693-1",
+      "artifact_sha256": "1f81f8292e4ce554cec66f149ced909d751e1aa3488d3cddebc9866fff53abea"
+    }
+  ]
+}

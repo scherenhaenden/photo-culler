@@ -1,12 +1,15 @@
-import { ActionButton, DesignTokens, PanelState, SidebarItem, StatusPanel } from "./components/components.slint";
+import { DesignTokens } from "./components/components.slint";
 import { GalleryPhoto, LibraryGallery } from "./library/gallery.slint";
+import { PhotoCullerProHeader } from "./library/photo_culler_pro_header.slint";
+import { CameraFilterOption, PhotoCullerProPrimarySidebar, PhotoCullerProFilterSidebar } from "./library/photo_culler_pro_sidebars.slint";
+
 export { DesignTokens } from "./components/components.slint";
 
 export component DemoWindow inherits Window {
-    // Keep this public runtime contract stable for the D34 integrator.
+    // Keep the public runtime contract stable for the D34 integrator.
     in property <int> view-state: 0; // 0 loading, 1 ready, 2 empty, 3 error
     in property <string> photo-name: "demo-001.jpg";
-    in property <string> error-message: "The local service could not be reached.";
+    in property <string> error-message: "The local Photo Culler service could not be reached.";
     in property <image> photo-thumbnail;
     in property <int> photo-index: 0;
     in property <int> photo-count: 1;
@@ -15,265 +18,118 @@ export component DemoWindow inherits Window {
     callback previous-photo();
     callback next-photo();
 
-    // Initial visual-parity inputs. The root adapter may populate these when the
-    // gallery/list contract is connected. Empty photos uses the legacy preview fields.
     in property <[GalleryPhoto]> gallery-photos: [];
+    in property <string> fallback-photo-id: "demo-001";
     in property <string> selected-photo-id: "demo-001";
     in property <string> gallery-title: "Sesión de muestra";
     in property <string> service-status: "Esperando al servicio local…";
     in property <bool> web-layout: false;
+    in-out property <string> search-query: "";
     in property <int> kept-count: 0;
     in property <int> alternate-count: 0;
     in property <int> rejected-count: 0;
     in property <int> unrated-count: 0;
+    in property <int> selected-photo-count: 0;
+    in property <bool> all-visible-selected: false;
+    in property <bool> gallery-metadata-available: false;
+    in property <[CameraFilterOption]> camera-filter-options: [];
+    in-out property <string> cull-status: "all";
+    in-out property <int> max-iso: 12800;
+    in-out property <int> min-sharpness: 0;
+    in-out property <int> min-rating: 0;
+    in-out property <bool> raw-only: false;
+    in-out property <bool> sort-descending: true;
+    in-out property <int> grid-density: 1;
     callback select-photo(string);
     callback select-archive(string);
-    property <length> sidebar-width: 220px;
+    callback navigate(view: string);
+    callback search-changed(query: string);
+    callback action-requested(action: string);
+    callback filter-requested(name: string, value: string);
+    callback selection-requested(photo-id: string, multi: bool);
+    callback select-all-requested();
+    callback sort-direction-changed(descending: bool);
+    callback density-changed(density: int);
 
-    title: "Photo Culler";
-    preferred-width: web-layout ? 1280px : 1440px;
-    preferred-height: web-layout ? 820px : 900px;
+    title: "Photo Culler Pro";
+    preferred-width: 1440px;
+    preferred-height: 900px;
     min-width: web-layout ? 360px : 1100px;
     min-height: web-layout ? 480px : 700px;
     background: DesignTokens.canvas;
 
     VerticalLayout {
         spacing: 0px;
-        HorizontalLayout {
-            height: 56px;
-            spacing: 0px;
-            Rectangle {
-                width: root.sidebar-width;
-                background: DesignTokens.sidebar;
-                border-width: 1px;
-                border-color: DesignTokens.border;
-                HorizontalLayout {
-                    padding: 18px;
-                    spacing: 5px;
-                    Text { text: "CULLER"; color: DesignTokens.foreground; font-family: DesignTokens.heading-font; font-size: 15px; font-weight: 900; vertical-alignment: center; }
-                    Text { text: "/ 01"; color: DesignTokens.accent; font-family: DesignTokens.heading-font; font-size: 15px; font-weight: 900; vertical-alignment: center; }
-                }
+
+        PhotoCullerProHeader {
+            horizontal-stretch: 1;
+            height: 46px;
+            web-layout: root.web-layout;
+            current-view: "library";
+            search-query: root.search-query;
+            search-changed(query) => {
+                root.search-query = query;
+                root.search-changed(query);
             }
-            Rectangle {
-                horizontal-stretch: 1;
-                background: DesignTokens.sidebar;
-                border-width: 1px;
-                border-color: DesignTokens.border;
-                HorizontalLayout {
-                    padding-left: 20px;
-                    padding-right: 16px;
-                    spacing: 10px;
-                    Text { text: "LIBRARY"; color: DesignTokens.foreground; font-family: DesignTokens.body-mono-font; font-size: 10px; font-weight: 800; vertical-alignment: center; }
-                    Rectangle { width: 1px; height: 20px; background: DesignTokens.border; }
-                    Text { text: "DASHBOARD"; color: DesignTokens.subdued; font-family: DesignTokens.body-mono-font; font-size: 10px; vertical-alignment: center; }
-                    Text { text: root.service-status; color: DesignTokens.muted; font-size: 11px; horizontal-stretch: 1; vertical-alignment: center; overflow: elide; }
-                    ActionButton {
-                        label: "↻ Actualizar";
-                        primary: false;
-                        width: 104px;
-                        clicked => { root.retry(); }
-                    }
-                }
-            }
+            navigate(view) => { root.navigate(view); }
+            action-requested(action) => { root.action-requested(action); }
         }
 
         HorizontalLayout {
             spacing: 0px;
             vertical-stretch: 1;
 
-            Rectangle {
-                width: root.sidebar-width;
-                background: DesignTokens.sidebar;
-                border-width: 1px;
-                border-color: DesignTokens.border;
-                VerticalLayout {
-                    padding: 12px;
-                    spacing: 6px;
-                    Rectangle {
-                        height: 50px;
-                        background: DesignTokens.surface;
-                        border-radius: 8px;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        HorizontalLayout {
-                            padding: 8px;
-                            spacing: 8px;
-                            Rectangle {
-                                width: 30px; height: 30px;
-                                background: DesignTokens.card-hover;
-                                border-radius: 6px;
-                                Text { text: "📂"; color: DesignTokens.accent; font-size: 14px; horizontal-alignment: center; vertical-alignment: center; }
-                            }
-                            VerticalLayout {
-                                alignment: center;
-                                Text { text: "CATALOG_01"; color: DesignTokens.foreground; font-family: DesignTokens.body-mono-font; font-size: 10px; font-weight: 800; }
-                                Text { text: "LOCAL ARCHIVE"; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 8px; }
-                            }
-                        }
-                    }
-                    Text { text: "GALERÍAS"; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 9px; font-weight: 800; vertical-alignment: center; }
-                    SidebarItem {
-                        label: root.gallery-title;
-                        selected: true;
-                        activated => { root.select-archive(root.gallery-title); }
-                    }
-                    Text { text: "FILTROS"; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 9px; font-weight: 800; vertical-alignment: center; }
-                    Rectangle {
-                        height: 34px;
-                        background: DesignTokens.surface;
-                        border-radius: 6px;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        Text { x: 10px; width: parent.width - 20px; text: "⌕  Buscar nombre o etiqueta"; color: DesignTokens.subdued; font-size: 10px; vertical-alignment: center; overflow: elide; }
-                    }
-                    Text { text: "DECISIÓN"; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 9px; font-weight: 800; vertical-alignment: center; }
-                    SidebarItem { label: "Todos"; selected: true; }
-                    SidebarItem { label: "BEST / KEEP"; enabled: false; }
-                    SidebarItem { label: "ALTERNATE"; enabled: false; }
-                    SidebarItem { label: "REJECT"; enabled: false; }
-                    Rectangle { height: 1px; background: DesignTokens.border; }
-                    Text { text: "SELECCIÓN"; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 9px; font-weight: 800; vertical-alignment: center; }
-                    HorizontalLayout {
-                        spacing: 6px;
-                        Text { text: "KEPT"; color: DesignTokens.best; font-family: DesignTokens.body-mono-font; font-size: 9px; }
-                        Text { text: root.kept-count < 10 ? "0" + root.kept-count : "" + root.kept-count; color: DesignTokens.foreground; font-family: DesignTokens.body-mono-font; font-size: 10px; horizontal-alignment: right; horizontal-stretch: 1; }
-                    }
-                    HorizontalLayout {
-                        spacing: 6px;
-                        Text { text: "ALTERNATE"; color: DesignTokens.alternate; font-family: DesignTokens.body-mono-font; font-size: 9px; }
-                        Text { text: root.alternate-count < 10 ? "0" + root.alternate-count : "" + root.alternate-count; color: DesignTokens.foreground; font-family: DesignTokens.body-mono-font; font-size: 10px; horizontal-alignment: right; horizontal-stretch: 1; }
-                    }
-                    HorizontalLayout {
-                        spacing: 6px;
-                        Text { text: "REJECTED"; color: web-layout ? DesignTokens.web-rejected : DesignTokens.rejected; font-family: DesignTokens.body-mono-font; font-size: 9px; }
-                        Text { text: root.rejected-count < 10 ? "0" + root.rejected-count : "" + root.rejected-count; color: DesignTokens.foreground; font-family: DesignTokens.body-mono-font; font-size: 10px; horizontal-alignment: right; horizontal-stretch: 1; }
-                    }
-                    HorizontalLayout {
-                        spacing: 6px;
-                        Text { text: "UNRATED"; color: DesignTokens.unrated; font-family: DesignTokens.body-mono-font; font-size: 9px; }
-                        Text { text: root.unrated-count < 10 ? "0" + root.unrated-count : "" + root.unrated-count; color: DesignTokens.foreground; font-family: DesignTokens.body-mono-font; font-size: 10px; horizontal-alignment: right; horizontal-stretch: 1; }
-                    }
-                    Rectangle { vertical-stretch: 1; background: transparent; }
-                    Rectangle {
-                        height: 52px;
-                        background: #000000;
-                        border-width: 1px;
-                        border-color: DesignTokens.border;
-                        HorizontalLayout {
-                            padding: 8px;
-                            spacing: 8px;
-                            Rectangle {
-                                width: 30px; height: 30px; border-radius: 999px;
-                                background: DesignTokens.surface;
-                                border-width: 1px;
-                                border-color: DesignTokens.border;
-                                Text { text: "OP"; color: DesignTokens.foreground; font-family: DesignTokens.body-mono-font; font-size: 9px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
-                            }
-                            VerticalLayout {
-                                alignment: center;
-                                Text { text: "OPERATOR_01"; color: DesignTokens.foreground; font-family: DesignTokens.body-mono-font; font-size: 9px; font-weight: 800; }
-                                Text { text: "SESIÓN DE CATÁLOGO"; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 8px; }
-                            }
-                        }
-                    }
-                }
+            PhotoCullerProPrimarySidebar {
+                vertical-stretch: 1;
+                active-view: "library";
+                keep-count: root.kept-count;
+                alt-count: root.alternate-count;
+                reject-count: root.rejected-count;
+                unrated-count: root.unrated-count;
+                navigate(view) => { root.navigate(view); }
             }
 
-            if !root.web-layout: Rectangle {
-                width: 6px;
-                background: transparent;
-                Rectangle {
-                    x: 2px;
-                    width: 1px;
-                    height: parent.height;
-                    background: DesignTokens.border;
-                }
-                TouchArea {
-                    mouse-cursor: ew-resize;
-                    property <length> starting-width: root.sidebar-width;
-                    property <length> requested-width: self.starting-width + self.mouse-x - self.pressed-x;
-                    pointer-event(event) => {
-                        if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
-                            self.starting-width = root.sidebar-width;
-                        }
-                    }
-                    moved => {
-                        if (!self.pressed) { return; }
-                        root.sidebar-width = self.requested-width < 200px ? 200px :
-                            (self.requested-width > 260px ? 260px : self.requested-width);
-                    }
-                }
+            PhotoCullerProFilterSidebar {
+                vertical-stretch: 1;
+                result-count: root.gallery-photos.length;
+                camera-options: root.camera-filter-options;
+                metadata-available: root.gallery-metadata-available;
+                cull-status <=> root.cull-status;
+                max-iso <=> root.max-iso;
+                min-sharpness <=> root.min-sharpness;
+                min-rating <=> root.min-rating;
+                raw-only <=> root.raw-only;
+                filter-requested(name, value) => { root.filter-requested(name, value); }
             }
 
-            VerticalLayout {
-                padding: 16px;
-                spacing: 12px;
-                HorizontalLayout {
-                    spacing: 12px;
-                    Text { text: "Catálogo"; color: DesignTokens.foreground; font-family: DesignTokens.heading-font; font-size: DesignTokens.text-heading; font-weight: 700; vertical-alignment: center; }
-                    Text { text: root.gallery-title; color: DesignTokens.muted; font-size: 11px; vertical-alignment: center; horizontal-stretch: 1; }
-                    Text {
-                        text: "MOSTRANDO  " + (root.photo-index + 1) + "  DE  " + root.photo-count + "  FOTOS";
-                        color: DesignTokens.muted;
-                        font-family: DesignTokens.body-mono-font;
-                        font-size: 9px;
-                        vertical-alignment: center;
-                    }
-                }
-                if root.view-state == 0: StatusPanel {
-                    vertical-stretch: 1;
-                    state: PanelState.loading;
-                    title: "Cargando catálogo";
-                    detail: "Conectando con el archivo local y preparando las miniaturas.";
-                }
-                if root.view-state == 2: StatusPanel {
-                    vertical-stretch: 1;
-                    state: PanelState.empty;
-                    title: "Tu catálogo aparecerá aquí";
-                    detail: "Elige una galería del archivo. La importación se conectará al servicio del catálogo.";
-                }
-                if root.view-state == 3: StatusPanel {
-                    vertical-stretch: 1;
-                    state: PanelState.error;
-                    title: "No se pudo conectar con el servicio";
-                    detail: root.error-message;
-                    action-label: "Reintentar";
-                    retry => { root.retry(); }
-                }
-                if root.view-state == 1: LibraryGallery {
-                    vertical-stretch: 1;
-                    web-layout: root.web-layout;
-                    view-state: root.view-state;
-                    photos: root.gallery-photos;
-                    fallback-id: root.selected-photo-id;
-                    fallback-name: root.photo-name;
-                    fallback-thumbnail: root.photo-thumbnail;
-                    selected-id: root.selected-photo-id;
-                    error-message: root.error-message;
-                    retry => { root.retry(); }
-                    select-photo(id) => { root.select-photo(id); }
-                }
-            }
-        }
-
-        Rectangle {
-            height: 24px;
-            background: DesignTokens.sidebar;
-            border-width: 1px;
-            border-color: DesignTokens.border;
-            HorizontalLayout {
-                padding-left: 14px;
-                padding-right: 14px;
-                spacing: 8px;
-                Text { text: "CATÁLOGO LOCAL"; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 8px; vertical-alignment: center; }
-                Text { text: root.view-state == 1 ? "●" : "○"; color: root.view-state == 3 ? DesignTokens.danger : (root.view-state == 1 ? DesignTokens.best : DesignTokens.alternate); font-size: 8px; vertical-alignment: center; }
-                Text { text: root.service-status; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 8px; vertical-alignment: center; horizontal-stretch: 1; overflow: elide; }
-                Text { text: root.navigation-label; color: DesignTokens.muted; font-family: DesignTokens.body-mono-font; font-size: 8px; vertical-alignment: center; }
+            LibraryGallery {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+                web-layout: root.web-layout;
+                viewport-width: root.width / 1px;
+                search-query: root.search-query;
+                view-state: root.view-state;
+                photos: root.gallery-photos;
+                fallback-id: root.fallback-photo-id;
+                fallback-name: root.photo-name;
+                fallback-thumbnail: root.photo-thumbnail;
+                selected-id: root.selected-photo-id;
+                error-message: root.error-message;
+                selected-photo-count: root.selected-photo-count;
+                all-visible-selected: root.all-visible-selected;
+                grid-density <=> root.grid-density;
+                sort-descending <=> root.sort-descending;
+                retry => { root.retry(); }
+                select-photo(id) => { root.select-photo(id); }
+                selection-requested(id, multi) => { root.selection-requested(id, multi); }
+                select-all-requested => { root.select-all-requested(); }
+                sort-direction-changed(descending) => { root.sort-direction-changed(descending); }
+                density-changed(density) => { root.density-changed(density); }
             }
         }
     }
 }
 
-// Existing Rust adapters still name DemoScaffold. Keeping this UI alias lets the
-// integrator switch the Slint entry file without a simultaneous Rust rename.
+// Existing Rust adapters still name DemoScaffold. Keep the alias so callers
+// can migrate their generated bindings independently from this UI redesign.
 export component DemoScaffold inherits DemoWindow { }

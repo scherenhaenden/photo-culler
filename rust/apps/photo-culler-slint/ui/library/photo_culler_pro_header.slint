@@ -1,0 +1,461 @@
+import { DesignTokens } from "../components/components.slint";
+
+// One compact tab in the pro header. Fixed widths preserve the supplied
+// reference geometry while the parent decides which tabs fit at each width.
+component PhotoCullerProTab inherits Rectangle {
+    in property <string> label;
+    in property <string> view;
+    in property <string> current-view;
+    in property <length> tab-width: 72px;
+    callback navigate(view: string);
+
+    width: tab-width;
+    height: 30px;
+    background: current-view == view ? DesignTokens.accent : transparent;
+    border-radius: 15px;
+
+    Text {
+        width: parent.width;
+        height: parent.height;
+        text: root.label;
+        color: root.current-view == root.view ? #ffffff : #ffffff99;
+        font-family: DesignTokens.body-font;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.8px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    TouchArea {
+        clicked => { root.navigate(root.view); }
+    }
+}
+
+// Compact action pill shared by Import and Export.
+component PhotoCullerProAction inherits Rectangle {
+    in property <string> label;
+    in property <string> symbol;
+    in property <string> action;
+    in property <bool> primary: false;
+    in property <bool> compact: false;
+    callback requested(action: string);
+
+    height: 28px;
+    width: root.compact ? 30px : (root.label == "Import" ? 78px : 82px);
+    background: root.primary ? #ffffff : #111111;
+    border-radius: 14px;
+    border-width: root.primary ? 0px : 1px;
+    border-color: #ffffff26;
+
+    HorizontalLayout {
+        spacing: root.compact ? 0px : 5px;
+        padding-left: root.compact ? 0px : 10px;
+        padding-right: root.compact ? 0px : 10px;
+        alignment: center;
+
+        Text {
+            text: root.symbol;
+            color: root.primary ? #050505 : (root.action == "export" ? DesignTokens.best : #ffffff);
+            font-family: DesignTokens.body-font;
+            font-size: 14px;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        if !root.compact: Text {
+            text: root.label;
+            color: root.primary ? #050505 : #ffffff;
+            font-family: DesignTokens.body-font;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            vertical-alignment: center;
+        }
+    }
+
+    TouchArea {
+        clicked => { root.requested(root.action); }
+    }
+}
+
+// Icon-only system control used for performance, processing, shortcuts and
+// settings. Text symbols keep this component asset-free and work in WASM.
+component PhotoCullerProControl inherits Rectangle {
+    in property <string> symbol;
+    in property <string> action;
+    in property <color> symbol-color: #ffffff99;
+    callback requested(action: string);
+
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border-radius: 14px;
+
+    Text {
+        width: parent.width;
+        height: parent.height;
+        text: root.symbol;
+        color: root.symbol-color;
+        font-family: DesignTokens.body-font;
+        font-size: root.action == "settings" ? 16px : 14px;
+        font-weight: root.action == "processing" ? 700 : 500;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    TouchArea {
+        clicked => { root.requested(root.action); }
+    }
+}
+
+/// Responsive implementation of the photo_culler_pro top header prototype.
+/// At 1440 px it retains the exact 46 px bar, full five-tab navigation, 208 px
+/// search field, Import/Export pills and four system controls.
+export component PhotoCullerProHeader inherits Rectangle {
+    in property <bool> web-layout: false;
+    in-out property <string> search-query: "";
+    in property <string> current-view: "library";
+    property <string> feedback-message: "";
+
+    callback navigate(view: string);
+    callback search-changed(query: string);
+    callback action-requested(action: string);
+
+    function show-unavailable(action: string) {
+        feedback-message = action == "import" ? "IMPORT · unavailable in Sprint 01" :
+            (action == "export" ? "EXPORT · unavailable in Sprint 01" :
+            (action == "performance" ? "SYSTEM STATUS · unavailable in Sprint 01" :
+            (action == "processing" ? "PROCESSING · unavailable in Sprint 01" :
+            (action == "shortcuts" ? "SHORTCUTS · unavailable in Sprint 01" :
+            (action == "settings" ? "SETTINGS · unavailable in Sprint 01" :
+            (action == "dashboard" ? "DASHBOARD · unavailable in Sprint 01" :
+            (action == "cinema" ? "CINEMA · unavailable in Sprint 01" :
+            (action == "compare" ? "COMPARE · unavailable in Sprint 01" :
+            (action == "bursts" ? "BURSTS · unavailable in Sprint 01" : "Unavailable in Sprint 01")))))))));
+        status-timer.running = false;
+        status-timer.running = true;
+    }
+
+    status-timer := Timer {
+        interval: 3s;
+        running: false;
+        triggered => {
+            root.feedback-message = "";
+            self.running = false;
+        }
+    }
+
+    height: 46px;
+    background: #050505;
+
+    Rectangle {
+        x: 0px;
+        y: parent.height - 1px;
+        width: parent.width;
+        height: 1px;
+        background: #ffffff1a;
+    }
+
+    HorizontalLayout {
+        x: 16px;
+        y: 0px;
+        width: max(0px, parent.width - 32px);
+        height: parent.height;
+        spacing: 0px;
+
+        // Brand and navigation stay together as in the React reference.
+        HorizontalLayout {
+            spacing: 24px;
+
+            Rectangle {
+                width: root.width >= 1200px ? 108px : 60px;
+                height: parent.height;
+                background: transparent;
+
+                if root.width >= 1200px: HorizontalLayout {
+                    spacing: 3px;
+                    alignment: start;
+
+                    Text {
+                        text: "CULLER";
+                        color: #ffffff;
+                        font-family: DesignTokens.heading-font;
+                        font-size: 16px;
+                        font-weight: 900;
+                        font-italic: true;
+                        letter-spacing: -0.5px;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: "/ 01";
+                        color: DesignTokens.accent;
+                        font-family: DesignTokens.heading-font;
+                        font-size: 16px;
+                        font-weight: 400;
+                        vertical-alignment: center;
+                    }
+                }
+
+                if root.width < 1200px: VerticalLayout {
+                    x: 0px;
+                    y: 3px;
+                    width: parent.width;
+                    height: 40px;
+                    spacing: 0px;
+                    alignment: start;
+
+                    Text {
+                        text: "CULLER";
+                        color: #ffffff;
+                        font-family: DesignTokens.heading-font;
+                        font-size: 16px;
+                        font-weight: 900;
+                        font-italic: true;
+                        letter-spacing: -0.5px;
+                        height: 20px;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: "/ 01";
+                        color: DesignTokens.accent;
+                        font-family: DesignTokens.heading-font;
+                        font-size: 16px;
+                        font-weight: 400;
+                        height: 18px;
+                        vertical-alignment: center;
+                    }
+                }
+
+                TouchArea {
+                    clicked => {
+                        root.show-unavailable("dashboard");
+                        root.navigate("dashboard");
+                    }
+                }
+            }
+
+            if root.width >= 600px: Rectangle {
+                width: 1px;
+                height: 16px;
+                y: (parent.height - self.height) / 2;
+                background: #ffffff1a;
+            }
+
+            if root.width >= 600px: HorizontalLayout {
+                spacing: 6px;
+
+                PhotoCullerProTab {
+                    label: "LIBRARY";
+                    view: "library";
+                    current-view: root.current-view;
+                    tab-width: 72px;
+                    navigate(view) => {
+                        if view != "library" { root.show-unavailable(view); }
+                        root.navigate(view);
+                    }
+                }
+                if root.width >= (root.web-layout ? 820px : 760px): PhotoCullerProTab {
+                    label: "CINEMA";
+                    view: "cinema";
+                    current-view: root.current-view;
+                    tab-width: 70px;
+                    navigate(view) => {
+                        if view != "library" { root.show-unavailable(view); }
+                        root.navigate(view);
+                    }
+                }
+                if root.width >= (root.web-layout ? 1080px : 1020px): PhotoCullerProTab {
+                    label: "COMPARE (4-UP)";
+                    view: "compare";
+                    current-view: root.current-view;
+                    tab-width: 118px;
+                    navigate(view) => {
+                        if view != "library" { root.show-unavailable(view); }
+                        root.navigate(view);
+                    }
+                }
+                if root.width >= 1100px: PhotoCullerProTab {
+                    label: "BURSTS";
+                    view: "bursts";
+                    current-view: root.current-view;
+                    tab-width: 68px;
+                    navigate(view) => {
+                        if view != "library" { root.show-unavailable(view); }
+                        root.navigate(view);
+                    }
+                }
+                if root.width >= 1100px: PhotoCullerProTab {
+                    label: "DASHBOARD";
+                    view: "dashboard";
+                    current-view: root.current-view;
+                    tab-width: 91px;
+                    navigate(view) => {
+                        if view != "library" { root.show-unavailable(view); }
+                        root.navigate(view);
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+            min-width: 8px;
+            height: 1px;
+            background: transparent;
+
+            if root.feedback-message != "": Rectangle {
+                x: (parent.width - self.width) / 2;
+                y: (root.height - self.height) / 2;
+                width: min(260px, max(0px, parent.width - 12px));
+                height: 24px;
+                background: #1b120e;
+                border-radius: 12px;
+                border-width: 1px;
+                border-color: #ff6b3580;
+
+                Text {
+                    x: 10px;
+                    width: max(0px, parent.width - 20px);
+                    height: parent.height;
+                    text: root.feedback-message;
+                    color: #f7c59f;
+                    font-family: DesignTokens.body-font;
+                    font-size: 9px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+        }
+
+        // Keep every reference tab and system control visible at the supplied
+        // 1100 px comparison width by contracting the search field first.
+        HorizontalLayout {
+            spacing: 12px;
+
+            if root.width >= 600px: Rectangle {
+                width: root.width >= 1200px ? 208px : (root.width >= 900px ? 128px : 96px);
+                height: 28px;
+                background: #111111;
+                border-radius: 14px;
+                border-width: 1px;
+                border-color: search-input.has-focus ? DesignTokens.accent : #ffffff26;
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    padding-left: 10px;
+                    padding-right: 10px;
+
+                    Text {
+                        text: "⌕";
+                        color: #ffffff66;
+                        font-family: DesignTokens.body-font;
+                        font-size: 16px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    search-input := TextInput {
+                        horizontal-stretch: 1;
+                        height: parent.height;
+                        text: root.search-query;
+                        font-family: DesignTokens.body-mono-font;
+                        font-size: 11px;
+                        color: #ffffffe6;
+                        vertical-alignment: center;
+                        edited => {
+                            root.search-query = self.text;
+                            root.search-changed(self.text);
+                        }
+                        accepted => {
+                            root.search-changed(self.text);
+                        }
+                    }
+                }
+
+                if root.search-query == "" && !search-input.has-focus: Text {
+                    x: 32px;
+                    width: max(0px, parent.width - 40px);
+                    height: parent.height;
+                    text: "Search filename, lens, tag...";
+                    color: #ffffff66;
+                    font-family: DesignTokens.body-mono-font;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+
+            if root.width >= 600px: HorizontalLayout {
+                spacing: 8px;
+                PhotoCullerProAction {
+                    label: "Import";
+                    symbol: "↑";
+                    action: "import";
+                    primary: true;
+                    compact: root.width < 900px;
+                    requested(action) => {
+                        root.show-unavailable(action);
+                        root.action-requested(action);
+                    }
+                }
+                if root.width >= 900px: PhotoCullerProAction {
+                    label: "Export";
+                    symbol: "↓";
+                    action: "export";
+                    requested(action) => {
+                        root.show-unavailable(action);
+                        root.action-requested(action);
+                    }
+                }
+            }
+
+            if root.width >= 1100px: Rectangle {
+                width: 1px;
+                height: 16px;
+                background: #ffffff1a;
+            }
+
+            HorizontalLayout {
+                spacing: 2px;
+
+                if root.width >= 1100px: PhotoCullerProControl {
+                    symbol: "P";
+                    action: "performance";
+                    requested(action) => {
+                        root.show-unavailable(action);
+                        root.action-requested(action);
+                    }
+                }
+                if root.width >= 800px: PhotoCullerProControl {
+                    symbol: "Z";
+                    action: "processing";
+                    symbol-color: DesignTokens.accent;
+                    requested(action) => {
+                        root.show-unavailable(action);
+                        root.action-requested(action);
+                    }
+                }
+                if root.width >= 1100px: PhotoCullerProControl {
+                    symbol: "?";
+                    action: "shortcuts";
+                    requested(action) => {
+                        root.show-unavailable(action);
+                        root.action-requested(action);
+                    }
+                }
+                PhotoCullerProControl {
+                    symbol: "S";
+                    action: "settings";
+                    requested(action) => {
+                        root.show-unavailable(action);
+                        root.action-requested(action);
+                    }
+                }
+            }
+        }
+    }
+}

@@ -4,6 +4,8 @@
 
 **Base actual del sprint:** `153d04920220fb0c396dca571620c0921052ab1b` en `feature/sprint-01-rust-foundation`. El candidato integra el servidor ejecutable, el cliente compartido, el launcher de escritorio, el arranque WASM, los componentes visuales y el workflow. La ejecución real de CI y la revisión de paridad con capturas siguen siendo gates de aceptación.
 
+**Diseño S05:** el PR [#154](https://github.com/scherenhaenden/photo-culler/pull/154) contiene el candidato Library en `afe088242bdcf173eb8e83c9571bf598f52c4e86`; el commit de documentación actual es `51deca2f945bc9892b05fb51fcca9d09b326da3c`. En el SHA de código pasaron 33 pruebas Slint (1 ignorada), 8 contratos de paridad y checks nativo/WASM. El run [#44546749693](https://github.com/scherenhaenden/photo-culler/actions/runs/44546749693) pasó sus seis jobs en la pila actual y capturó la Library nativa en Linux, macOS y Windows. Las comparaciones, capturas, hashes y límites están en [evidencia visual S05](evidence/design/README.md). La iconografía vectorial está visualmente verificada en el PR apilado #155.
+
 ## Resultado que se va a entregar
 
 Desde un checkout limpio, abrir la misma galería sintética con un JPEG y su miniatura en Slint nativo para macOS arm64, Linux x86-64 y Windows x86-64, y en Slint WASM servido junto con REST en Chromium y Firefox. El servidor y la lógica de aplicación de ambos clientes son Rust. En web, HTML y un cargador inicializan WASM. Los artefactos funcionan sin Python en ejecución.
@@ -17,6 +19,7 @@ La demo trabaja con una galería incluida, por loopback y en modo de lectura. La
 | [Arquitectura y contratos](ARCHITECTURE.md) | Límites de la demo, API, ciclo del servidor, interfaz compartida, build, artefactos y condiciones de aceptación. |
 | [Trabajo pendiente del Sprint 01](SPRINT_01_REMAINING.md) | Bloqueos actuales, dependencias, criterios de cierre y pruebas por plataforma. |
 | [Roadmap de paridad visual](DESIGN_PARITY_ROADMAP.md) | Referencias de escritorio y web, componentes a portar y criterios para aceptar el diseño en Slint. |
+| [Especificación visual Photo Culler Pro](PHOTO_CULLER_PRO_DESIGN_SPEC.md) | SHA del ZIP proporcionado, composición exacta de Library y mapa de sus componentes a Slint. |
 | [Orden de envío y pipeline](PIPELINE.md) | Las 34 fichas en orden de despacho, cuándo se puede empezar, requisitos para integrar y quién escribe los archivos compartidos. |
 | [34 fichas de implementación](TASKS.md) | Cada ficha tiene alcance, rutas bajo su propiedad y pruebas que debe aportar. |
 

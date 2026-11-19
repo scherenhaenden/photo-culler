@@ -11,13 +11,13 @@ that contains spaces.
 2. Run `probe.ps1 http://127.0.0.1:PORT`; save the health/gallery/JPEG output.
 3. Close normally. Verify and record that the owned server child exits and the
    port is released. Reopen and repeat the screenshot and API checks.
-4. Start an independent external server, connect to it explicitly, close the
-   desktop and verify the external PID and health endpoint remain alive. Stop
-   that service manually after recording the result.
+4. Start an independent external server, launch the desktop with
+   `$env:PHOTO_CULLER_API_ORIGIN = 'http://127.0.0.1:<external-port>'`, close
+   the desktop and verify the external PID and health endpoint remain alive.
+   Stop that service manually after recording the result.
 5. Complete `evidence.txt`. A CI build without an interactive desktop is only
    build evidence; leave graphical checks pending if no desktop is available.
 
-The current launcher integration must expose the assigned origin and an
-explicit external-service choice for all steps to be executable. Record any
-missing UI capability as a blocker instead of inferring success from build or
-API output.
+External-service selection is currently an environment override, not an
+in-window option, and the assigned origin is not displayed in the UI. Record
+both limits instead of inferring graphical success from build or API output.

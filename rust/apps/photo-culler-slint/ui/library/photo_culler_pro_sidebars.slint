@@ -1,0 +1,615 @@
+// Photo Culler Pro navigation and Library filter rails.
+import { DesignTokens } from "../components/components.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export struct CameraFilterOption {
+    label: string,
+    selected: bool,
+}
+
+component ProNavigationItem inherits Rectangle {
+    in property <string> icon;
+    in property <string> label;
+    in property <string> view;
+    in property <bool> selected: false;
+    callback activated(view: string);
+
+    height: 34px;
+    background: selected ? #ff6b35 : #00000000;
+    border-radius: 11px;
+
+    focus_scope := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.activated(root.view);
+                accept
+            } else { reject }
+        }
+
+        HorizontalLayout {
+            padding-left: 12px;
+            padding-right: 8px;
+            spacing: 10px;
+            Text {
+                text: root.icon;
+                color: root.selected ? #ffffff : #ffffffb3;
+                font-family: DesignTokens.body-font;
+                font-size: 14px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                width: 16px;
+            }
+            Text {
+                text: root.label;
+                color: root.selected ? #ffffff : #ffffffb3;
+                font-family: DesignTokens.body-font;
+                font-size: 11px;
+                font-weight: 700;
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+        Rectangle {
+            x: 2px;
+            y: 2px;
+            width: parent.width - 4px;
+            height: parent.height - 4px;
+            border-radius: 9px;
+            border-width: focus_scope.has-focus ? 2px : 0px;
+            border-color: DesignTokens.focus;
+            background: transparent;
+        }
+        TouchArea {
+            clicked => { focus_scope.focus(); root.activated(root.view); }
+        }
+    }
+}
+
+component DecisionStat inherits Rectangle {
+    in property <string> icon;
+    in property <string> label;
+    in property <int> count;
+    in property <color> tint;
+
+    height: 30px;
+    background: #111111;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: #ffffff19;
+
+    HorizontalLayout {
+        padding-left: 9px;
+        padding-right: 9px;
+        spacing: 6px;
+        Text { text: root.icon; color: root.tint; font-size: 13px; vertical-alignment: center; }
+        Text {
+            text: root.label;
+            color: #ffffff99;
+            font-family: DesignTokens.body-mono-font;
+            font-size: 9px;
+            font-weight: 700;
+            horizontal-stretch: 1;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        Text {
+            text: "" + root.count;
+            color: root.tint;
+            font-family: DesignTokens.body-mono-font;
+            font-size: 10px;
+            font-weight: 700;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component PhotoCullerProPrimarySidebar inherits Rectangle {
+    in property <string> active-view: "library";
+    in property <int> keep-count: 0;
+    in property <int> alt-count: 0;
+    in property <int> reject-count: 0;
+    in property <int> unrated-count: 1;
+    callback navigate(view: string);
+
+    width: 220px;
+    background: #050505;
+    border-width: 1px;
+    border-color: #ffffff19;
+
+    VerticalLayout {
+        spacing: 0px;
+        Rectangle {
+            height: 58px;
+            background: #050505;
+            border-width: 1px;
+            border-color: #ffffff19;
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                spacing: 10px;
+                Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 8px;
+                    background: #111111;
+                    border-width: 1px;
+                    border-color: #ffffff26;
+                Text { text: "DB"; color: #ff6b35; font-family: DesignTokens.body-mono-font; font-size: 9px; font-weight: 800; horizontal-alignment: center; vertical-alignment: center; }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 1px;
+                    Text { text: "CATALOG_01"; color: #ffffff; font-family: DesignTokens.heading-font; font-size: 12px; font-weight: 900; vertical-alignment: center; }
+                    Text { text: "LOCAL ARCHIVE"; color: #ffffff66; font-family: DesignTokens.body-font; font-size: 9px; font-weight: 700; vertical-alignment: center; }
+                }
+            }
+        }
+
+        VerticalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+            padding-top: 12px;
+            padding-bottom: 8px;
+            spacing: 4px;
+            vertical-stretch: 1;
+
+            ProNavigationItem { icon: "L"; label: "LIBRARY"; view: "library"; selected: root.active-view == "library"; activated(view) => { root.navigate(view); } }
+            ProNavigationItem { icon: "4"; label: "COMPARE (4-UP)"; view: "compare"; selected: root.active-view == "compare"; activated(view) => { root.navigate(view); } }
+            ProNavigationItem { icon: "B"; label: "BURSTS ENGINE"; view: "bursts"; selected: root.active-view == "bursts"; activated(view) => { root.navigate(view); } }
+            ProNavigationItem { icon: "T"; label: "TIMELINE"; view: "timeline"; selected: root.active-view == "timeline"; activated(view) => { root.navigate(view); } }
+            ProNavigationItem { icon: "C"; label: "CINEMA SPECS"; view: "cinema"; selected: root.active-view == "cinema"; activated(view) => { root.navigate(view); } }
+            ProNavigationItem { icon: "S"; label: "SYSTEM OVERVIEW"; view: "dashboard"; selected: root.active-view == "dashboard"; activated(view) => { root.navigate(view); } }
+
+            HorizontalLayout {
+                height: 17px;
+                padding-left: 8px;
+                padding-right: 8px;
+                Rectangle { height: 1px; background: #ffffff19; }
+            }
+            Text {
+                text: "SELECTION STATS";
+                color: #ffffff66;
+                font-family: DesignTokens.body-font;
+                font-size: 9px;
+                font-weight: 700;
+                letter-spacing: 1.2px;
+                height: 24px;
+                vertical-alignment: center;
+            }
+            VerticalLayout {
+                spacing: 5px;
+                DecisionStat { icon: "✓"; label: "KEPT"; count: root.keep-count; tint: #25a18e; }
+                DecisionStat { icon: "◆"; label: "ALT (PICK)"; count: root.alt-count; tint: #f7c59f; }
+                DecisionStat { icon: "×"; label: "REJECTED"; count: root.reject-count; tint: #ff6b35; }
+                DecisionStat { icon: "?"; label: "UNRATED"; count: root.unrated-count; tint: #ffffff99; }
+            }
+            Rectangle { vertical-stretch: 1; background: transparent; }
+        }
+
+        Rectangle {
+            height: 62px;
+            background: #000000;
+            border-width: 1px;
+            border-color: #ffffff19;
+            HorizontalLayout {
+                padding: 12px;
+                spacing: 10px;
+                Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 999px;
+                    background: #111111;
+                    border-width: 1px;
+                    border-color: #ffffff33;
+                    Text { text: "OP"; color: #ffffffcc; font-family: DesignTokens.body-mono-font; font-size: 9px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 1px;
+                    Text { text: "OPERATOR_01"; color: #ffffff; font-family: DesignTokens.body-font; font-size: 11px; font-weight: 800; vertical-alignment: center; }
+                    HorizontalLayout {
+                        spacing: 5px;
+                        Rectangle { width: 6px; height: 6px; border-radius: 999px; background: #25a18e; }
+                        Text { text: "ACTIVE SESSION"; color: #25a18e; font-family: DesignTokens.body-font; font-size: 9px; font-weight: 700; vertical-alignment: center; }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component FilterChoice inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <string> filter-name;
+    in property <bool> selected: false;
+    in property <bool> enabled: true;
+    callback activated(name: string, value: string);
+
+    height: 28px;
+    background: selected ? #ff6b35 : #111111;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: selected ? #ff6b35 : #ffffff19;
+    opacity: root.enabled ? 1 : 0.42;
+
+    focus_scope := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.enabled;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.activated(root.filter-name, root.value);
+                accept
+            } else { reject }
+        }
+        Text {
+            text: root.label;
+            color: root.selected ? #ffffff : #ffffff99;
+            font-family: DesignTokens.body-font;
+            font-size: 9px;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        Rectangle {
+            x: 2px;
+            y: 2px;
+            width: parent.width - 4px;
+            height: parent.height - 4px;
+            border-radius: 6px;
+            border-width: focus_scope.has-focus ? 2px : 0px;
+            border-color: DesignTokens.focus;
+            background: transparent;
+        }
+        TouchArea {
+            enabled: root.enabled;
+            clicked => { focus_scope.focus(); root.activated(root.filter-name, root.value); }
+        }
+    }
+}
+
+component FilterSectionTitle inherits Text {
+    color: #ffffff66;
+    font-family: DesignTokens.body-font;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.8px;
+    vertical-alignment: center;
+}
+
+component FilterRange inherits Rectangle {
+    in property <bool> enabled: true;
+    in property <string> title;
+    in property <string> filter-name;
+    in property <string> value-prefix: "";
+    in property <string> unit;
+    in property <int> value;
+    in property <int> minimum;
+    in property <int> maximum;
+    in property <int> step;
+    in property <color> tint;
+    in property <string> min-label;
+    in property <string> max-label;
+    in property <bool> show-endpoints: true;
+    callback changed(value: int);
+
+    height: root.show-endpoints ? 54px : 34px;
+    background: transparent;
+    opacity: root.enabled ? 1 : 0.42;
+
+    VerticalLayout {
+        spacing: 4px;
+        HorizontalLayout {
+            FilterSectionTitle { text: root.enabled ? root.title : root.title + " · UNAVAILABLE"; horizontal-stretch: 1; }
+            Text {
+                text: root.value-prefix + root.value + root.unit;
+                color: root.tint;
+                font-family: DesignTokens.body-mono-font;
+                font-size: 10px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+        }
+        focus_scope := FocusScope {
+            height: 14px;
+            enabled: root.enabled;
+            focus-on-tab-navigation: true;
+            key-pressed(event) => {
+                if (event.text == Key.LeftArrow) {
+                    root.changed(root.value - root.step < root.minimum ? root.minimum : root.value - root.step);
+                    accept
+                } else if (event.text == Key.RightArrow) {
+                    root.changed(root.value + root.step > root.maximum ? root.maximum : root.value + root.step);
+                    accept
+                } else { reject }
+            }
+            Rectangle {
+                y: 4px;
+                width: parent.width;
+                height: 6px;
+                border-radius: 999px;
+                background: #111111;
+                Rectangle {
+                    width: parent.width * (root.value - root.minimum) / (root.maximum - root.minimum);
+                    height: parent.height;
+                    border-radius: 999px;
+                    background: root.tint;
+                }
+            }
+            Rectangle {
+                x: max(0px, min(parent.width - 12px,
+                    parent.width * (root.value - root.minimum) / (root.maximum - root.minimum) - 6px));
+                y: 1px;
+                width: 12px;
+                height: 12px;
+                border-radius: 999px;
+                border-width: 1px;
+                border-color: #ffffff33;
+                background: root.tint;
+            }
+            Rectangle {
+                x: 1px;
+                y: 1px;
+                width: parent.width - 2px;
+                height: parent.height - 2px;
+                border-radius: 5px;
+                border-width: focus_scope.has-focus ? 2px : 0px;
+                border-color: DesignTokens.focus;
+                background: transparent;
+            }
+            TouchArea {
+                enabled: root.enabled;
+                clicked => {
+                    focus_scope.focus();
+                    root.changed(root.value + root.step > root.maximum ? root.minimum : root.value + root.step);
+                }
+            }
+        }
+        if root.show-endpoints: HorizontalLayout {
+            Text { text: root.min-label; color: #ffffff66; font-family: DesignTokens.body-mono-font; font-size: 8px; horizontal-stretch: 1; }
+            Text { text: root.max-label; color: #ffffff66; font-family: DesignTokens.body-mono-font; font-size: 8px; horizontal-alignment: right; }
+        }
+    }
+}
+
+component FilterToggle inherits Rectangle {
+    in property <bool> enabled: true;
+    in property <string> label;
+    in property <string> filter-name;
+    in property <bool> checked: false;
+    callback toggled(name: string, value: string);
+
+    height: 28px;
+    background: transparent;
+    opacity: root.enabled ? 1 : 0.42;
+
+    focus_scope := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.enabled;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.toggled(root.filter-name, root.checked ? "false" : "true");
+                accept
+            } else { reject }
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            Rectangle {
+                width: 14px;
+                height: 14px;
+                border-radius: 3px;
+                background: root.checked ? #ff6b35 : #111111;
+                border-width: 1px;
+                border-color: root.checked ? #ff6b35 : #ffffff33;
+                Text { text: root.checked ? "✓" : ""; color: #ffffff; font-size: 10px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+            }
+            Text {
+                text: root.label;
+                color: #ffffffcc;
+                font-family: DesignTokens.body-font;
+                font-size: 10px;
+                font-weight: 700;
+                horizontal-stretch: 1;
+                vertical-alignment: center;
+            }
+        }
+        Rectangle {
+            x: 1px;
+            y: 1px;
+            width: parent.width - 2px;
+            height: parent.height - 2px;
+            border-radius: 5px;
+            border-width: focus_scope.has-focus ? 2px : 0px;
+            border-color: DesignTokens.focus;
+            background: transparent;
+        }
+        TouchArea {
+            enabled: root.enabled;
+            clicked => { focus_scope.focus(); root.toggled(root.filter-name, root.checked ? "false" : "true"); }
+        }
+    }
+}
+
+export component PhotoCullerProFilterSidebar inherits Rectangle {
+    in property <int> result-count: 1;
+    in property <[CameraFilterOption]> camera-options: [];
+    in property <bool> metadata-available: false;
+    callback filter-requested(name: string, value: string);
+
+    in-out property <string> cull-status: "all";
+    in-out property <int> max-iso: 12800;
+    in-out property <int> min-sharpness: 0;
+    in-out property <int> min-rating: 0;
+    in-out property <bool> raw-only: false;
+
+    width: 230px;
+    background: #050505;
+    border-width: 1px;
+    border-color: #ffffff19;
+
+    VerticalLayout {
+        spacing: 0px;
+        Rectangle {
+            height: 44px;
+            background: #111111;
+            border-width: 1px;
+            border-color: #ffffff19;
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 10px;
+                spacing: 8px;
+                Text { text: "F"; color: #ff6b35; font-family: DesignTokens.body-mono-font; font-size: 11px; font-weight: 800; vertical-alignment: center; }
+                Text { text: "FILTERS (" + root.result-count + ")"; color: #ffffff; font-family: DesignTokens.body-font; font-size: 10px; font-weight: 900; vertical-alignment: center; horizontal-stretch: 1; }
+                FocusScope {
+                    width: 46px;
+                    height: parent.height;
+                    focus-on-tab-navigation: true;
+                    key-pressed(event) => {
+                        if (event.text == Key.Return || event.text == " ") {
+                            root.cull-status = "all";
+                            root.max-iso = 12800;
+                            root.min-sharpness = 0;
+                            root.min-rating = 0;
+                            root.raw-only = false;
+                            root.filter-requested("reset", "");
+                            accept
+                        } else { reject }
+                    }
+                    Text { text: "↺ RESET"; color: #ff6b35; font-family: DesignTokens.body-font; font-size: 9px; font-weight: 700; horizontal-alignment: right; vertical-alignment: center; }
+                    Rectangle {
+                        x: 1px;
+                        y: 1px;
+                        width: parent.width - 2px;
+                        height: parent.height - 2px;
+                        border-radius: 4px;
+                        border-width: parent.has-focus ? 2px : 0px;
+                        border-color: DesignTokens.focus;
+                        background: transparent;
+                    }
+                    TouchArea {
+                        clicked => {
+                            root.cull-status = "all";
+                            root.max-iso = 12800;
+                            root.min-sharpness = 0;
+                            root.min-rating = 0;
+                            root.raw-only = false;
+                            parent.focus();
+                            root.filter-requested("reset", "");
+                        }
+                    }
+                }
+            }
+        }
+
+        ScrollView {
+            vertical-stretch: 1;
+            VerticalLayout {
+                vertical-stretch: 0;
+                alignment: start;
+                padding: 12px;
+                spacing: 20px;
+
+                VerticalLayout {
+                    vertical-stretch: 0;
+                    alignment: start;
+                    spacing: 7px;
+                    FilterSectionTitle { text: "CULL DECISION"; }
+                    GridLayout {
+                        spacing: 6px;
+                        FilterChoice { row: 0; col: 0; label: "ALL"; value: "all"; filter-name: "cull-status"; selected: root.cull-status == "all"; activated(name, value) => { root.cull-status = value; root.filter-requested(name, value); } }
+                        FilterChoice { row: 0; col: 1; label: "KEEP"; value: "keep"; filter-name: "cull-status"; selected: root.cull-status == "keep"; activated(name, value) => { root.cull-status = value; root.filter-requested(name, value); } }
+                        FilterChoice { row: 1; col: 0; label: "ALT"; value: "alt"; filter-name: "cull-status"; selected: root.cull-status == "alt"; activated(name, value) => { root.cull-status = value; root.filter-requested(name, value); } }
+                        FilterChoice { row: 1; col: 1; label: "REJECT"; value: "reject"; filter-name: "cull-status"; selected: root.cull-status == "reject"; activated(name, value) => { root.cull-status = value; root.filter-requested(name, value); } }
+                        FilterChoice { row: 2; col: 0; label: "UNRATED"; value: "unrated"; filter-name: "cull-status"; selected: root.cull-status == "unrated"; activated(name, value) => { root.cull-status = value; root.filter-requested(name, value); } }
+                    }
+                }
+
+                VerticalLayout {
+                    vertical-stretch: 0;
+                    alignment: start;
+                    spacing: 6px;
+                    FilterSectionTitle { text: "CAMERA BODY"; }
+                    if root.camera-options.length == 0: Text {
+                        text: root.metadata-available ? "NO CAMERA VALUES" : "CAMERA FILTER · UNAVAILABLE";
+                        color: #ffffff66;
+                        font-family: DesignTokens.body-mono-font;
+                        font-size: 8px;
+                        vertical-alignment: center;
+                    }
+                    for option[index] in root.camera-options: FilterToggle {
+                        label: option.label;
+                        filter-name: "camera-body";
+                        checked: option.selected;
+                        enabled: root.metadata-available;
+                        toggled(name, value) => { root.filter-requested(name, option.label); }
+                    }
+                }
+
+                FilterRange {
+                    title: "ISO THRESHOLD";
+                    enabled: root.metadata-available;
+                    filter-name: "max-iso";
+                    value-prefix: "≤ ";
+                    value: root.max-iso;
+                    minimum: 100;
+                    maximum: 12800;
+                    step: 100;
+                    unit: "";
+                    tint: #ff6b35;
+                    min-label: "ISO 100";
+                    max-label: "ISO 12800+";
+                    changed(value) => { root.max-iso = value; root.filter-requested("max-iso", "" + value); }
+                }
+
+                FilterRange {
+                    title: "MIN SHARPNESS";
+                    enabled: root.metadata-available;
+                    show-endpoints: false;
+                    filter-name: "min-sharpness";
+                    value: root.min-sharpness;
+                    minimum: 0;
+                    maximum: 95;
+                    step: 5;
+                    unit: "%";
+                    tint: #25a18e;
+                    min-label: "0%";
+                    max-label: "95%";
+                    changed(value) => { root.min-sharpness = value; root.filter-requested("min-sharpness", "" + value); }
+                }
+
+                VerticalLayout {
+                    vertical-stretch: 0;
+                    alignment: start;
+                    spacing: 7px;
+                    FilterSectionTitle { text: root.metadata-available ? "MIN STAR RATING" : "MIN STAR RATING · UNAVAILABLE"; }
+                    HorizontalLayout {
+                        spacing: 4px;
+                        FilterChoice { width: 30px; label: "ANY"; value: "0"; filter-name: "min-rating"; selected: root.min-rating == 0; enabled: root.metadata-available; activated(name, value) => { root.min-rating = 0; root.filter-requested(name, value); } }
+                        FilterChoice { width: 30px; label: "1"; value: "1"; filter-name: "min-rating"; selected: root.min-rating == 1; enabled: root.metadata-available; activated(name, value) => { root.min-rating = 1; root.filter-requested(name, value); } }
+                        FilterChoice { width: 30px; label: "2"; value: "2"; filter-name: "min-rating"; selected: root.min-rating == 2; enabled: root.metadata-available; activated(name, value) => { root.min-rating = 2; root.filter-requested(name, value); } }
+                        FilterChoice { width: 30px; label: "3"; value: "3"; filter-name: "min-rating"; selected: root.min-rating == 3; enabled: root.metadata-available; activated(name, value) => { root.min-rating = 3; root.filter-requested(name, value); } }
+                        FilterChoice { width: 30px; label: "4"; value: "4"; filter-name: "min-rating"; selected: root.min-rating == 4; enabled: root.metadata-available; activated(name, value) => { root.min-rating = 4; root.filter-requested(name, value); } }
+                        FilterChoice { width: 30px; label: "5"; value: "5"; filter-name: "min-rating"; selected: root.min-rating == 5; enabled: root.metadata-available; activated(name, value) => { root.min-rating = 5; root.filter-requested(name, value); } }
+                    }
+                }
+
+                FilterToggle {
+                    label: root.metadata-available ? "RAW FORMATS ONLY" : "RAW FORMATS ONLY · UNAVAILABLE";
+                    filter-name: "raw-only";
+                    checked: root.raw-only;
+                    enabled: root.metadata-available;
+                    toggled(name, value) => { root.raw-only = value == "true"; root.filter-requested(name, value); }
+                }
+            }
+        }
+    }
+}

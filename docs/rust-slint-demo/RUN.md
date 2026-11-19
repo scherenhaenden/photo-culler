@@ -50,6 +50,21 @@ después termina y recoge el proceso si no salió. Los errores de carga se
 presentan fuera del canvas y los detalles operativos están en stderr. Conserva
 stdout, stderr, la versión del browser y la URL al registrar una ejecución.
 
+## Capturar Library en dos tamaños
+
+`ui/library/capture_smoke.mjs` abre el servidor Axum local con el bundle WASM
+real y activa el fixture solo mediante `?photo-culler-smoke=1`. Requiere Node.js
+y Playwright 1.51.1. El comando reproducible y sus precondiciones están en
+[`BUILDS.md`](../BUILDS.md#reproduce-the-paired-s05-browser-captures). El script
+comprueba el tamaño CSS y backing store del canvas, la miniatura REST, la
+selección inicial y las dimensiones/hash de cada PNG.
+
+Las capturas pareadas y su manifest están en
+[`evidence/design`](evidence/design/README.md). El fixture tiene diez registros
+con metadatos sintéticos y repite un JPEG; no representa datos EXIF reales. La
+captura WASM tampoco prueba el renderizador ni el ciclo de vida de una ventana
+nativa.
+
 ## Verificar procesos y Python
 
 Tras arrancar el paquete, identifica el PID del servidor (`pgrep -f
@@ -65,6 +80,38 @@ intérprete Python. Registra el PID, árbol, binario, versión y resultado. La
 prueba no declara aceptación visual: D24/D25 registran Chromium/Firefox y D34
 repite ambos sobre el bundle real, con MIME y miniatura.
 
-El runner actual no tiene aún los binarios Slint/servidor del sprint. D34 debe
-copiar esos artefactos a un directorio temporal, ejecutar este protocolo y
-publicar el resultado real. Un build manifestado no cuenta como arranque.
+## Evidencia CI vigente
+
+La aceptación final [#44546749693](https://github.com/scherenhaenden/photo-culler/actions/runs/44546749693)
+pasó sus seis jobs en el head `68959bf702c554839b720d80fd51bfbad6824317`, basado
+en diseño `afe088242bdcf173eb8e83c9571bf598f52c4e86` y docs `51deca2`. Verificó
+contratos y staging, Linux x86-64, macOS arm64, Windows x86-64, WASM y
+Chromium/Firefox. En cada desktop runner ejecutó el flujo live de una foto, una
+captura separada del fixture de diez tarjetas, cierre/reapertura con liberación
+del puerto propio y supervivencia del servidor externo. Los hashes de las
+capturas nativas y los digests de artifacts están en
+[`evidence/design`](evidence/design/README.md) y [BUILDS.md](../BUILDS.md).
+
+Descarga local de toda la evidencia:
+
+```sh
+gh run download 44546749693 --repo scherenhaenden/photo-culler --dir ./artifacts/run-44546749693
+```
+
+El runner Windows captura el marco DWM visible a 1442×932; el tamaño real de la
+ventana se mantiene en 1456×939 y el recorte excluye taskbar y escritorio. El
+workflow usa `winit-software` en Windows alojado porque el runner no dispone de
+OpenGL 2.0 fiable; los paquetes normales conservan la selección estándar del
+renderizador.
+
+La corrida anterior [#44508069950](https://github.com/scherenhaenden/photo-culler/actions/runs/44508069950)
+validó una revisión anterior del diseño (`14a4a6fc3371ee5d7ebc8fc3c303e2d7bfa93ceb`).
+Sigue como evidencia histórica del build y browser flow; la evidencia nativa
+vigente es #44546749693.
+
+El código final del PR de diseño #154 es `afe088242bdcf173eb8e83c9571bf598f52c4e86`.
+En ese SHA pasaron localmente 33 pruebas Slint (una ignorada), 8 contratos de
+paridad, checks nativo/WASM y la captura browser de ambas dimensiones. El CI de
+ese SHA todavía no aparecía al cerrar la captura. Revisa el manifest y los
+límites exactos de esa evidencia en [`evidence/design`](evidence/design/README.md);
+no la presentes como una ventana desktop aceptada.
