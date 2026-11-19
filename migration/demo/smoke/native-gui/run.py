@@ -276,13 +276,13 @@ def owned_run(platform_name, desktop, out, label, screenshot=False):
                 if wid.get("dpi_awareness") != "thread-per-monitor-v2":
                     raise RuntimeError(f"Windows capture did not report per-monitor DPI awareness: {wid}")
                 physical_bounds = wid["window_bounds"]
-                screen_bounds = wid["virtual_screen_bounds"]
+                screen_bounds = wid["physical_screen_bounds"]
                 expected_dimensions = wid["screenshot_dimensions"]
                 if dimensions != tuple(expected_dimensions):
                     raise RuntimeError(f"Windows screenshot dimensions {dimensions} differ from window bounds {expected_dimensions}")
                 if (physical_bounds[0] < screen_bounds[0] or physical_bounds[1] < screen_bounds[1]
                         or physical_bounds[2] > screen_bounds[2] or physical_bounds[3] > screen_bounds[3]):
-                    raise RuntimeError(f"Windows window bounds exceed virtual-screen bounds: {wid}")
+                    raise RuntimeError(f"Windows window bounds exceed physical-screen bounds: {wid}")
             if platform_name == "linux":
                 geometry = wid["geometry"]
                 if dimensions != (geometry.get("width"), geometry.get("height")):

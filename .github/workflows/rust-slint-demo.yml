@@ -131,6 +131,13 @@ jobs:
           --desktop "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-desktop"
           --server "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-server"
           --output "$GITHUB_WORKSPACE/artifacts/native-gui/${{ matrix.key }}"
+      - name: Set hosted Windows display resolution for GUI smoke
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command Set-DisplayResolution -ErrorAction SilentlyContinue)) { throw 'Set-DisplayResolution is unavailable on this hosted Windows runner' }
+          Set-DisplayResolution -Width 1920 -Height 1080 -Force
+          Start-Sleep -Seconds 2
       - name: Run packaged Windows Slint desktop smoke
         if: runner.os == 'Windows'
         shell: pwsh
@@ -232,7 +239,15 @@ jobs:
       - name: Install pinned browser test runner
         run: npm install --no-save --package-lock=false playwright@1.51.1
       - name: Install Chromium and Firefox
-        run: npx playwright install --with-deps chromium firefox
+        run: |
+          for attempt in 1 2 3; do
+            if npx playwright install --with-deps chromium firefox; then
+              exit 0
+            fi
+            echo "Playwright browser dependency install attempt $attempt failed; retrying."
+            sleep $((attempt * 10))
+          done
+          exit 1
       - name: Run Chromium with real Axum and WASM artifacts
         env:
           PHOTO_CULLER_SERVER: ${{ github.workspace }}/rust/target/release/photo-culler-server
