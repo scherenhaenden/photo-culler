@@ -241,6 +241,7 @@ jobs:
           test -f migration/demo/smoke/firefox/smoke.mjs
           test -f migration/demo/smoke/ui-states/README.md
           test -f migration/demo/smoke/ui-states/smoke.mjs
+          test -f rust/apps/photo-culler-slint/ui/library/capture_smoke.mjs
           test -f migration/demo/smoke/live-smoke.mjs
       - name: Install pinned browser test runner
         run: npm install --no-save --package-lock=false playwright@1.51.1
@@ -268,6 +269,12 @@ jobs:
           PHOTO_CULLER_WEB_ROOT: ${{ github.workspace }}/artifacts/wasm32/bundle
           PHOTO_CULLER_UI_STATES_CAPTURE_DIR: ${{ github.workspace }}/artifacts/ui-states/chromium
         run: node migration/demo/smoke/ui-states/smoke.mjs chromium
+      - name: Capture current S05 Pro Library design at both reference viewports
+        env:
+          PHOTO_CULLER_SERVER: ${{ github.workspace }}/rust/target/release/photo-culler-server
+          PHOTO_CULLER_WEB_ROOT: ${{ github.workspace }}/artifacts/wasm32/bundle
+          PHOTO_CULLER_GALLERY_CAPTURE_DIR: ${{ github.workspace }}/artifacts/s05-gallery
+        run: node rust/apps/photo-culler-slint/ui/library/capture_smoke.mjs
       - name: Run Firefox with real Axum and WASM artifacts
         env:
           PHOTO_CULLER_SERVER: ${{ github.workspace }}/rust/target/release/photo-culler-server
@@ -289,4 +296,5 @@ jobs:
           path: |
             artifacts/browser-smoke/
             artifacts/ui-states/
+            artifacts/s05-gallery/
           if-no-files-found: warn
