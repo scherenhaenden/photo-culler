@@ -116,7 +116,11 @@ def gallery_fixture_pixels(path):
     pixels = zlib.decompress(compressed)
     if len(pixels) != height * (stride + 1):
         raise RuntimeError(f"unexpected decoded PNG size in screenshot: {path}")
-    gallery_left, gallery_top = int(width * 0.30), int(height * 0.18)
+    # The first fixture thumbnail occupies the central upper gallery viewport.
+    # Keep the ROI away from panel controls and the desktop strip that can show
+    # through the hosted Windows window's transparent outer pixels.
+    gallery_left, gallery_top = int(width * 0.36), int(height * 0.12)
+    gallery_right, gallery_bottom = int(width * 0.75), int(height * 0.45)
     yellow_sun = blue_sky = 0
     yellow_bounds = [width, height, -1, -1]
     blue_bounds = [width, height, -1, -1]
@@ -151,8 +155,8 @@ def gallery_fixture_pixels(path):
         elif filter_type != 0:
             raise RuntimeError(f"unknown PNG row filter {filter_type} in screenshot: {path}")
 
-        if y >= gallery_top:
-            for x in range(gallery_left, width):
+        if gallery_top <= y < gallery_bottom:
+            for x in range(gallery_left, gallery_right):
                 index = x * channels
                 red, green, blue = scanline[index:index + 3]
                 alpha = scanline[index + 3] if channels == 4 else 255
@@ -174,7 +178,7 @@ def gallery_fixture_pixels(path):
     )
     return {
         "dimensions": [width, height],
-        "gallery_region_origin": [gallery_left, gallery_top],
+        "gallery_region": [gallery_left, gallery_top, gallery_right, gallery_bottom],
         "yellow_sun_pixels": yellow_sun,
         "blue_sky_pixels": blue_sky,
         "yellow_pixel_bounds": yellow_pixel_bounds,
