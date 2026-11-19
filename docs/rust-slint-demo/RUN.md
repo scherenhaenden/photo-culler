@@ -50,6 +50,21 @@ después termina y recoge el proceso si no salió. Los errores de carga se
 presentan fuera del canvas y los detalles operativos están en stderr. Conserva
 stdout, stderr, la versión del browser y la URL al registrar una ejecución.
 
+## Capturar Library en dos tamaños
+
+`ui/library/capture_smoke.mjs` abre el servidor Axum local con el bundle WASM
+real y activa el fixture solo mediante `?photo-culler-smoke=1`. Requiere Node.js
+y Playwright 1.51.1. El comando reproducible y sus precondiciones están en
+[`BUILDS.md`](../BUILDS.md#reproduce-the-paired-s05-browser-captures). El script
+comprueba el tamaño CSS y backing store del canvas, la miniatura REST, la
+selección inicial y las dimensiones/hash de cada PNG.
+
+Las capturas pareadas y su manifest están en
+[`evidence/design`](evidence/design/README.md). El fixture tiene diez registros
+con metadatos sintéticos y repite un JPEG; no representa datos EXIF reales. La
+captura WASM tampoco prueba el renderizador ni el ciclo de vida de una ventana
+nativa.
+
 ## Verificar procesos y Python
 
 Tras arrancar el paquete, identifica el PID del servidor (`pgrep -f
@@ -86,3 +101,10 @@ flujo WASM visible en Chromium/Firefox. Los manifests nativos aún dicen
 Slint de escritorio. Esa evidencia debe completarse en la aceptación nativa;
 no interpretes un binario compilado o un servidor probado como ventana gráfica
 aceptada.
+
+El código final del PR de diseño #154 es `afe088242bdcf173eb8e83c9571bf598f52c4e86`.
+En ese SHA pasaron localmente 33 pruebas Slint (una ignorada), 8 contratos de
+paridad, checks nativo/WASM y la captura browser de ambas dimensiones. El CI de
+ese SHA todavía no aparecía al cerrar la captura. Revisa el manifest y los
+límites exactos de esa evidencia en [`evidence/design`](evidence/design/README.md);
+no la presentes como una ventana desktop aceptada.

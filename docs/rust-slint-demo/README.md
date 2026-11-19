@@ -4,6 +4,8 @@
 
 **Base actual del sprint:** `153d04920220fb0c396dca571620c0921052ab1b` en `feature/sprint-01-rust-foundation`. El candidato integra el servidor ejecutable, el cliente compartido, el launcher de escritorio, el arranque WASM, los componentes visuales y el workflow. La ejecución real de CI y la revisión de paridad con capturas siguen siendo gates de aceptación.
 
+**Diseño S05:** el PR [#154](https://github.com/scherenhaenden/photo-culler/pull/154) contiene el candidato Library en `afe088242bdcf173eb8e83c9571bf598f52c4e86`. En ese SHA pasaron localmente 33 pruebas del crate Slint (1 ignorada), 8 contratos de paridad, checks nativo/WASM y capturas de browser a 1440×900 y 1100×700. El CI de ese SHA y la ventana nativa siguen pendientes; las capturas pareadas, hashes y límites están en [evidencia visual S05](evidence/design/README.md).
+
 ## Resultado que se va a entregar
 
 Desde un checkout limpio, abrir la misma galería sintética con un JPEG y su miniatura en Slint nativo para macOS arm64, Linux x86-64 y Windows x86-64, y en Slint WASM servido junto con REST en Chromium y Firefox. El servidor y la lógica de aplicación de ambos clientes son Rust. En web, HTML y un cargador inicializan WASM. Los artefactos funcionan sin Python en ejecución.

@@ -10,6 +10,7 @@ ran or passed.
 
 | Date (UTC) | Commit | Platform / runner | Command | Result | Artifact / hash | Startup / product flow |
 |---|---|---|---|---|---|---|
+| 2026-11-19 | [`afe088242bdcf173eb8e83c9571bf598f52c4e86`](https://github.com/scherenhaenden/photo-culler/commit/afe088242bdcf173eb8e83c9571bf598f52c4e86) | Darwin 26.6.2 arm64, local host; Chromium 134.0.6998.35 | `cargo test --offline --locked -p photo-culler-slint --lib`; native and WASM `cargo check`; Python parity contract; Node capture smoke | 33 passed, 0 failed, 1 ignored; 8/8 parity assertions; native/WASM checks, formatting, syntax and diff checks passed. No Actions run was visible yet for this SHA. | Paired deterministic reference/candidate captures and SHA-256 manifest are committed in [`evidence/design`](rust-slint-demo/evidence/design/README.md). Candidate hashes: `a7ae64afa5b73abda9e0e4b4e96e2cfd2f23d062f664ad66bf11ff1ea6847714` (1440×900), `d99f55a69872fc0b8ec96046313dd70f34b66c0374467a8c1461c9759dab8b2f` (1100×700). | The Slint WASM screen rendered ten smoke records at 5×2 and 4×3 layouts. All records reuse one bundled JPEG and explicit synthetic metadata. This is not native-window evidence. |
 | 2026-11-19 | [`14a4a6fc3371ee5d7ebc8fc3c303e2d7bfa93ceb`](https://github.com/scherenhaenden/photo-culler/commit/14a4a6fc3371ee5d7ebc8fc3c303e2d7bfa93ceb) | GitHub Actions `ubuntu-24.04`, `macos-15`, `windows-2025` | [Rust Slint demo artifacts #44508069950](https://github.com/scherenhaenden/photo-culler/actions/runs/44508069950), workflow dispatch on `feature/sprint-01-photo-culler-pro-design` | All 6 jobs passed: staging contracts, Linux, macOS arm64, Windows x86-64, WASM, Chromium/Firefox. | Five artifacts; GitHub SHA-256 digests and binary hashes are listed below. | Native packages build/stage and the owned server child starts, serves gallery/JPEG and exits in lifecycle tests. Native `runtime_smoke` remains `not_run`; no packaged Slint window was opened. Chromium and Firefox ran the actual Axum+WASM Library flow and produced reviewed 1440×900 screenshots. |
 | 2026-11-19 | [`202baa2c3efb8a4fa81a20d02c06af6322da1bc4`](https://github.com/scherenhaenden/photo-culler/commit/202baa2c3efb8a4fa81a20d02c06af6322da1bc4) | Darwin 26.6.2 arm64, local host | `cargo test --offline --locked --manifest-path rust/Cargo.toml -p photo-culler-server --test s01_runtime` | 4 passed, 0 failed. | Local test binary only; no package artifact created. | Health, gallery, JPEG, allowlisted bundle/MIME and standalone/owned shutdown tests ran. This is API/process evidence, not native GUI evidence. |
 | 2026-11-19 | [`98d9b6af7ac31dd807ddf1a4d204dae0df07a212`](https://github.com/scherenhaenden/photo-culler/commit/98d9b6af7ac31dd807ddf1a4d204dae0df07a212) | Darwin 26.6.2 arm64, local host | `cargo test --offline --locked --manifest-path rust/Cargo.toml -p photo-culler-slint --lib` | 26 passed, 0 failed, 1 ignored (the ignored test requires a staged server executable). | Local test binary only; no package artifact created. | Controller loading/ready/empty/error/retry and native transport/owned-server behaviors passed; this is not a GUI capture. |
@@ -60,3 +61,22 @@ record stdout/stderr or a durable CI URL; and compute SHA-256 from the output
 artifact. Mark smoke test and complete product flow separately, with the
 fixture/catalog identity and original-file integrity result. A failed or
 skipped run should keep its actual exit status and reason.
+
+## Reproduce the paired S05 browser captures
+
+The capture script requires a built `photo-culler-server`, staged WASM bundle,
+Node.js, and Playwright 1.51.1. From the repository root:
+
+```sh
+npm install --no-save --package-lock=false playwright@1.51.1
+PHOTO_CULLER_SERVER=rust/target/release/photo-culler-server \
+PHOTO_CULLER_WEB_ROOT=artifacts/wasm32/bundle \
+PHOTO_CULLER_GALLERY_CAPTURE_DIR=artifacts/s05-gallery \
+node rust/apps/photo-culler-slint/ui/library/capture_smoke.mjs
+```
+
+The script opens the local Rust server, loads `?photo-culler-smoke=1`, verifies
+that the Slint canvas follows 1440×900 and 1100×700 CSS and backing-store
+dimensions, checks the REST JPEG hash, and writes both PNGs plus a JSON
+manifest. The fixture's ten records have synthetic metadata and repeat one
+image; this is not real-catalogue, native-window, or full-product acceptance.

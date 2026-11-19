@@ -1,0 +1,60 @@
+{
+  "reference_source": {
+    "archive": "photo_culler_pro.zip",
+    "archive_sha256": "66b06c65a453182dc0bfcf24efa07460255d0a914b5a606b5fafeb990e8f59c7",
+    "reference_method": "Original Photo Culler Pro Vite/React source rendered from a temporary extracted copy. Only remote photo URLs were replaced in that temporary copy with the bundled demo JPEG so both renders use identical pixels.",
+    "fixture_jpeg_sha256": "cc20c24844d2fc6fca729fcb66cfe661960f7b56be41a3dd462a0f1b22cfb4f2"
+  },
+  "candidate": {
+    "commit": "afe088242bdcf173eb8e83c9571bf598f52c4e86",
+    "surface": "Photo Culler Slint WebAssembly served by the local Rust Axum server",
+    "mode": "explicit browser smoke fixture (?photo-culler-smoke=1)",
+    "browser": "Chromium 134.0.6998.35",
+    "synthetic_metadata": true,
+    "fixture_photo_count": 10,
+    "selected_fixture": "photo-01",
+    "fixture_jpeg_sha256": "cc20c24844d2fc6fca729fcb66cfe661960f7b56be41a3dd462a0f1b22cfb4f2",
+    "capture_manifest_path": "candidate/capture-manifest.json",
+    "capture_manifest_sha256": "2345323b0ac51f51be5fecc7eeab5e7764ac3ae9e051e3eef0119075ec533900"
+  },
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 900,
+      "columns": 5,
+      "rows": 2,
+      "reference": {
+        "path": "reference/pro-library-1440x900.png",
+        "sha256": "b4ae08b31fd428352a01757f8c082b7240138f8e5a15fd63ff6ff7d0750a1942"
+      },
+      "candidate": {
+        "path": "candidate/pro-library-1440x900.png",
+        "sha256": "a7ae64afa5b73abda9e0e4b4e96e2cfd2f23d062f664ad66bf11ff1ea6847714",
+        "css_viewport": [1440, 900],
+        "canvas_backing_size": [1440, 900]
+      }
+    },
+    {
+      "width": 1100,
+      "height": 700,
+      "columns": 4,
+      "rows": 3,
+      "reference": {
+        "path": "reference/pro-library-1100x700.png",
+        "sha256": "1b43e4312ded629e3cd0f933bc76e36702daaba660749461bd961ac0484bf46d"
+      },
+      "candidate": {
+        "path": "candidate/pro-library-1100x700.png",
+        "sha256": "d99f55a69872fc0b8ec96046313dd70f34b66c0374467a8c1461c9759dab8b2f",
+        "css_viewport": [1100, 700],
+        "canvas_backing_size": [1100, 700]
+      }
+    }
+  ],
+  "acceptance_boundary": {
+    "browser_capture_is_native_gui_evidence": false,
+    "native_window_capture": "pending S07 hosted acceptance",
+    "photo_content_is_synthetic": true,
+    "full_application_screens_are_in_scope": false
+  }
+}
