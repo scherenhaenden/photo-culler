@@ -65,6 +65,24 @@ intérprete Python. Registra el PID, árbol, binario, versión y resultado. La
 prueba no declara aceptación visual: D24/D25 registran Chromium/Firefox y D34
 repite ambos sobre el bundle real, con MIME y miniatura.
 
-El runner actual no tiene aún los binarios Slint/servidor del sprint. D34 debe
-copiar esos artefactos a un directorio temporal, ejecutar este protocolo y
-publicar el resultado real. Un build manifestado no cuenta como arranque.
+## Evidencia CI vigente
+
+La [corrida #44508069950](https://github.com/scherenhaenden/photo-culler/actions/runs/44508069950)
+validó el código de diseño `14a4a6fc3371ee5d7ebc8fc3c303e2d7bfa93ceb` el
+2026-11-19. Pasaron staging contracts, build/staging Linux x86-64, macOS arm64,
+Windows x86-64, WASM y los flujos reales de Chromium/Firefox. El run conserva
+los cinco artefactos con sus manifests/checksums; los nombres, SHA-256 y estado
+de runtime están en [BUILDS.md](../BUILDS.md).
+
+Descarga local de toda la evidencia:
+
+```sh
+gh run download 44508069950 --repo scherenhaenden/photo-culler --dir ./artifacts/run-44508069950
+```
+
+Este run prueba el arranque/parada del hijo servidor en los tres runners y el
+flujo WASM visible en Chromium/Firefox. Los manifests nativos aún dicen
+`runtime_smoke: not_run`: el workflow todavía no abre ni captura la ventana
+Slint de escritorio. Esa evidencia debe completarse en la aceptación nativa;
+no interpretes un binario compilado o un servidor probado como ventana gráfica
+aceptada.

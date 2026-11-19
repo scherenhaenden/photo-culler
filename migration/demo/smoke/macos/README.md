@@ -15,14 +15,16 @@ window opened or rendered correctly.
 4. Close the window normally. Record that the owned child exited and the port
    stopped accepting connections. Reopen the app and repeat health/gallery
    checks; capture a second screenshot.
-5. Start a separate external demo server on another loopback port, connect to
-   it using the app's explicit external-service option, then close the window.
+5. Start a separate external demo server on another loopback port, launch the
+   app with `PHOTO_CULLER_API_ORIGIN=http://127.0.0.1:<external-port>`, then
+   close the window.
    Verify that the external server PID remains alive and that its health URL
    still responds. Stop that service manually after the check.
 
-Fill in `evidence.txt` for each run. If the UI has no external-service option
-or no way to display the assigned origin yet, mark that step blocked and name
-the missing integration; do not substitute a build result for a UI check.
+Fill in `evidence.txt` for each run. External-service selection is currently
+an environment override, not an in-window option, and the assigned origin is
+not displayed in the UI. Record both limits; do not substitute a build result
+for a UI check.
 
 ## API probe
 
