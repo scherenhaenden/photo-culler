@@ -61,9 +61,11 @@ try {
       { timeout: 45_000 },
     );
     await page.goto(`${origin}/?photo-culler-smoke=1`, { waitUntil: "domcontentloaded" });
-    const thumbnailResponse = await thumbnailResponsePromise;
-    assert.equal(thumbnailResponse.status(), 200, "the fixture thumbnail route must return HTTP 200");
-    const thumbnailHash = createHash("sha256").update(await thumbnailResponse.body()).digest("hex");
+    const applicationThumbnailResponse = await thumbnailResponsePromise;
+    assert.equal(applicationThumbnailResponse.status(), 200, "the application thumbnail route must return HTTP 200");
+    const fixtureResponse = await page.request.get(new URL(THUMBNAIL_PATH, origin).toString());
+    assert.equal(fixtureResponse.status(), 200, "the same-origin fixture route must return HTTP 200");
+    const thumbnailHash = createHash("sha256").update(await fixtureResponse.body()).digest("hex");
     await page.waitForFunction(
       () => document.documentElement.dataset.photoCullerState === "ready",
       undefined,

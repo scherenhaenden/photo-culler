@@ -115,6 +115,10 @@ class GalleryParityTests(unittest.TestCase):
         self.assertIn('DisabledAction { label: "ALT";', GALLERY)
         self.assertIn('DisabledAction { label: "REJECT";', GALLERY)
 
+    def test_card_selection_is_rendered_from_the_adapter_selection_set(self):
+        self.assertIn("selected: photo.selected;", GALLERY)
+        self.assertNotIn("photo.selected || photo.id == root.selected-id", GALLERY)
+
     def test_root_preserves_existing_runtime_contract_and_connects_new_state(self):
         for contract in (
             "in property <int> view-state:",

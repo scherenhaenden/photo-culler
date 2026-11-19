@@ -472,7 +472,7 @@ export component LibraryGallery inherits Rectangle {
                     row: index / root.grid-columns;
                     col: Math.mod(index, root.grid-columns);
                     photo: photo;
-                    selected: photo.selected || photo.id == root.selected-id;
+                    selected: photo.selected;
                     web-layout: root.web-layout;
                     search-query: root.search-query;
                     card-width: root.card-width;
