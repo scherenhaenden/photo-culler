@@ -140,81 +140,121 @@ impl Catalog {
     /// Reads all components from one consistent snapshot.
     pub async fn get(&self, photo_id: &str) -> Result<Option<Photo>, sqlx::Error> {
         let mut tx = self.readers.begin().await?;
-        let row =
-            sqlx::query("SELECT id, photo_id, gallery_id, stem_name, perceptual_hash, session_id, burst_id, decision, score, quality_tier, analysis_summary_json, created_at FROM photos WHERE photo_id = ?")
-                .bind(photo_id)
-                .fetch_optional(&mut *tx)
-                .await?;
-        let Some(row) = row else {
-            tx.commit().await?;
-            return Ok(None);
-        };
-        let id: i64 = row.try_get("id")?;
-        let files = sqlx::query("SELECT volume_id, import_source_id, last_seen_revision_id, relative_path, source_relative_path, status, role, size_bytes, modified_time, quick_hash, full_hash FROM files WHERE photo_id = ? ORDER BY id")
-            .bind(id)
-            .fetch_all(&mut *tx)
-            .await?
-            .into_iter()
-            .map(|r| Ok(File {
-                volume_id: r.try_get("volume_id")?,
-                import_source_id: r.try_get("import_source_id")?,
-                last_seen_revision_id: r.try_get("last_seen_revision_id")?,
-                relative_path: r.try_get("relative_path")?,
-                source_relative_path: r.try_get("source_relative_path")?,
-                status: r.try_get("status")?,
-                role: r.try_get("role")?,
-                size_bytes: r.try_get("size_bytes")?,
-                modified_time: r.try_get("modified_time")?,
-                quick_hash: r.try_get("quick_hash")?,
-                full_hash: r.try_get("full_hash")?,
-            }))
-            .collect::<Result<Vec<_>, sqlx::Error>>()?;
-        let metadata =
-            sqlx::query("SELECT capture_time, subsecond, camera_make, camera_model, serial_number, lens, iso, aperture, shutter_speed, focal_length, orientation, latitude, longitude FROM metadata WHERE photo_id = ?")
-                .bind(id)
-                .fetch_optional(&mut *tx)
-                .await?
-                .map(|r| {
-                    Ok::<Metadata, sqlx::Error>(Metadata {
-                        capture_time: r.try_get("capture_time")?,
-                        subsecond: r.try_get("subsecond")?,
-                        camera_make: r.try_get("camera_make")?,
-                        camera_model: r.try_get("camera_model")?,
-                        serial_number: r.try_get("serial_number")?,
-                        lens: r.try_get("lens")?,
-                        iso: r.try_get("iso")?,
-                        aperture: r.try_get("aperture")?,
-                        shutter_speed: r.try_get("shutter_speed")?,
-                        focal_length: r.try_get("focal_length")?,
-                        orientation: r.try_get("orientation")?,
-                        latitude: r.try_get("latitude")?,
-                        longitude: r.try_get("longitude")?,
-                    })
-                })
-                .transpose()?;
-        let result = Photo {
-            photo_id: row.try_get("photo_id")?,
-            gallery_id: row.try_get("gallery_id")?,
-            stem_name: row.try_get("stem_name")?,
-            perceptual_hash: row.try_get("perceptual_hash")?,
-            session_id: row.try_get("session_id")?,
-            burst_id: row.try_get("burst_id")?,
-            decision: row.try_get("decision")?,
-            score: row.try_get("score")?,
-            quality_tier: row.try_get("quality_tier")?,
-            analysis_summary_json: row.try_get("analysis_summary_json")?,
-            created_at: row.try_get("created_at")?,
-            files,
-            metadata,
-        };
+        let result = read_photo(&mut *tx, photo_id).await?;
         tx.commit().await?;
-        Ok(Some(result))
+        Ok(result)
+    }
+
+    /// Read a stable, photo-ID-ordered page and all of its child data from one snapshot.
+    pub async fn list_gallery(
+        &self,
+        gallery_id: &str,
+        after_id: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<Photo>, sqlx::Error> {
+        if !(1..=200).contains(&limit) {
+            return Err(sqlx::Error::Protocol(
+                "gallery page limit must be between 1 and 200".into(),
+            ));
+        }
+
+        let mut tx = self.readers.begin().await?;
+        let ids = sqlx::query_scalar::<_, String>(
+            "SELECT photo_id FROM photos WHERE gallery_id = ? AND (? IS NULL OR photo_id > ?) ORDER BY photo_id ASC LIMIT ?",
+        )
+        .bind(gallery_id)
+        .bind(after_id)
+        .bind(after_id)
+        .bind(limit as i64)
+        .fetch_all(&mut *tx)
+        .await?;
+
+        let mut photos = Vec::with_capacity(ids.len());
+        for id in ids {
+            let photo = read_photo(&mut *tx, &id).await?.ok_or_else(|| {
+                sqlx::Error::Protocol("photo disappeared inside a read snapshot".into())
+            })?;
+            photos.push(photo);
+        }
+        tx.commit().await?;
+        Ok(photos)
     }
     /// Stop accepting work and wait for all checked-out connections to return.
     pub async fn close(self) {
         self.readers.close().await;
         self.writer.close().await;
     }
+}
+
+async fn read_photo(
+    connection: &mut sqlx::SqliteConnection,
+    photo_id: &str,
+) -> Result<Option<Photo>, sqlx::Error> {
+    let row = sqlx::query("SELECT id, photo_id, gallery_id, stem_name, perceptual_hash, session_id, burst_id, decision, score, quality_tier, analysis_summary_json, created_at FROM photos WHERE photo_id = ?")
+        .bind(photo_id)
+        .fetch_optional(&mut *connection)
+        .await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let id: i64 = row.try_get("id")?;
+    let files = sqlx::query("SELECT volume_id, import_source_id, last_seen_revision_id, relative_path, source_relative_path, status, role, size_bytes, modified_time, quick_hash, full_hash FROM files WHERE photo_id = ? ORDER BY id")
+        .bind(id)
+        .fetch_all(&mut *connection)
+        .await?
+        .into_iter()
+        .map(|r| Ok(File {
+            volume_id: r.try_get("volume_id")?,
+            import_source_id: r.try_get("import_source_id")?,
+            last_seen_revision_id: r.try_get("last_seen_revision_id")?,
+            relative_path: r.try_get("relative_path")?,
+            source_relative_path: r.try_get("source_relative_path")?,
+            status: r.try_get("status")?,
+            role: r.try_get("role")?,
+            size_bytes: r.try_get("size_bytes")?,
+            modified_time: r.try_get("modified_time")?,
+            quick_hash: r.try_get("quick_hash")?,
+            full_hash: r.try_get("full_hash")?,
+        }))
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+    let metadata = sqlx::query("SELECT capture_time, subsecond, camera_make, camera_model, serial_number, lens, iso, aperture, shutter_speed, focal_length, orientation, latitude, longitude FROM metadata WHERE photo_id = ?")
+        .bind(id)
+        .fetch_optional(&mut *connection)
+        .await?
+        .map(|r| {
+            Ok::<Metadata, sqlx::Error>(Metadata {
+                capture_time: r.try_get("capture_time")?,
+                subsecond: r.try_get("subsecond")?,
+                camera_make: r.try_get("camera_make")?,
+                camera_model: r.try_get("camera_model")?,
+                serial_number: r.try_get("serial_number")?,
+                lens: r.try_get("lens")?,
+                iso: r.try_get("iso")?,
+                aperture: r.try_get("aperture")?,
+                shutter_speed: r.try_get("shutter_speed")?,
+                focal_length: r.try_get("focal_length")?,
+                orientation: r.try_get("orientation")?,
+                latitude: r.try_get("latitude")?,
+                longitude: r.try_get("longitude")?,
+            })
+        })
+        .transpose()?;
+
+    Ok(Some(Photo {
+        photo_id: row.try_get("photo_id")?,
+        gallery_id: row.try_get("gallery_id")?,
+        stem_name: row.try_get("stem_name")?,
+        perceptual_hash: row.try_get("perceptual_hash")?,
+        session_id: row.try_get("session_id")?,
+        burst_id: row.try_get("burst_id")?,
+        decision: row.try_get("decision")?,
+        score: row.try_get("score")?,
+        quality_tier: row.try_get("quality_tier")?,
+        analysis_summary_json: row.try_get("analysis_summary_json")?,
+        created_at: row.try_get("created_at")?,
+        files,
+        metadata,
+    }))
 }
 
 #[cfg(test)]
