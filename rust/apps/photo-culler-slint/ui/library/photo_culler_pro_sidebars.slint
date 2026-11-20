@@ -563,7 +563,7 @@ export component PhotoCullerProFilterSidebar inherits Rectangle {
                 }
 
                 FilterRange {
-                    title: "ISO THRESHOLD";
+                    title: root.metadata-available ? "ISO THRESHOLD" : "ISO";
                     enabled: root.metadata-available;
                     filter-name: "max-iso";
                     value-prefix: "≤ ";

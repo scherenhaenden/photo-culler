@@ -7,7 +7,8 @@ use crate::demo::controller::{
 };
 use photo_culler_api::thumbnail_path;
 use photo_culler_client::demo::{
-    Decision, DemoClient as RestClient, DemoPhoto as RestPhoto, Representation, Transport,
+    ClientError, Decision, DemoClient as RestClient, DemoPhoto as RestPhoto, Representation,
+    Transport,
 };
 
 const DEMO_GALLERY: &str = "demo";
@@ -36,8 +37,12 @@ impl<T: Transport> ControllerClient for DemoRestClient<T> {
                 });
             }
 
-            self.inner.health().await.map_err(map_error)?;
-            let page = self.inner.gallery(gallery_id).await.map_err(map_error)?;
+            self.inner.health().await.map_err(map_client_error)?;
+            let page = self
+                .inner
+                .gallery(gallery_id)
+                .await
+                .map_err(map_client_error)?;
             if page.gallery_id != DEMO_GALLERY
                 || page.next_cursor.is_some()
                 || page.total != page.items.len() as u64
@@ -49,7 +54,9 @@ impl<T: Transport> ControllerClient for DemoRestClient<T> {
 
             for photo in &page.items {
                 let expected =
-                    thumbnail_path(&photo.photo_id, THUMBNAIL_EDGE).map_err(map_error)?;
+                    thumbnail_path(&photo.photo_id, THUMBNAIL_EDGE).map_err(|_| DemoError {
+                        message: "La ruta de la miniatura no es válida.".into(),
+                    })?;
                 if photo.thumbnail_url != expected {
                     return Err(DemoError {
                         message: "The service returned a non-canonical thumbnail route.".into(),
@@ -75,7 +82,10 @@ impl<T: Transport> ControllerClient for DemoRestClient<T> {
 
     fn thumbnail<'a>(&'a self, photo: &'a DemoPhoto) -> ThumbnailFuture<'a> {
         Box::pin(async move {
-            let expected = thumbnail_path(&photo.photo_id, THUMBNAIL_EDGE).map_err(map_error)?;
+            let expected =
+                thumbnail_path(&photo.photo_id, THUMBNAIL_EDGE).map_err(|_| DemoError {
+                    message: "La ruta de la miniatura no es válida.".into(),
+                })?;
             if photo.thumbnail_url != expected {
                 return Err(DemoError {
                     message: "The requested thumbnail route is invalid.".into(),
@@ -93,7 +103,10 @@ impl<T: Transport> ControllerClient for DemoRestClient<T> {
                 representation: Representation::Jpeg,
                 thumbnail_url: photo.thumbnail_url.clone(),
             };
-            self.inner.thumbnail(&rest_photo).await.map_err(map_error)
+            self.inner
+                .thumbnail(&rest_photo)
+                .await
+                .map_err(map_client_error)
         })
     }
 }
@@ -106,10 +119,35 @@ fn decision_name(decision: &Decision) -> &'static str {
     }
 }
 
-fn map_error(error: impl std::fmt::Debug) -> DemoError {
-    DemoError {
-        message: format!("{error:?}"),
-    }
+fn map_client_error(error: ClientError) -> DemoError {
+    let message = match error {
+        ClientError::Http { status, body } => {
+            let context = body.map(|body| match body.request_id {
+                Some(request_id) => format!("{} · {}", body.code, request_id),
+                None => body.code,
+            });
+            match context {
+                Some(context) => {
+                    format!("Falló la solicitud al servicio local (HTTP {status}; {context}).")
+                }
+                None => format!("Falló la solicitud al servicio local (HTTP {status})."),
+            }
+        }
+        ClientError::Transport(_) => "No se pudo conectar con el servicio local.".into(),
+        ClientError::Redirect { .. } | ClientError::Redirected => {
+            "El servicio local redirigió una solicitud inesperadamente.".into()
+        }
+        ClientError::InvalidMime { .. } => {
+            "El servicio local devolvió un formato de respuesta inesperado.".into()
+        }
+        ClientError::BodyTooLarge { .. } => {
+            "La respuesta del servicio local supera el tamaño permitido.".into()
+        }
+        ClientError::InvalidBody(_) | ClientError::UnsafePath => {
+            "El servicio local devolvió una respuesta no válida.".into()
+        }
+    };
+    DemoError { message }
 }
 
 #[cfg(test)]
@@ -158,6 +196,27 @@ mod tests {
             body: body.into(),
             redirected: false,
         }
+    }
+
+    #[test]
+    fn user_facing_http_error_keeps_safe_correlation_details() {
+        let error = ClientError::Http {
+            status: 503,
+            body: Some(photo_culler_client::demo::ApiErrorBody {
+                code: "service_unavailable".into(),
+                message: "internal path /private/catalog.db".into(),
+                request_id: Some("req-123".into()),
+            }),
+        };
+
+        let message = map_client_error(error).message;
+
+        assert_eq!(
+            message,
+            "Falló la solicitud al servicio local (HTTP 503; service_unavailable · req-123)."
+        );
+        assert!(!message.contains("/private/catalog.db"));
+        assert!(!message.contains("Http {"));
     }
 
     #[test]

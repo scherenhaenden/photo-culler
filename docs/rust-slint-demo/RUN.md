@@ -82,15 +82,21 @@ repite ambos sobre el bundle real, con MIME y miniatura.
 
 ## Evidencia CI vigente
 
-La aceptación final [#44546749693](https://github.com/scherenhaenden/photo-culler/actions/runs/44546749693)
-pasó sus seis jobs en el head `68959bf702c554839b720d80fd51bfbad6824317`, basado
-en diseño `afe088242bdcf173eb8e83c9571bf598f52c4e86` y docs `51deca2`. Verificó
-contratos y staging, Linux x86-64, macOS arm64, Windows x86-64, WASM y
-Chromium/Firefox. En cada desktop runner ejecutó el flujo live de una foto, una
-captura separada del fixture de diez tarjetas, cierre/reapertura con liberación
-del puerto propio y supervivencia del servidor externo. Los hashes de las
-capturas nativas y los digests de artifacts están en
-[`evidence/design`](evidence/design/README.md) y [BUILDS.md](../BUILDS.md).
+La ejecución más reciente de la pila [#44566993573](https://github.com/scherenhaenden/photo-culler/actions/runs/44566993573)
+pasó sus seis jobs sobre el commit documental `3884dc47feea0d29d691c9f5431343b624537538`.
+La ejecución integrada inmediatamente anterior [#44563618333](https://github.com/scherenhaenden/photo-culler/actions/runs/44563618333)
+pasó la misma matriz sobre `59cb9f0` y produjo los artefactos de aceptación cuyos
+hashes se registran en [`evidence/design`](evidence/design/README.md) y
+[BUILDS.md](../BUILDS.md). Ambas cubren build/staging, WASM, Linux x86-64,
+macOS arm64, Windows x86-64 y Chromium/Firefox. Los runners de escritorio
+abrieron la galería real de una foto y una captura separada de diez tarjetas
+sintéticas, verificaron cierre y reapertura, liberación del puerto propio y
+supervivencia de un servidor externo. Los navegadores capturaron estados de
+carga, vacío, error y reintento a 1440×900 y 1100×700.
+
+La pila de PR #153–#157 sigue abierta y en borrador. D34 requiere integrar la
+pila en `feature/sprint-01-rust-foundation` y repetir la aceptación en la rama
+resultante antes de promover el sprint.
 
 Descarga local de toda la evidencia:
 
@@ -104,10 +110,11 @@ workflow usa `winit-software` en Windows alojado porque el runner no dispone de
 OpenGL 2.0 fiable; los paquetes normales conservan la selección estándar del
 renderizador.
 
-La corrida anterior [#44508069950](https://github.com/scherenhaenden/photo-culler/actions/runs/44508069950)
-validó una revisión anterior del diseño (`14a4a6fc3371ee5d7ebc8fc3c303e2d7bfa93ceb`).
-Sigue como evidencia histórica del build y browser flow; la evidencia nativa
-vigente es #44546749693.
+La corrida [#44546749693](https://github.com/scherenhaenden/photo-culler/actions/runs/44546749693)
+es evidencia histórica del build y la aceptación nativa de una versión anterior
+del diseño. #44563618333 es la ejecución integrada que produjo los artefactos
+registrados actualmente. #44566993573 confirmó después que la revisión
+documental conserva el verde de los seis jobs.
 
 El código final del PR de diseño #154 es `afe088242bdcf173eb8e83c9571bf598f52c4e86`.
 En ese SHA pasaron localmente 33 pruebas Slint (una ignorada), 8 contratos de
