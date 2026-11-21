@@ -1,6 +1,6 @@
 # Estado del candidato de integración
 
-**Corte de revisión:** 2026-11-21 · **base:** `26991eb` · **entrega:** véase [HANDOFF_2026-11-21.md](HANDOFF_2026-11-21.md) para la rama y el commit publicados. `cargo check -p photo-culler-server -p photo-culler-cli -p photo-culler-slint` y el build check completo de `photo-culler-slint` para `wasm32-unknown-unknown` pasan en este host; `cargo metadata --locked` también pasa. Los smokes runtime con fixture sintético no equivalen a aceptación de UI, producto ni multiplataforma. La validación posterior del SHA `3862bc9` está registrada abajo.
+**Corte de revisión:** 2026-11-21 · **base de integración:** `feature/sprint-01-rust-foundation` · **entrega:** véase [HANDOFF_2026-11-21.md](HANDOFF_2026-11-21.md) para el historial de la rama y los commits publicados. El producto activo es Rust/Slint; Python y Tauri/egui quedan como fuentes legacy/históricas. Los smokes de fixtures sintéticos no equivalen a aceptación con catálogos reales ni cierran el roadmap completo.
 
 Este ledger distingue **aceptación runtime** (flujo ejecutado sobre el SHA indicado), **candidato** (código ensamblado, aún sin aceptación en este worktree), **parcial** (módulos/contratos con integración incompleta) y **pendiente** (sin entrega verificable). La presencia de archivos no cuenta como aceptación.
 
@@ -22,8 +22,10 @@ Este ledger distingue **aceptación runtime** (flujo ejecutado sobre el SHA indi
 - Pasó `cargo test --offline --locked --manifest-path rust/Cargo.toml -p photo-culler-server -p photo-culler-cli -p photo-culler-core -p photo-culler-image-engine`: 142 tests, incluidos los smokes de lifecycle HTTP S01.
 - El recorrido detectó y corrigió el cursor sin filtro de decisión en CLI, límites de dimensiones del decoder, una expectativa de revisión CAS, y el smoke HTTP que no enviaba el bearer token emitido al iniciar el servidor propio.
 - `cargo test --locked --manifest-path rust/Cargo.toml --workspace` aún no completa en este host: `glib-sys` necesita `pkg-config` y bibliotecas GTK de desarrollo para Slint. No se instalaron dependencias del sistema.
-- El workflow de candidato añade `product-tests`: tests de todos los paquetes activos Rust/Slint en Linux, excluyendo los shells experimentales egui/Tauri. Su resultado remoto está pendiente. La suite local seleccionada no cubre `photo-culler-slint`.
-- Sigue pendiente la aceptación de UI de importación/biblioteca en desktop y navegador.
+- El SHA `884ab18` pasó el workflow [#44919862289](https://github.com/scherenhaenden/photo-culler/actions/runs/44919862289): comprobaciones Rust/Slint en Linux, macOS, Windows y WASM; `product-tests` en Linux ejecutó 191 tests correctos y 1 ignorado en los paquetes activos, excluyendo egui/Tauri. La suite local seleccionada anterior no cubría `photo-culler-slint`.
+- El workflow [#44919867569](https://github.com/scherenhaenden/photo-culler/actions/runs/44919867569) aún debe completar la matriz de artefactos desktop y el recorrido Chromium/Firefox emparejado para aceptar UI en este SHA.
+- El run anterior detectó que la CSP bloqueaba estilos y texturas blob de Slint y que el smoke intentaba esperar mediante `unsafe-eval`; el commit `884ab18` corrige ambos y hace pairing mediante la pantalla real. También corrige la compilación de dos tests Slint.
+- Se añadió al candidato un test del controlador que atraviesa error de API → retry → galería con JPEG decodificado; queda pendiente de CI en el SHA que incluya ese test.
 
 ## Estado por capa
 
