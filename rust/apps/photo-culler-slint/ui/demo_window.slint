@@ -21,6 +21,7 @@ export component DemoWindow inherits Window {
     in property <bool> can-previous-photo: false;
     in property <bool> can-next-photo: false;
     callback retry();
+    callback choose-folder-requested();
     callback refresh-gallery();
     callback previous-photo();
     callback next-photo();
@@ -236,6 +237,7 @@ export component DemoWindow inherits Window {
                 grid-density <=> root.grid-density;
                 sort-descending <=> root.sort-descending;
                 retry => { root.retry(); }
+                choose-folder-requested => { root.choose-folder-requested(); }
                 refresh-gallery => { root.refresh-gallery(); }
                 previous-photo => { root.previous-photo(); }
                 next-photo => { root.next-photo(); }

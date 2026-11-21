@@ -137,7 +137,9 @@ export component StatusPanel inherits Rectangle {
     in property <string> title: "";
     in property <string> detail: "";
     in property <string> action-label: "Retry";
+    in property <bool> show-folder-action: false;
     callback retry();
+    callback choose-folder();
 
     min-height: 180px;
     background: DesignTokens.surface;
@@ -175,6 +177,13 @@ export component StatusPanel inherits Rectangle {
             label: root.action-label;
             primary: false;
             clicked => { root.retry(); }
+        }
+        if root.state == PanelState.empty && root.show-folder-action: ActionButton {
+            label: "Choose a folder";
+            primary: true;
+            accessible-role: button;
+            accessible-label: "Choose a photo folder";
+            clicked => { root.choose-folder(); }
         }
     }
 }
