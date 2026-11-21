@@ -6,6 +6,9 @@
 
 use std::fmt;
 
+#[cfg(not(target_arch = "wasm32"))]
+pub mod native;
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct RootId(String);
 
@@ -163,6 +166,20 @@ pub fn browser_request<C: RootCatalog>(
 /// into `BrowserRequest`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NativePath(String);
+
+impl NativePath {
+    /// Build a native path only when the platform path has a lossless UTF-8
+    /// representation. Never silently replace bytes before persisting it.
+    pub fn from_path(path: &std::path::Path) -> Result<Self, SelectionError> {
+        path.to_str()
+            .map(|value| Self(value.to_owned()))
+            .ok_or(SelectionError::Rejected)
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 pub trait NativePicker {
     fn pick(&mut self, intent: Intent) -> Result<Option<NativePath>, SelectionError>;
