@@ -10,6 +10,7 @@
 4. Una carpeta vacía muestra «No hay fotos compatibles». Si la fuente deja de estar disponible, la app identifica la carpeta y permite reintentar. El catálogo conserva las entradas existentes.
 
 ## Diseño antes de implementar
+La [guía de arquitectura e implementación del cliente](SPRINT_02_ARQUITECTURA.md) fija el arranque, los contratos, los estados de error y las fichas de las tres ramas.
 
 El [launcher](../../rust/apps/photo-culler-slint/src/desktop_app.rs) ya acepta catálogo y raíces mediante argumentos. El [contrato del selector](../../rust/apps/photo-culler-slint/src/file_selection/README.md), el [diálogo de importación](../../rust/apps/photo-culler-slint/ui/library/import_dialog.slint), el cliente REST y la [biblioteca](../../rust/apps/photo-culler-slint/ui/library/gallery.slint) son los puntos de integración. El [registro técnico](../INTEGRATION_CANDIDATE_STATUS.md) recoge pruebas de API y pendientes de escritorio. Antes del primer cambio, reproducir el recorrido con el paquete de referencia y anotar el primer paso que exige una terminal.
 
