@@ -7,6 +7,8 @@
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
 
+use crate::import::scanning::{self, Role};
+
 /// A file record supplied by the scanner. `relative_path` is relative to the
 /// authorized source root, so equal names under different directories remain
 /// distinct.
@@ -163,20 +165,11 @@ pub fn associate(files: impl IntoIterator<Item = PairingFile>) -> PairingResult 
 }
 
 fn classify(path: &Path) -> Option<FileKind> {
-    let name = path.file_name()?.to_string_lossy();
-    let lower = name.to_ascii_lowercase();
-    if lower.ends_with(".xmp") || lower.ends_with(".aae") {
-        return Some(FileKind::Sidecar);
-    }
-    let extension = path.extension()?.to_string_lossy().to_ascii_lowercase();
-    match extension.as_str() {
-        "jpg" | "jpeg" | "jpe" => Some(FileKind::Jpeg),
-        "arw" | "cr2" | "cr3" | "dng" | "nef" | "nrw" | "orf" | "pef" | "raf" | "raw" | "rw2"
-        | "srw" | "3fr" | "fff" | "iiq" | "kdc" | "mos" | "mef" | "mrw" => Some(FileKind::Raw),
-        "png" | "tif" | "tiff" | "bmp" | "gif" | "webp" | "heic" | "heif" => {
-            Some(FileKind::OtherImage)
-        }
-        _ => None,
+    match scanning::role_for_path(path)? {
+        Role::Raw => Some(FileKind::Raw),
+        Role::Jpeg => Some(FileKind::Jpeg),
+        Role::Image => Some(FileKind::OtherImage),
+        Role::Sidecar => Some(FileKind::Sidecar),
     }
 }
 
@@ -199,9 +192,8 @@ fn logical_key(path: &Path, kind: FileKind) -> String {
         .into_owned();
     if kind == FileKind::Sidecar {
         stem = strip_last_extension(&stem);
-        if extension_of(&stem)
-            .as_deref()
-            .is_some_and(is_media_extension)
+        if scanning::role_for_path(Path::new(&stem))
+            .is_some_and(|role| matches!(role, Role::Raw | Role::Jpeg | Role::Image))
         {
             stem = strip_last_extension(&stem);
         }
@@ -220,47 +212,6 @@ fn strip_last_extension(name: &str) -> String {
         Some(index) if index > 0 => name[..index].to_owned(),
         _ => name.to_owned(),
     }
-}
-
-fn extension_of(name: &str) -> Option<String> {
-    name.rsplit_once('.')
-        .map(|(_, extension)| extension.to_ascii_lowercase())
-}
-
-fn is_media_extension(extension: &str) -> bool {
-    matches!(
-        extension,
-        "jpg"
-            | "jpeg"
-            | "jpe"
-            | "arw"
-            | "cr2"
-            | "cr3"
-            | "dng"
-            | "nef"
-            | "nrw"
-            | "orf"
-            | "pef"
-            | "raf"
-            | "raw"
-            | "rw2"
-            | "srw"
-            | "3fr"
-            | "fff"
-            | "iiq"
-            | "kdc"
-            | "mos"
-            | "mef"
-            | "mrw"
-            | "png"
-            | "tif"
-            | "tiff"
-            | "bmp"
-            | "gif"
-            | "webp"
-            | "heic"
-            | "heif"
-    )
 }
 
 #[cfg(test)]

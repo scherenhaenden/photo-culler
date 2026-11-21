@@ -39,16 +39,61 @@ component DensityButton inherits Rectangle {
     TouchArea { clicked => { root.activated(); } }
 }
 
-component DisabledAction inherits Rectangle {
+component PhotoNavigationButton inherits FocusScope {
     in property <string> label;
+    in property <string> accessible-name;
+    in property <bool> can-activate: true;
+    callback activated();
+
+    width: 30px;
+    height: 22px;
+    opacity: root.can-activate ? 1 : 0.38;
+    focus-on-tab-navigation: true;
+    accessible-role: button;
+    accessible-label: root.accessible-name;
+    key-pressed(event) => {
+        if (root.can-activate && (event.text == Key.Return || event.text == " ")) {
+            root.activated();
+            accept
+        } else { reject }
+    }
+
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        border-radius: 5px;
+        background: #ffffff12;
+        border-width: root.has-focus ? 2px : 1px;
+        border-color: root.has-focus ? DesignTokens.focus : #ffffff33;
+        Text {
+            text: root.label;
+            color: #ffffff;
+            font-family: DesignTokens.body-font;
+            font-size: 12px;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        TouchArea {
+            enabled: root.can-activate;
+            mouse-cursor: pointer;
+            clicked => { root.focus(); root.activated(); }
+        }
+    }
+}
+
+component DecisionAction inherits Rectangle {
+    in property <string> label;
+    in property <string> decision;
     in property <color> fill-color: #ffffff19;
     in property <color> text-color: #ffffff;
+    callback activated(decision: string);
 
     height: 18px;
     min-width: 34px;
     background: root.fill-color;
     border-radius: 999px;
-    opacity: 0.48;
+    opacity: 0.92;
     Text {
         text: root.label;
         color: root.text-color;
@@ -57,6 +102,10 @@ component DisabledAction inherits Rectangle {
         font-weight: 900;
         horizontal-alignment: center;
         vertical-alignment: center;
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.activated(root.decision); }
     }
 }
 
@@ -268,14 +317,22 @@ export component LibraryGallery inherits Rectangle {
     in property <string> error-message: "No se pudo cargar la galería.";
     in property <int> selected-photo-count: 0;
     in property <bool> all-visible-selected: false;
+    in property <string> navigation-label: "Foto 1 de 1";
+    in property <string> navigation-error: "";
+    in property <bool> can-previous-photo: false;
+    in property <bool> can-next-photo: false;
     in-out property <int> grid-density: 1; // 0 small, 1 medium, 2 large
     in-out property <bool> sort-descending: true;
     callback retry();
+    callback refresh-gallery();
+    callback previous-photo();
+    callback next-photo();
     callback select-photo(string);
     callback selection-requested(photo-id: string, multi: bool);
     callback select-all-requested();
     callback sort-direction-changed(descending: bool);
     callback density-changed(density: int);
+    callback decision-requested(decision: string);
 
     background: #050505;
     property <int> effective-viewport-width: root.viewport-width > 0 ? root.viewport-width : round(root.width / 1px);
@@ -329,7 +386,7 @@ export component LibraryGallery inherits Rectangle {
                 padding-right: 16px;
                 spacing: 12px;
                 Text {
-                    text: root.item-count + " CATALOGUED";
+                    text: root.item-count + " ON THIS PAGE";
                     color: #ffffff66;
                     font-family: DesignTokens.body-font;
                     font-size: 9px;
@@ -392,9 +449,22 @@ export component LibraryGallery inherits Rectangle {
                             font-weight: 900;
                             vertical-alignment: center;
                         }
-                        DisabledAction { label: "KEEP"; fill-color: #25a18e; }
-                        DisabledAction { label: "ALT"; fill-color: #f7c59f; text-color: #111111; }
-                        DisabledAction { label: "REJECT"; fill-color: #ff6b35; }
+                        DecisionAction {
+                            label: "KEEP"; decision: "keep"; fill-color: #25a18e;
+                            activated(decision) => { root.decision-requested(decision); }
+                        }
+                        DecisionAction {
+                            label: "ALT"; decision: "alt"; fill-color: #f7c59f; text-color: #111111;
+                            activated(decision) => { root.decision-requested(decision); }
+                        }
+                        DecisionAction {
+                            label: "REJECT"; decision: "reject"; fill-color: #ff6b35;
+                            activated(decision) => { root.decision-requested(decision); }
+                        }
+                        DecisionAction {
+                            label: "CLEAR"; decision: "undecided";
+                            activated(decision) => { root.decision-requested(decision); }
+                        }
                     }
                 }
                 Rectangle {
@@ -432,6 +502,78 @@ export component LibraryGallery inherits Rectangle {
                         DensityButton { label: "SMALL"; selected: root.grid-density == 0; activated => { root.grid-density = 0; root.density-changed(0); } }
                         DensityButton { label: "MED"; selected: root.grid-density == 1; activated => { root.grid-density = 1; root.density-changed(1); } }
                         DensityButton { label: "LARGE"; selected: root.grid-density == 2; activated => { root.grid-density = 2; root.density-changed(2); } }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            height: 24px;
+            background: #111111;
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 12px;
+                spacing: 6px;
+                Text {
+                    text: root.navigation-error == "" ? "Search and filters apply to this page." : "No se pudo cargar la página. Pulsa la flecha para reintentar. " + root.navigation-error;
+                    color: root.navigation-error == "" ? #ffffffb3 : #ffb08c;
+                    font-family: DesignTokens.body-font;
+                    font-size: 10px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    horizontal-stretch: 1;
+                }
+                PhotoNavigationButton {
+                    label: "‹";
+                    accessible-name: "Previous photo";
+                    can-activate: root.can-previous-photo;
+                    activated => { root.previous-photo(); }
+                }
+                Text {
+                    text: root.navigation-label;
+                    color: #ffffffb3;
+                    font-family: DesignTokens.body-mono-font;
+                    font-size: 9px;
+                    vertical-alignment: center;
+                }
+                PhotoNavigationButton {
+                    label: "›";
+                    accessible-name: "Next photo";
+                    can-activate: root.can-next-photo;
+                    activated => { root.next-photo(); }
+                }
+                refresh := FocusScope {
+                    width: 68px;
+                    height: parent.height;
+                    focus-on-tab-navigation: true;
+                    accessible-role: button;
+                    accessible-label: "Reload gallery from the first page";
+                    key-pressed(event) => {
+                        if (event.text == Key.Return || event.text == " ") {
+                            root.refresh-gallery();
+                            accept
+                        } else { reject }
+                    }
+                    Rectangle {
+                        width: parent.width;
+                        height: parent.height;
+                        border-radius: 4px;
+                        background: #ffffff12;
+                        border-width: refresh.has-focus ? 2px : 1px;
+                        border-color: refresh.has-focus ? DesignTokens.focus : #ffffff33;
+                        Text {
+                            text: "RELOAD";
+                            color: #ffffff;
+                            font-family: DesignTokens.body-font;
+                            font-size: 9px;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { refresh.focus(); root.refresh-gallery(); }
+                        }
                     }
                 }
             }
@@ -498,7 +640,7 @@ export component LibraryGallery inherits Rectangle {
                 alignment: center;
                 spacing: 6px;
                 Text {
-                    text: "No photos match current filters.";
+                    text: "No photos on this page match the current filters.";
                     color: #ffffff66;
                     font-family: DesignTokens.body-font;
                     font-size: 14px;

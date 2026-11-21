@@ -1,4 +1,6 @@
 //! Provisional read adapter. See README.md for its integration boundary.
+use std::{future::Future, pin::Pin};
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -20,6 +22,7 @@ pub struct Photo {
     pub gallery_id: String,
     pub name: String,
     pub decision: String,
+    pub decision_revision: u64,
     pub score: Option<f64>,
     pub quality_tier: Option<String>,
     pub analysis_summary: Value,
@@ -31,6 +34,7 @@ pub struct PhotoItem {
     pub id: String,
     pub name: String,
     pub decision: String,
+    pub decision_revision: u64,
     pub score: Option<f64>,
     pub quality_tier: Option<String>,
     pub thumbnail_url: String,
@@ -42,6 +46,7 @@ pub struct PhotoDetail {
     pub id: String,
     pub name: String,
     pub decision: String,
+    pub decision_revision: u64,
     pub score: Option<f64>,
     pub quality_tier: Option<String>,
     pub analysis_summary: Value,
@@ -108,32 +113,46 @@ pub enum Error {
 
 /// All methods must read from the requested gallery. Implementations must not
 /// expose file system paths; `thumbnail` returns bytes from the media service.
-pub trait Catalog {
-    fn galleries(&self) -> Result<Vec<Gallery>, Error>;
-    fn active_gallery(&self) -> Result<Option<String>, Error>;
-    fn photos(&self, filter: &Filter) -> Result<Vec<Photo>, Error>;
-    fn photo(&self, id: &str) -> Result<Option<Photo>, Error>;
-    fn sessions(&self, gallery_id: &str) -> Result<Vec<Session>, Error>;
-    fn groups(&self, gallery_id: &str) -> Result<Vec<Group>, Error>;
-    fn profiles(&self) -> Result<Vec<Profile>, Error>;
-    fn summary(&self, gallery_id: &str) -> Result<Summary, Error>;
-    fn thumbnail(&self, photo_id: &str, size: u32) -> Result<Option<Thumbnail>, Error>;
+pub type CatalogFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+pub trait Catalog: Send + Sync {
+    fn galleries<'a>(&'a self) -> CatalogFuture<'a, Result<Vec<Gallery>, Error>>;
+    fn active_gallery<'a>(&'a self) -> CatalogFuture<'a, Result<Option<String>, Error>>;
+    fn photos<'a>(
+        &'a self,
+        filter: &'a Filter,
+        after_id: Option<&'a str>,
+        limit: usize,
+    ) -> CatalogFuture<'a, Result<Vec<Photo>, Error>>;
+    fn photo<'a>(&'a self, id: &'a str) -> CatalogFuture<'a, Result<Option<Photo>, Error>>;
+    fn sessions<'a>(
+        &'a self,
+        gallery_id: &'a str,
+    ) -> CatalogFuture<'a, Result<Vec<Session>, Error>>;
+    fn groups<'a>(&'a self, gallery_id: &'a str) -> CatalogFuture<'a, Result<Vec<Group>, Error>>;
+    fn profiles<'a>(&'a self) -> CatalogFuture<'a, Result<Vec<Profile>, Error>>;
+    fn summary<'a>(&'a self, gallery_id: &'a str) -> CatalogFuture<'a, Result<Summary, Error>>;
+    fn thumbnail<'a>(
+        &'a self,
+        photo_id: &'a str,
+        size: u32,
+    ) -> CatalogFuture<'a, Result<Option<Thumbnail>, Error>>;
 }
 
 pub struct Reads<C>(pub C);
 impl<C: Catalog> Reads<C> {
-    pub fn galleries(&self) -> Result<Items<Gallery>, Error> {
-        let mut items = self.0.galleries()?;
+    pub async fn galleries(&self) -> Result<Items<Gallery>, Error> {
+        let mut items = self.0.galleries().await?;
         items.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(Items {
             contract_version: 1,
             items,
         })
     }
-    pub fn active_gallery(&self) -> Result<Option<String>, Error> {
-        self.0.active_gallery()
+    pub async fn active_gallery(&self) -> Result<Option<String>, Error> {
+        self.0.active_gallery().await
     }
-    pub fn page(
+    pub async fn page(
         &self,
         filter: Filter,
         cursor: Option<Cursor>,
@@ -145,11 +164,15 @@ impl<C: Catalog> Reads<C> {
         if cursor.as_ref().is_some_and(|c| c.filter != filter) {
             return Err(Error::CursorFilterMismatch);
         }
-        let mut photos = self.0.photos(&filter)?;
+        let after_id = cursor.as_ref().map(|cursor| cursor.after_id.as_str());
+        // Ask for one extra row to determine whether the response needs a next cursor.
+        let mut photos = self.0.photos(&filter, after_id, limit + 1).await?;
         // Enforce filtering at the boundary even if the repository double is careless.
         photos.retain(|p| {
             p.gallery_id == filter.gallery_id
-                && filter.decision.as_ref().is_none_or(|d| &p.decision == d)
+                && filter.decision.as_deref().is_none_or(|decision| {
+                    decision_category(&p.decision) == decision_category(decision)
+                })
         });
         photos.sort_by(|a, b| a.id.cmp(&b.id));
         if let Some(cursor) = cursor {
@@ -172,6 +195,7 @@ impl<C: Catalog> Reads<C> {
                 id: p.id,
                 name: p.name,
                 decision: p.decision,
+                decision_revision: p.decision_revision,
                 score: p.score,
                 quality_tier: p.quality_tier,
             })
@@ -182,51 +206,64 @@ impl<C: Catalog> Reads<C> {
             next_cursor,
         })
     }
-    pub fn detail(&self, id: &str) -> Result<PhotoDetail, Error> {
-        let p = self.0.photo(id)?.ok_or(Error::NotFound)?;
+    pub async fn detail(&self, id: &str) -> Result<PhotoDetail, Error> {
+        let p = self.0.photo(id).await?.ok_or(Error::NotFound)?;
         Ok(PhotoDetail {
             contract_version: 1,
             id: p.id,
             name: p.name,
             decision: p.decision,
+            decision_revision: p.decision_revision,
             score: p.score,
             quality_tier: p.quality_tier,
             analysis_summary: p.analysis_summary,
             metadata: p.metadata,
         })
     }
-    pub fn sessions(&self, gallery: &str) -> Result<Items<Session>, Error> {
-        let mut items = self.0.sessions(gallery)?;
+    pub async fn sessions(&self, gallery: &str) -> Result<Items<Session>, Error> {
+        let mut items = self.0.sessions(gallery).await?;
         items.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(Items {
             contract_version: 1,
             items,
         })
     }
-    pub fn groups(&self, gallery: &str) -> Result<Items<Group>, Error> {
-        let mut items = self.0.groups(gallery)?;
+    pub async fn groups(&self, gallery: &str) -> Result<Items<Group>, Error> {
+        let mut items = self.0.groups(gallery).await?;
         items.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(Items {
             contract_version: 1,
             items,
         })
     }
-    pub fn profiles(&self) -> Result<Items<Profile>, Error> {
-        let mut items = self.0.profiles()?;
+    pub async fn profiles(&self) -> Result<Items<Profile>, Error> {
+        let mut items = self.0.profiles().await?;
         items.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(Items {
             contract_version: 1,
             items,
         })
     }
-    pub fn summary(&self, gallery: &str) -> Result<Summary, Error> {
-        self.0.summary(gallery)
+    pub async fn summary(&self, gallery: &str) -> Result<Summary, Error> {
+        self.0.summary(gallery).await
     }
-    pub fn thumbnail(&self, photo_id: &str, size: u32) -> Result<Thumbnail, Error> {
+    pub async fn thumbnail(&self, photo_id: &str, size: u32) -> Result<Thumbnail, Error> {
         if size == 0 || size > 4096 {
             return Err(Error::InvalidPage);
         }
-        self.0.thumbnail(photo_id, size)?.ok_or(Error::NotFound)
+        self.0
+            .thumbnail(photo_id, size)
+            .await?
+            .ok_or(Error::NotFound)
+    }
+}
+
+fn decision_category(decision: &str) -> &'static str {
+    match decision.to_ascii_uppercase().as_str() {
+        "KEEP" | "BEST" | "PROTECTED_BY_COVERAGE" => "keep",
+        "ALT" | "ALTERNATE" => "alt",
+        "REJECT" | "REJECT_TECHNICAL" | "REJECT_REDUNDANT" => "reject",
+        _ => "undecided",
     }
 }
 
@@ -245,3 +282,5 @@ fn path_segment(value: &str) -> String {
 
 #[cfg(test)]
 mod tests;
+
+pub mod routes;

@@ -13,13 +13,14 @@ slint = { version = "=1.19.0", default-features = false, features = ["std", "com
 image = { version = "=0.25.10", default-features = false, features = ["jpeg"] }
 photo-culler-api = { path = "../../crates/photo-culler-api" }
 photo-culler-client = { path = "../../crates/photo-culler-client" }
+serde = { workspace = true }
 serde_json = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "=0.3.103"
 wasm-bindgen = "=0.2.126"
 wasm-bindgen-futures = "=0.4.76"
-web-sys = { version = "=0.3.103", features = ["Document", "Element", "Headers", "Node", "ReadableStream", "ReadableStreamDefaultReader", "Request", "RequestInit", "RequestMode", "RequestRedirect", "Response", "Window", "console"] }
+web-sys = { version = "=0.3.103", features = ["Document", "Element", "Headers", "Node", "ReadableStream", "ReadableStreamDefaultReader", "Request", "RequestCredentials", "RequestInit", "RequestMode", "RequestRedirect", "Response", "Window", "console"] }
 
 [build-dependencies]
 slint-build = "=1.19.0"

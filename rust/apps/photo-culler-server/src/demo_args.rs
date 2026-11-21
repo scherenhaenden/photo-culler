@@ -9,6 +9,10 @@ pub struct DemoArgs {
     pub port: u16,
     pub data_dir: Option<PathBuf>,
     pub web_root: Option<PathBuf>,
+    /// Optional opaque catalog gallery ID used as the import destination.
+    pub gallery_id: Option<String>,
+    /// Server-local roots explicitly authorized for imports; canonicalize in runtime.
+    pub authorized_roots: Vec<PathBuf>,
     pub owned: bool,
 }
 
@@ -43,13 +47,15 @@ impl std::fmt::Display for ArgsError {
 
 impl std::error::Error for ArgsError {}
 
-pub const HELP: &str = "Photo Culler demo server scaffold\n\
+pub const HELP: &str = "Photo Culler local catalog server\n\
 Usage: photo-culler-server [OPTIONS]\n\
 \n\
 Options:\n\
   --bind <IP>          Loopback address (default: 127.0.0.1)\n\
   --port <PORT>        TCP port (default: 8765)\n\
   --data-dir <PATH>    Writable catalog and cache directory\n\
+  --gallery-id <ID>    Select the catalog gallery and import destination\n\
+  --authorized-root <PATH>  Allow imports from this local directory (repeatable)\n\
   --web-root <PATH>    Validated generated Slint web bundle directory\n\
   --owned              Emit one JSON ready line; stdin EOF requests shutdown\n\
   -h, --help           Print this help\n";
@@ -64,6 +70,8 @@ where
     let mut port = DEFAULT_PORT;
     let mut data_dir = None;
     let mut web_root = None;
+    let mut gallery_id = None;
+    let mut authorized_roots = Vec::new();
     let mut owned = false;
 
     while let Some(option) = args.next() {
@@ -90,6 +98,10 @@ where
                 })?;
             }
             "--data-dir" => data_dir = Some(PathBuf::from(args.next().ok_or_else(value)?)),
+            "--gallery-id" => gallery_id = Some(args.next().ok_or_else(value)?),
+            "--authorized-root" => {
+                authorized_roots.push(PathBuf::from(args.next().ok_or_else(value)?))
+            }
             "--web-root" | "--static-dir" => {
                 web_root = Some(PathBuf::from(args.next().ok_or_else(value)?))
             }
@@ -103,6 +115,8 @@ where
         port,
         data_dir,
         web_root,
+        gallery_id,
+        authorized_roots,
         owned,
     }))
 }

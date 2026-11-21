@@ -1,7 +1,12 @@
-//! Deterministic metadata normalization independent of the container parser.
+//! Deterministic photo metadata normalization and bounded JPEG EXIF parsing.
 //!
-//! JPEG/TIFF/RAW and sidecar readers adapt their decoded tags to [`TagRecord`].
-//! This layer retains the winning source and original text for every value.
+//! The current container reader supports JPEG APP1/TIFF EXIF tags. The public
+//! [`normalize`] adapter also accepts records from future RAW and sidecar
+//! readers, but those container readers are not implemented here yet.
+
+mod jpeg;
+
+pub use jpeg::{ExifReadError, parse_jpeg_exif, read_jpeg_file, read_jpeg_metadata};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Source {
@@ -89,7 +94,12 @@ pub fn normalize(records: &[TagRecord]) -> PhotoMetadata {
             "datetimeoriginal" | "createdate" => {
                 let offset = find_offset(records, rec.source);
                 match parse_capture(&rec.value, offset.as_deref()) {
-                    Some(value) => assign(&mut result.capture_time, value, &rec.value, &provenance),
+                    Some(value) => assign_capture_time(
+                        &mut result.capture_time,
+                        value,
+                        &rec.value,
+                        &provenance,
+                    ),
                     None => result.warnings.push(warning(rec, "invalid_capture_time")),
                 }
             }
@@ -129,6 +139,28 @@ fn assign<T: Clone>(field: &mut Field<T>, value: T, raw: &str, provenance: &Prov
         field.provenance = Some(provenance.clone());
     }
 }
+
+fn assign_capture_time(
+    field: &mut Field<CaptureTime>,
+    value: CaptureTime,
+    raw: &str,
+    provenance: &Provenance,
+) {
+    let should_assign = match field.provenance.as_ref() {
+        None => true,
+        Some(current) if provenance.source != current.source => provenance.source > current.source,
+        Some(current) => {
+            let new_is_specific = canonical_key(&provenance.tag) == "datetimeoriginal";
+            let current_is_specific = canonical_key(&current.tag) == "datetimeoriginal";
+            !current_is_specific || new_is_specific
+        }
+    };
+    if should_assign {
+        field.value = Some(value);
+        field.original = Some(raw.to_owned());
+        field.provenance = Some(provenance.clone());
+    }
+}
 fn assign_string(field: &mut Field<String>, rec: &TagRecord, provenance: Provenance) {
     let clean = rec.value.trim();
     if !clean.is_empty() {
@@ -160,12 +192,11 @@ fn parse_rational(s: &str) -> Option<Rational> {
 fn find_offset(records: &[TagRecord], source: Source) -> Option<String> {
     records
         .iter()
-        .find(|r| {
-            r.source == source
-                && matches!(
-                    canonical_key(&r.name).as_str(),
-                    "offsettimeoriginal" | "offsettime"
-                )
+        .find(|r| r.source == source && canonical_key(&r.name) == "offsettimeoriginal")
+        .or_else(|| {
+            records
+                .iter()
+                .find(|r| r.source == source && canonical_key(&r.name) == "offsettime")
         })
         .map(|r| r.value.clone())
 }
@@ -178,6 +209,9 @@ fn parse_capture(raw: &str, offset: Option<&str>) -> Option<CaptureTime> {
         date.next()?.parse::<u32>().ok()?,
     );
     if date.next().is_some() {
+        return None;
+    }
+    if !(1..=9999).contains(&y) {
         return None;
     }
     let mut time = time.split(':');

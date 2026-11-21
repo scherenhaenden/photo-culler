@@ -12,11 +12,28 @@ use std::{
 use axum::Router;
 use tokio::{net::TcpListener, sync::oneshot, task::JoinHandle};
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ReadyMessage {
     pub event: &'static str,
     pub protocol: u8,
     pub origin: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_token: Option<String>,
+}
+
+impl std::fmt::Debug for ReadyMessage {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ReadyMessage")
+            .field("event", &self.event)
+            .field("protocol", &self.protocol)
+            .field("origin", &self.origin)
+            .field(
+                "session_token",
+                &self.session_token.as_ref().map(|_| "[REDACTED]"),
+            )
+            .finish()
+    }
 }
 
 #[derive(Debug)]
@@ -42,11 +59,12 @@ impl RunningServer {
     pub fn address(&self) -> SocketAddr {
         self.address
     }
-    pub fn ready_message(&self) -> ReadyMessage {
+    pub fn ready_message(&self, session_token: Option<String>) -> ReadyMessage {
         ReadyMessage {
             event: "ready",
             protocol: 1,
             origin: format!("http://{}", self.address),
+            session_token,
         }
     }
     pub async fn shutdown(mut self) -> io::Result<()> {
@@ -121,8 +139,8 @@ where
     W: Write,
 {
     let server = start(port, make_router).await?;
-    let mut line =
-        serde_json::to_vec(&server.ready_message()).map_err(|e| LifecycleError(e.to_string()))?;
+    let mut line = serde_json::to_vec(&server.ready_message(None))
+        .map_err(|e| LifecycleError(e.to_string()))?;
     line.push(b'\n');
     if let Err(error) = output.write_all(&line) {
         let _ = server.shutdown().await;

@@ -9,7 +9,7 @@ use photo_culler_api::{HealthResponse, HealthStatus};
 use std::{
     io::{BufRead, BufReader, Read},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
     sync::mpsc,
     thread,
@@ -23,6 +23,8 @@ const MAX_READY_LINE: usize = 4096;
 
 pub struct DemoServer {
     pub origin: String,
+    /// Session bearer kept in process memory and never included in diagnostics.
+    pub session_token: Option<String>,
     address: SocketAddr,
     _owned: Option<OwnedChild>,
 }
@@ -30,14 +32,24 @@ pub struct DemoServer {
 impl DemoServer {
     /// Uses an explicitly configured loopback service when supplied; otherwise
     /// starts and owns the server executable beside this desktop binary.
-    pub fn open() -> Result<Self, String> {
+    pub fn open(
+        data_dir: Option<&Path>,
+        authorized_roots: &[PathBuf],
+        gallery_id: Option<&str>,
+    ) -> Result<Self, String> {
         if let Some(origin) = std::env::var_os("PHOTO_CULLER_API_ORIGIN") {
+            if data_dir.is_some() || !authorized_roots.is_empty() || gallery_id.is_some() {
+                return Err(
+                    "persistent catalog and import options require the launcher-owned local server; external API mode is active"
+                        .to_owned(),
+                );
+            }
             let origin = origin
                 .into_string()
                 .map_err(|_| "PHOTO_CULLER_API_ORIGIN is not valid UTF-8".to_owned())?;
             return Self::connect_external(&origin);
         }
-        Self::start_owned()
+        Self::start_owned(data_dir, authorized_roots, gallery_id)
     }
 
     pub fn address(&self) -> SocketAddr {
@@ -50,7 +62,15 @@ impl DemoServer {
     }
 
     fn connect_external(origin: &str) -> Result<Self, String> {
-        let ready = validate_origin(origin)?;
+        let mut ready = validate_origin(origin)?;
+        ready.session_token = match std::env::var("PHOTO_CULLER_BEARER") {
+            Ok(token) if valid_session_token(&token) => Some(token),
+            Ok(_) => return Err("PHOTO_CULLER_BEARER has an invalid session token format".into()),
+            Err(std::env::VarError::NotPresent) => None,
+            Err(std::env::VarError::NotUnicode(_)) => {
+                return Err("PHOTO_CULLER_BEARER is not valid UTF-8".into());
+            }
+        };
         let host = origin
             .strip_prefix("http://")
             .and_then(|authority| authority.rsplit_once(':').map(|(host, _)| host))
@@ -62,19 +82,66 @@ impl DemoServer {
         verify_health(address)?;
         Ok(Self {
             origin: ready.origin,
+            session_token: ready.session_token,
             address,
             _owned: None,
         })
     }
 
-    fn start_owned() -> Result<Self, String> {
+    fn start_owned(
+        data_dir: Option<&Path>,
+        authorized_roots: &[PathBuf],
+        gallery_id: Option<&str>,
+    ) -> Result<Self, String> {
         let executable = sibling_server_path()?;
-        Self::start_owned_at(&executable)
+        Self::start_owned_at_with_data_dir(&executable, data_dir, authorized_roots, gallery_id)
     }
 
+    #[cfg(test)]
     fn start_owned_at(executable: &std::path::Path) -> Result<Self, String> {
-        let mut child = Command::new(executable)
-            .args(["--owned", "--port", "0"])
+        Self::start_owned_at_with_data_dir(executable, None, &[], None)
+    }
+
+    fn start_owned_at_with_data_dir(
+        executable: &std::path::Path,
+        data_dir: Option<&Path>,
+        authorized_roots: &[PathBuf],
+        gallery_id: Option<&str>,
+    ) -> Result<Self, String> {
+        if data_dir.is_some_and(|path| path.as_os_str().is_empty()) {
+            return Err("--data-dir requires a non-empty path".to_owned());
+        }
+        if data_dir.is_some_and(|path| path.exists() && !path.is_dir()) {
+            return Err("--data-dir must point to a directory".to_owned());
+        }
+        if (!authorized_roots.is_empty() || gallery_id.is_some()) && data_dir.is_none() {
+            return Err("--authorized-root and --gallery-id require --data-dir".to_owned());
+        }
+        if gallery_id.is_some() && authorized_roots.is_empty() {
+            return Err("--gallery-id requires at least one --authorized-root".to_owned());
+        }
+        if gallery_id.is_some_and(str::is_empty) {
+            return Err("--gallery-id requires a non-empty ID".to_owned());
+        }
+        if authorized_roots
+            .iter()
+            .any(|path| path.as_os_str().is_empty())
+        {
+            return Err("--authorized-root requires a non-empty path".to_owned());
+        }
+
+        let mut command = Command::new(executable);
+        command.args(["--owned", "--port", "0"]);
+        if let Some(data_dir) = data_dir {
+            command.arg("--data-dir").arg(data_dir.as_os_str());
+        }
+        for root in authorized_roots {
+            command.arg("--authorized-root").arg(root.as_os_str());
+        }
+        if let Some(gallery_id) = gallery_id {
+            command.arg("--gallery-id").arg(gallery_id);
+        }
+        let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -124,6 +191,10 @@ impl DemoServer {
                 }
             })??;
         let ready: ReadyMessage = parse_ready_line(&line)?;
+        let session_token = ready
+            .session_token
+            .filter(|token| valid_session_token(token))
+            .ok_or_else(|| "owned server omitted its session credential".to_owned())?;
         let expected_origin = format!("http://127.0.0.1:{}", ready.port);
         if ready.origin != expected_origin {
             return Err("owned server must announce its 127.0.0.1 loopback origin".into());
@@ -132,10 +203,15 @@ impl DemoServer {
         verify_health(address)?;
         Ok(Self {
             origin: ready.origin,
+            session_token: Some(session_token),
             address,
             _owned: Some(owned),
         })
     }
+}
+
+fn valid_session_token(token: &str) -> bool {
+    token.len() == 64 && token.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 struct OwnedChild {

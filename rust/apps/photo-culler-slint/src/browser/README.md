@@ -7,21 +7,30 @@ The page checks the local health endpoint before loading the UI and presents a
 clear recovery message when WebGL, the service, or the generated WASM app is
 unavailable.
 
-At sprint base `2caabb66`, the workspace has no `photo-culler-slint` crate,
-Slint dependencies, browser build script, or generated wasm-bindgen adapter.
-Accordingly the page expects the eventual generated `photo_culler_slint.js`
-adapter to export `start(canvas, { fetchApi })` after its default WASM init.
-The crate owner must register this module and adapter, build it for
-`wasm32-unknown-unknown`, and validate in Chromium and Firefox. `fetchApi`
-uses a relative `/api/v1/` URL, same-origin credentials, and rejects absolute,
-traversal, query, and fragment inputs.
+Historical note for sprint base `2caabb66`: that snapshot had no
+`photo-culler-slint` crate, Slint dependencies, browser build script, or
+generated wasm-bindgen adapter. Those pieces have since been added. The current
+browser entry point and shared import dialog are wired in
+`browser/demo_start.rs`; its same-origin transport uses relative API paths.
+The accepted browser evidence still covers the S01 fixture flow. The candidate
+REST v2 import path has not yet received runtime acceptance; follow the manual
+procedure in `docs/rust-slint-demo/RUN.md` and record results against its exact
+build SHA before claiming it works in a browser.
 
 If WebGL is unavailable, the page explains how to enable hardware acceleration
 and directs the user to open Photo Culler Desktop on the same computer.
 
-Run the self-contained unit tests without Cargo:
+The standalone Task 43 transport checks below are historical unit checks. They
+do not exercise the current workspace build, the Rust server, or REST v2 import
+at runtime, and are not browser acceptance evidence:
 
 ```sh
 rustc --edition=2024 --test rust/apps/photo-culler-slint/src/browser/mod.rs -o /tmp/photo-culler-task43-tests
 /tmp/photo-culler-task43-tests
 ```
+
+The current candidate adds a same-origin pairing overlay. The browser keeps its
+bearer in WASM memory only, sends it in `Authorization` with Fetch credentials
+omitted, and returns to pairing after a 401. Reloading loses the token. This
+path compiles for WASM but has no current browser-window acceptance; a
+non-interactive/service server also has no initial-code handoff yet.

@@ -1,8 +1,8 @@
 //! Native desktop server lifecycle and same-origin API transport boundary.
 //!
-//! The Slint crate, launcher and shared REST client are not present in the
-//! sprint base. This module keeps their ownership contract testable without
-//! importing unregistered workspace crates; see README.md for adapters.
+//! The current candidate connects this boundary to the Slint launcher and
+//! shared REST client. The lower-level ownership contract remains separate so
+//! server lifecycle behavior can be reviewed independently; see README.md.
 
 pub mod demo_http;
 pub mod demo_launch;

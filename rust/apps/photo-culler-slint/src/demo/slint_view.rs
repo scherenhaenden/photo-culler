@@ -4,7 +4,7 @@
 //! visual-smoke mode.
 
 use crate::demo::{
-    controller::{DemoError, DemoView, UiDispatcher, ViewState},
+    controller::{DemoError, DemoView, LoadedPhoto, UiDispatcher, ViewState},
     thumbnail_image::decode_jpeg,
 };
 use slint::ComponentHandle;
@@ -19,6 +19,7 @@ struct PhotoMetadata {
     id: String,
     filename: String,
     decision: String,
+    decision_revision: u64,
     camera: Option<String>,
     lens: Option<String>,
     tags: Vec<String>,
@@ -29,6 +30,30 @@ struct PhotoMetadata {
     rating: Option<u8>,
     is_raw: Option<bool>,
     capture_time: Option<String>,
+}
+
+fn gallery_item(entry: &LoadedPhoto) -> GalleryItem {
+    let jpeg = Arc::<[u8]>::from(entry.jpeg.clone().unwrap_or_default().into_boxed_slice());
+    let photo = &entry.photo;
+    GalleryItem {
+        metadata: PhotoMetadata {
+            id: photo.photo_id.clone(),
+            filename: photo.filename.clone(),
+            decision: photo.decision.clone(),
+            decision_revision: photo.decision_revision,
+            camera: None,
+            lens: None,
+            tags: Vec::new(),
+            session_name: None,
+            iso: None,
+            sharpness: None,
+            focus_accuracy: None,
+            rating: None,
+            is_raw: None,
+            capture_time: None,
+        },
+        jpeg,
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -307,6 +332,27 @@ impl SlintDemoView {
             library,
         }
     }
+
+    /// Returns the selected IDs visible in the current filtered catalog page.
+    /// Hidden selections are retained locally but never included in bulk writes.
+    /// Smoke-fixture-only cards are intentionally excluded from persistent writes.
+    pub fn selected_photo_ids(&self) -> Vec<String> {
+        if self.smoke_fixture {
+            return Vec::new();
+        }
+        let Ok(library) = self.library.lock() else {
+            return Vec::new();
+        };
+        let mut selected: Vec<_> = library
+            .visible_indices()
+            .into_iter()
+            .map(|index| &library.items[index].metadata.id)
+            .filter(|id| library.selected.contains(*id))
+            .cloned()
+            .collect();
+        selected.sort();
+        selected
+    }
 }
 
 impl DemoView for SlintDemoView {
@@ -316,12 +362,16 @@ impl DemoView for SlintDemoView {
         };
         match state {
             ViewState::Loading => {
+                window.set_navigation_error("".into());
                 window.set_error_message("Connecting to the local Photo Culler service.".into());
                 window.set_service_status("Conectando con el servicio local…".into());
+                window.set_can_previous_photo(false);
+                window.set_can_next_photo(false);
                 window.set_view_state(0);
                 set_browser_status("loading", "Loading gallery");
             }
             ViewState::Empty => {
+                window.set_navigation_error("".into());
                 if let Ok(mut library) = self.library.lock() {
                     library.items.clear();
                     library.selected.clear();
@@ -330,112 +380,117 @@ impl DemoView for SlintDemoView {
                 window.set_photo_count(0);
                 window.set_photo_index(0);
                 window.set_navigation_label("0 fotos".into());
+                window.set_can_previous_photo(false);
+                window.set_can_next_photo(false);
                 window.set_service_status("Galería vacía".into());
                 window.set_view_state(2);
                 set_browser_status("empty", "The selected gallery contains no photos.");
             }
             ViewState::Error { message } => {
+                window.set_navigation_error("".into());
                 set_browser_status("error", &message);
+                window.set_can_previous_photo(false);
+                window.set_can_next_photo(false);
                 window.set_service_status("Servicio no disponible".into());
                 window.set_error_message(message.into());
                 window.set_view_state(3);
             }
             ViewState::Ready {
-                photo,
-                jpeg,
-                preview_error,
-                ..
+                gallery_id,
+                photos,
+                selected_index,
+                page_offset,
+                page_number,
+                next_cursor,
             } => {
-                let filename = photo.filename;
-                let photo_id = photo.photo_id;
-                let decision = photo.decision;
+                window.set_navigation_error("".into());
+                let Some(selected) = photos.get(selected_index) else {
+                    window.set_service_status("No hay una foto seleccionada".into());
+                    window.set_view_state(2);
+                    return;
+                };
+                let photo = &selected.photo;
+                let filename = photo.filename.clone();
+                let photo_id = photo.photo_id.clone();
                 window.set_photo_name(filename.clone().into());
-                window.set_gallery_title("Sesión de muestra".into());
+                window.set_gallery_title(gallery_id.clone().into());
                 window.set_fallback_photo_id(photo_id.clone().into());
-                window.set_selected_photo_id(photo_id.clone().into());
-                window.set_photo_index(0);
-                window.set_navigation_label("Foto 1 de 1".into());
-                if let Some(bytes) = jpeg {
-                    match decode_jpeg(&bytes, "image/jpeg") {
-                        Ok(image) => {
-                            window.set_photo_thumbnail(image);
-                            let jpeg: Arc<[u8]> = Arc::from(bytes.into_boxed_slice());
-                            let records = if self.smoke_fixture {
-                                smoke_fixture_metadata()
-                                    .into_iter()
-                                    .map(|metadata| GalleryItem {
-                                        metadata,
-                                        jpeg: jpeg.clone(),
-                                    })
-                                    .collect()
-                            } else {
-                                vec![GalleryItem {
-                                    metadata: PhotoMetadata {
-                                        id: photo_id.clone(),
-                                        filename: filename.clone(),
-                                        decision: decision.clone(),
-                                        camera: None,
-                                        lens: None,
-                                        tags: Vec::new(),
-                                        session_name: None,
-                                        iso: None,
-                                        sharpness: None,
-                                        focus_accuracy: None,
-                                        rating: None,
-                                        is_raw: None,
-                                        capture_time: None,
-                                    },
-                                    jpeg,
-                                }]
-                            };
-                            if let Ok(mut library) = self.library.lock() {
-                                library.items = records;
-                                library.metadata_available = self.smoke_fixture;
-                                let valid_ids: HashSet<_> = library
-                                    .items
-                                    .iter()
-                                    .map(|item| item.metadata.id.clone())
-                                    .collect();
-                                library.selected.retain(|id| valid_ids.contains(id));
-                                if library.selected.is_empty()
-                                    && let Some(first_id) =
-                                        library.items.first().map(|item| item.metadata.id.clone())
-                                {
-                                    library.selected.insert(first_id);
-                                }
-                            }
-                            window.set_service_status(if self.smoke_fixture {
-                                "SMOKE FIXTURE · REST JPEG, synthetic metadata".into()
-                            } else {
-                                "Servicio local listo".into()
-                            });
-                            window.set_error_message("".into());
-                            window.set_view_state(1);
-                            refresh_library(&self.window, &self.library, self.web_layout);
-                            let browser_message = if self.smoke_fixture {
-                                format!("{filename} · 10-card smoke fixture")
-                            } else {
-                                filename
-                            };
-                            set_browser_status("ready", &browser_message);
-                        }
-                        Err(error) => {
-                            let message = format!("Preview unavailable: {error:?}");
-                            set_browser_status("error", &message);
-                            window.set_error_message(message.into());
-                            window.set_view_state(3);
-                        }
-                    }
-                } else {
-                    let message =
-                        preview_error.unwrap_or_else(|| "The photo preview is unavailable.".into());
-                    set_browser_status("error", &message);
-                    window.set_service_status("Vista previa no disponible".into());
-                    window.set_error_message(message.into());
-                    window.set_view_state(3);
+                if window.get_selected_photo_id().as_str() != photo_id.as_str() {
+                    window.set_selected_photo_id(photo_id.clone().into());
+                    window.invoke_recipe_photo_selected(photo_id.clone().into());
                 }
+                let global_index = page_offset + selected_index;
+                let known_total = next_cursor.is_none().then_some(page_offset + photos.len());
+                window.set_photo_index(global_index as i32);
+                window.set_photo_count(known_total.unwrap_or(global_index + 1) as i32);
+                window.set_can_previous_photo(selected_index > 0 || page_number > 1);
+                window
+                    .set_can_next_photo(selected_index + 1 < photos.len() || next_cursor.is_some());
+                window.set_navigation_label(match known_total {
+                    Some(total) => format!("Foto {} de {total}", global_index + 1).into(),
+                    None => format!("Foto {} · página {page_number}", global_index + 1).into(),
+                });
+                let preview = selected
+                    .jpeg
+                    .as_ref()
+                    .and_then(|bytes| decode_jpeg(bytes, "image/jpeg").ok());
+                window.set_photo_thumbnail(preview.clone().unwrap_or_default());
+                let records: Vec<GalleryItem> = if self.smoke_fixture && preview.is_some() {
+                    let jpeg: Arc<[u8]> =
+                        Arc::from(selected.jpeg.clone().unwrap_or_default().into_boxed_slice());
+                    smoke_fixture_metadata()
+                        .into_iter()
+                        .map(|metadata| GalleryItem {
+                            metadata,
+                            jpeg: jpeg.clone(),
+                        })
+                        .collect()
+                } else {
+                    photos.iter().map(gallery_item).collect()
+                };
+                if let Ok(mut library) = self.library.lock() {
+                    library.items = records;
+                    library.metadata_available = self.smoke_fixture && preview.is_some();
+                    let valid_ids: HashSet<_> = library
+                        .items
+                        .iter()
+                        .map(|item| item.metadata.id.clone())
+                        .collect();
+                    library.selected.retain(|id| valid_ids.contains(id));
+                    if library.selected.is_empty()
+                        && let Some(first_id) =
+                            library.items.first().map(|item| item.metadata.id.clone())
+                    {
+                        library.selected.insert(first_id);
+                    }
+                }
+                window.set_service_status(if preview.is_none() {
+                    "Vista previa no disponible".into()
+                } else if self.smoke_fixture {
+                    "SMOKE FIXTURE · REST JPEG, synthetic metadata".into()
+                } else {
+                    "Servicio local listo".into()
+                });
+                window.set_error_message("".into());
+                window.set_view_state(1);
+                refresh_library(&self.window, &self.library, self.web_layout);
+                let browser_message = if self.smoke_fixture && preview.is_some() {
+                    format!("{filename} · 10-card smoke fixture")
+                } else {
+                    filename
+                };
+                set_browser_status("ready", &browser_message);
             }
         }
+    }
+
+    fn set_navigation_error(&self, message: String) {
+        let Some(window) = self.window.upgrade() else {
+            return;
+        };
+        window.set_navigation_error(message.clone().into());
+        window.set_service_status("No se pudo cargar la página; puedes reintentar.".into());
+        set_browser_status("error", &message);
     }
 }
 
@@ -501,7 +556,10 @@ fn wire_library_callbacks(
         }
         if let Some(window) = weak.upgrade() {
             if !photo_id.is_empty() {
-                window.set_selected_photo_id(photo_id.clone());
+                if window.get_selected_photo_id().as_str() != photo_id.as_str() {
+                    window.set_selected_photo_id(photo_id.clone());
+                    window.invoke_recipe_photo_selected(photo_id);
+                }
             }
         }
         refresh_library(&weak, &callback_library, web_layout);
@@ -550,16 +608,16 @@ fn refresh_library(
     let visible = state.visible_indices();
     let gallery_photos: Vec<_> = visible
         .iter()
-        .filter_map(|index| {
+        .map(|index| {
             let item = &state.items[*index];
-            let thumbnail = decode_jpeg(&item.jpeg, "image/jpeg").ok()?;
+            let thumbnail = decode_jpeg(&item.jpeg, "image/jpeg").unwrap_or_default();
             let metadata = &item.metadata;
             let decision = decision_label(&metadata.decision, web_layout);
             let score = metadata
                 .focus_accuracy
                 .map(|score| format!("{:.1}", score as f32 / 10.0))
                 .unwrap_or_else(|| "—".into());
-            Some(crate::GalleryPhoto {
+            crate::GalleryPhoto {
                 id: metadata.id.clone().into(),
                 filename: metadata.filename.clone().into(),
                 decision: decision.into(),
@@ -574,7 +632,7 @@ fn refresh_library(
                 sharpness: metadata.sharpness.map(i32::from).unwrap_or(-1),
                 metadata_known: state.metadata_available,
                 selected: state.selected.contains(&metadata.id),
-            })
+            }
         })
         .collect();
     let camera_options: Vec<_> = ordered_camera_names(&state.items)
@@ -609,17 +667,12 @@ fn refresh_library(
         .iter()
         .filter(|item| decision_category(&item.metadata.decision) == "unrated")
         .count() as i32;
-    let visible_count = gallery_photos.len() as i32;
-    let selected_count = state.selected.len() as i32;
+    // The decision toolbar and its count refer to photos currently visible
+    // under the active filters. Keep hidden multi-selections stored so they
+    // can reappear when filters change, but never imply they will be changed.
+    let selected_count = selected_visible_count as i32;
     window.set_gallery_photos(slint::ModelRc::new(slint::VecModel::from(gallery_photos)));
     window.set_camera_filter_options(slint::ModelRc::new(slint::VecModel::from(camera_options)));
-    window.set_photo_count(visible_count);
-    window.set_photo_index(0);
-    window.set_navigation_label(if visible_count == 0 {
-        "0 fotos".into()
-    } else {
-        format!("Foto 1 de {visible_count}").into()
-    });
     window.set_selected_photo_count(selected_count);
     window.set_all_visible_selected(all_visible_selected);
     window.set_gallery_metadata_available(state.metadata_available);
@@ -896,6 +949,7 @@ fn metadata(
         id: id.into(),
         filename: filename.into(),
         decision: decision.into(),
+        decision_revision: 0,
         camera: Some(camera.into()),
         lens: Some(lens.into()),
         tags: tags.iter().map(|tag| (*tag).into()).collect(),
@@ -1146,6 +1200,7 @@ mod tests {
             id: "demo-001".into(),
             filename: "demo-001.jpg".into(),
             decision: "undecided".into(),
+            decision_revision: 0,
             camera: None,
             lens: None,
             tags: Vec::new(),

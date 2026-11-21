@@ -155,6 +155,15 @@ impl AssetBundle {
             .with_state(self);
         api.merge(assets)
     }
+
+    /// Exact request paths that may be served without an API session. The
+    /// authentication layer uses this manifest-derived allowlist instead of
+    /// inferring static content from URL extensions.
+    pub fn public_request_paths(&self) -> BTreeSet<String> {
+        let mut paths = BTreeSet::from(["/".to_owned()]);
+        paths.extend(self.files.keys().map(|relative| format!("/{relative}")));
+        paths
+    }
 }
 
 fn content_type(name: &str) -> Option<&'static str> {

@@ -1,10 +1,17 @@
 # Detail analyzer integration notes
 
-The `photo-culler-image-engine` root does not yet register analyzer submodules.
-This task adds a standalone implementation and tests only inside the exclusive
-`analyzers/detail/` area. The integrator still needs to declare
-`analyzers::detail` from the crate root and connect it to the engine adapter.
-No manifest, root module, or shared metrics file was changed here.
+## Current candidate integration status
+
+The historical note that the crate root did not register analyzer submodules
+is stale for the current candidate: `lib.rs` now registers
+`analyzers::detail`. Registration only makes this module available.
+`NativePixelEngine` continues to compute its existing detail subset through
+`metrics::PixelFeatures`; it does not call `DetailAnalysis::analyze` or adapt
+`DetailAnalysis::metric_values()` into runtime `MetricResult` values. In
+particular, its regional and directional-motion outputs are not runtime
+metrics. See the parent `analyzers/INTEGRATION.md` for the audited runtime
+boundary and acceptance gates. Keep this API standalone until metric IDs,
+units, versions, confidence, and golden-fixture parity are agreed.
 
 ## Input contract
 

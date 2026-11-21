@@ -6,6 +6,10 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+mod sqlite;
+
+pub use sqlite::SqliteRecipeStore;
+
 pub const RECIPE_SCHEMA_VERSION: u32 = 1;
 pub const MAX_HISTORY: usize = 50;
 
@@ -113,7 +117,17 @@ pub trait RecipeStore {
     fn load(&self, photo_id: &str) -> Result<Option<RecipeDocument>, Self::Error>;
     /// Persist the complete snapshot atomically. Implementations should use a
     /// transaction and enforce the expected current revision where supported.
-    fn save(&self, photo_id: &str, document: &RecipeDocument) -> Result<(), Self::Error>;
+    fn save(
+        &self,
+        photo_id: &str,
+        document: &RecipeDocument,
+    ) -> Result<(), RecipeStoreError<Self::Error>>;
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum RecipeStoreError<E> {
+    Conflict { expected: u64, actual: u64 },
+    Persistence(E),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -178,7 +192,7 @@ impl<S: RecipeStore> RecipeService<S> {
         document.revision = 1;
         self.store
             .save(photo_id, &document)
-            .map_err(|_| RecipeError::PersistenceFailed)?;
+            .map_err(map_store_error)?;
         Ok(document)
     }
 
@@ -202,7 +216,7 @@ impl<S: RecipeStore> RecipeService<S> {
         bump(&mut document)?;
         self.store
             .save(photo_id, &document)
-            .map_err(|_| RecipeError::PersistenceFailed)?;
+            .map_err(map_store_error)?;
         Ok(document)
     }
 
@@ -246,7 +260,7 @@ impl<S: RecipeStore> RecipeService<S> {
         bump(&mut document)?;
         self.store
             .save(photo_id, &document)
-            .map_err(|_| RecipeError::PersistenceFailed)?;
+            .map_err(map_store_error)?;
         Ok(document)
     }
 }
@@ -256,6 +270,15 @@ fn validate_id(id: &str) -> Result<(), RecipeError> {
         Err(RecipeError::EmptyPhotoId)
     } else {
         Ok(())
+    }
+}
+
+fn map_store_error<E>(error: RecipeStoreError<E>) -> RecipeError {
+    match error {
+        RecipeStoreError::Conflict { expected, actual } => {
+            RecipeError::Conflict { expected, actual }
+        }
+        RecipeStoreError::Persistence(_) => RecipeError::PersistenceFailed,
     }
 }
 fn check_revision(expected: u64, actual: u64) -> Result<(), RecipeError> {
@@ -291,7 +314,7 @@ mod tests {
         fn load(&self, id: &str) -> Result<Option<RecipeDocument>, ()> {
             Ok(self.0.borrow().get(id).cloned())
         }
-        fn save(&self, id: &str, doc: &RecipeDocument) -> Result<(), ()> {
+        fn save(&self, id: &str, doc: &RecipeDocument) -> Result<(), RecipeStoreError<()>> {
             self.0.borrow_mut().insert(id.into(), doc.clone());
             Ok(())
         }
@@ -311,14 +334,21 @@ mod tests {
                 Err(e) => Err(e),
             }
         }
-        fn save(&self, id: &str, doc: &RecipeDocument) -> Result<(), Self::Error> {
+        fn save(
+            &self,
+            id: &str,
+            doc: &RecipeDocument,
+        ) -> Result<(), RecipeStoreError<Self::Error>> {
             let path = self.0.join(format!("{id}.json"));
             let tmp = self.0.join(format!(".{id}.tmp"));
             fs::write(
                 &tmp,
-                serde_json::to_vec(doc).map_err(std::io::Error::other)?,
-            )?;
-            fs::rename(tmp, path)
+                serde_json::to_vec(doc)
+                    .map_err(std::io::Error::other)
+                    .map_err(RecipeStoreError::Persistence)?,
+            )
+            .map_err(RecipeStoreError::Persistence)?;
+            fs::rename(tmp, path).map_err(RecipeStoreError::Persistence)
         }
     }
 

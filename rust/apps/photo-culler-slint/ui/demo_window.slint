@@ -1,7 +1,10 @@
 import { DesignTokens } from "./components/components.slint";
 import { GalleryPhoto, LibraryGallery } from "./library/gallery.slint";
 import { PhotoCullerProHeader } from "./library/photo_culler_pro_header.slint";
+import { ImportDialog, ImportJobSummary, ImportSource } from "./library/import_dialog.slint";
+import { RecipeEditor } from "./recipes/recipes.slint";
 import { CameraFilterOption, PhotoCullerProPrimarySidebar, PhotoCullerProFilterSidebar } from "./library/photo_culler_pro_sidebars.slint";
+import { Button } from "std-widgets.slint";
 
 export { DesignTokens } from "./components/components.slint";
 
@@ -14,7 +17,11 @@ export component DemoWindow inherits Window {
     in property <int> photo-index: 0;
     in property <int> photo-count: 1;
     in property <string> navigation-label: "Photo 1 of 1";
+    in property <string> navigation-error: "";
+    in property <bool> can-previous-photo: false;
+    in property <bool> can-next-photo: false;
     callback retry();
+    callback refresh-gallery();
     callback previous-photo();
     callback next-photo();
 
@@ -45,11 +52,72 @@ export component DemoWindow inherits Window {
     callback navigate(view: string);
     callback search-changed(query: string);
     callback action-requested(action: string);
+    in property <string> analysis-status: "";
+    in property <string> analysis-state: "";
+    in property <bool> analysis-busy: false;
+    callback analysis-requested();
+    callback analysis-pause-requested();
+    callback analysis-resume-requested();
+    callback analysis-cancel-requested();
+    in property <bool> auth-required: false;
+    in property <bool> auth-busy: false;
+    in-out property <string> auth-pairing-code: "";
+    in property <string> auth-status: "Introduce el código temporal del servidor local.";
+    callback auth-pair-requested(code: string);
     callback filter-requested(name: string, value: string);
     callback selection-requested(photo-id: string, multi: bool);
     callback select-all-requested();
     callback sort-direction-changed(descending: bool);
     callback density-changed(density: int);
+    callback decision-requested(decision: string);
+
+    // Recipe state is hosted by the application controller and persists only
+    // parameters. The source preview remains read-only.
+    in-out property <float> recipe-exposure: 0;
+    in-out property <float> recipe-temperature: 6500;
+    in-out property <float> recipe-tint: 0;
+    in property <string> recipe-revision-label: "Sin cargar";
+    in property <string> recipe-status: "Selecciona una foto para cargar su receta.";
+    in property <bool> recipe-busy: false;
+    in property <bool> recipe-dirty: false;
+    in property <bool> recipe-can-undo: false;
+    in property <bool> recipe-can-redo: false;
+    callback recipe-changed(exposure: float, temperature: float, tint: float);
+    callback recipe-photo-selected(photo-id: string);
+    callback recipe-save-requested();
+    callback recipe-undo-requested();
+    callback recipe-redo-requested();
+    callback recipe-revert-requested();
+
+    // API v2 import snapshot and event contract. The controller owns all
+    // requests and updates these properties; source IDs are opaque, never paths.
+    in-out property <bool> import-open: false;
+    in property <[ImportSource]> import-sources: [];
+    in property <[ImportJobSummary]> import-active-jobs: [];
+    in-out property <string> import-selected-source-id: "";
+    in property <bool> import-sources-loading: false;
+    in property <string> import-source-error: "";
+    in property <string> import-estimate-state: "idle"; // idle | loading | ready | error
+    in property <string> import-estimate-error: "";
+    in property <string> import-estimate-total-files: "";
+    in property <string> import-estimate-total-bytes: "";
+    in property <string> import-estimate-logical-photos: "";
+    in property <string> import-estimate-details: "";
+    in property <string> import-job-id: "";
+    in property <string> import-job-state: "";
+    in property <string> import-job-discovered: "0";
+    in property <string> import-job-imported: "0";
+    in property <string> import-job-issues: "0";
+    in property <string> import-job-error: "";
+    callback import-open-requested();
+    callback import-source-selected(source-id: string);
+    callback import-job-selected(job-id: string);
+    callback import-estimate-requested(source-id: string);
+    callback import-start-requested(source-id: string);
+    callback import-pause-requested(job-id: string);
+    callback import-resume-requested(job-id: string);
+    callback import-cancel-requested(job-id: string);
+    callback import-dismissed();
 
     title: "Photo Culler Pro";
     preferred-width: 1440px;
@@ -72,7 +140,51 @@ export component DemoWindow inherits Window {
                 root.search-changed(query);
             }
             navigate(view) => { root.navigate(view); }
-            action-requested(action) => { root.action-requested(action); }
+            action-requested(action) => {
+                if action == "import" {
+                    root.import-open = true;
+                    root.import-open-requested();
+                }
+                if action == "processing" { root.analysis-requested(); }
+                root.action-requested(action);
+            }
+        }
+
+        if root.analysis-status != "": Rectangle {
+            horizontal-stretch: 1;
+            height: 38px;
+            background: #20242b;
+            HorizontalLayout {
+                spacing: 8px;
+                padding-left: 12px;
+                padding-right: 12px;
+                alignment: center;
+
+                Text {
+                    horizontal-stretch: 1;
+                    height: parent.height;
+                    text: root.analysis-status;
+                    color: #d5d9df;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                if root.analysis-state == "running": Button {
+                    text: "Pausar";
+                    enabled: !root.analysis-busy;
+                    clicked => { root.analysis-pause-requested(); }
+                }
+                if root.analysis-state == "paused": Button {
+                    text: "Reanudar";
+                    enabled: !root.analysis-busy;
+                    clicked => { root.analysis-resume-requested(); }
+                }
+                if root.analysis-state == "queued" || root.analysis-state == "running" || root.analysis-state == "paused": Button {
+                    text: "Cancelar";
+                    enabled: !root.analysis-busy;
+                    clicked => { root.analysis-cancel-requested(); }
+                }
+            }
         }
 
         HorizontalLayout {
@@ -117,14 +229,147 @@ export component DemoWindow inherits Window {
                 error-message: root.error-message;
                 selected-photo-count: root.selected-photo-count;
                 all-visible-selected: root.all-visible-selected;
+                navigation-label: root.navigation-label;
+                navigation-error: root.navigation-error;
+                can-previous-photo: root.can-previous-photo;
+                can-next-photo: root.can-next-photo;
                 grid-density <=> root.grid-density;
                 sort-descending <=> root.sort-descending;
                 retry => { root.retry(); }
-                select-photo(id) => { root.select-photo(id); }
+                refresh-gallery => { root.refresh-gallery(); }
+                previous-photo => { root.previous-photo(); }
+                next-photo => { root.next-photo(); }
+                select-photo(id) => {
+                    root.recipe-photo-selected(id);
+                    root.select-photo(id);
+                }
                 selection-requested(id, multi) => { root.selection-requested(id, multi); }
                 select-all-requested => { root.select-all-requested(); }
                 sort-direction-changed(descending) => { root.sort-direction-changed(descending); }
                 density-changed(density) => { root.density-changed(density); }
+                decision-requested(decision) => { root.decision-requested(decision); }
+            }
+
+            RecipeEditor {
+                width: 380px;
+                vertical-stretch: 1;
+                visible: root.view-state == 1;
+                photo-label: root.selected-photo-id;
+                original-image: root.photo-thumbnail;
+                revision-label: root.recipe-revision-label;
+                status: root.recipe-status;
+                busy: root.recipe-busy;
+                dirty: root.recipe-dirty;
+                can-undo: root.recipe-can-undo;
+                can-redo: root.recipe-can-redo;
+                preview-available: false;
+                export-available: false;
+                exposure-value <=> root.recipe-exposure;
+                temperature-value <=> root.recipe-temperature;
+                tint-value <=> root.recipe-tint;
+                recipe-changed(exposure, temperature, tint) => {
+                    root.recipe-changed(exposure, temperature, tint);
+                }
+                save-requested => { root.recipe-save-requested(); }
+                undo-requested => { root.recipe-undo-requested(); }
+                redo-requested => { root.recipe-redo-requested(); }
+                revert-requested => { root.recipe-revert-requested(); }
+            }
+        }
+    }
+
+    ImportDialog {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        open: root.import-open;
+        web-layout: root.web-layout;
+        sources: root.import-sources;
+        active-jobs: root.import-active-jobs;
+        selected-source-id <=> root.import-selected-source-id;
+        sources-loading: root.import-sources-loading;
+        source-error: root.import-source-error;
+        estimate-state: root.import-estimate-state;
+        estimate-error: root.import-estimate-error;
+        estimate-total-files: root.import-estimate-total-files;
+        estimate-total-bytes: root.import-estimate-total-bytes;
+        estimate-logical-photos: root.import-estimate-logical-photos;
+        estimate-details: root.import-estimate-details;
+        job-id: root.import-job-id;
+        job-state: root.import-job-state;
+        job-discovered: root.import-job-discovered;
+        job-imported: root.import-job-imported;
+        job-issues: root.import-job-issues;
+        job-error: root.import-job-error;
+        dismissed => {
+            root.import-open = false;
+            root.import-dismissed();
+        }
+        source-selected(id) => {
+            root.import-selected-source-id = id;
+            root.import-source-selected(id);
+        }
+        job-selected(job-id) => { root.import-job-selected(job-id); }
+        estimate-requested(id) => { root.import-estimate-requested(id); }
+        start-requested(id) => { root.import-start-requested(id); }
+        pause-requested(id) => { root.import-pause-requested(id); }
+        resume-requested(id) => { root.import-resume-requested(id); }
+        cancel-requested(id) => { root.import-cancel-requested(id); }
+    }
+
+    if root.auth-required: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        background: #101318f2;
+
+        VerticalLayout {
+            x: root.width * 0.15;
+            y: root.height * 0.22;
+            width: root.width * 0.7;
+            height: root.height * 0.56;
+            spacing: 16px;
+            alignment: center;
+
+            Text {
+                horizontal-stretch: 1;
+                text: "Conecta Photo Culler";
+                color: #f2f3f5;
+                font-size: 24px;
+                horizontal-alignment: center;
+            }
+            Text {
+                horizontal-stretch: 1;
+                text: "Pega el código de un solo uso del servidor. Un CLI ya emparejado puede emitir otro; también puedes reiniciar el servidor manual. El código y la sesión permanecen solo en memoria.";
+                color: #b7bec8;
+                font-size: 13px;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+            TextInput {
+                horizontal-stretch: 1;
+                height: 44px;
+                text: root.auth-pairing-code;
+                font-family: DesignTokens.body-mono-font;
+                font-size: 14px;
+                color: #f2f3f5;
+                edited => { root.auth-pairing-code = self.text; }
+                accepted => { root.auth-pair-requested(root.auth-pairing-code); }
+            }
+            Button {
+                text: "Conectar";
+                enabled: root.auth-pairing-code != "" && !root.auth-busy;
+                clicked => { root.auth-pair-requested(root.auth-pairing-code); }
+            }
+            Text {
+                horizontal-stretch: 1;
+                text: root.auth-status;
+                color: #b7bec8;
+                font-size: 12px;
+                horizontal-alignment: center;
+                wrap: word-wrap;
             }
         }
     }

@@ -121,11 +121,13 @@ class GalleryParityTests(unittest.TestCase):
         self.assertIn('canvas_backing_width: document.querySelector("#canvas").width', CAPTURE)
         self.assertIn('fullPage: false', CAPTURE)
 
-    def test_write_actions_remain_disabled_without_an_implementation_badge(self):
+    def test_decision_actions_are_wired_to_the_persistent_review_callback(self):
         self.assertNotIn('text: "READ ONLY";', GALLERY)
-        self.assertIn('DisabledAction { label: "KEEP";', GALLERY)
-        self.assertIn('DisabledAction { label: "ALT";', GALLERY)
-        self.assertIn('DisabledAction { label: "REJECT";', GALLERY)
+        self.assertIn('label: "KEEP"; decision: "keep";', GALLERY)
+        self.assertIn('label: "ALT"; decision: "alt";', GALLERY)
+        self.assertIn('label: "REJECT"; decision: "reject";', GALLERY)
+        self.assertIn('label: "CLEAR"; decision: "undecided";', GALLERY)
+        self.assertIn('root.decision-requested(decision)', GALLERY)
 
     def test_1100px_header_keeps_every_reference_tab_and_control_visible(self):
         header = (UI / "library" / "photo_culler_pro_header.slint").read_text(encoding="utf-8")

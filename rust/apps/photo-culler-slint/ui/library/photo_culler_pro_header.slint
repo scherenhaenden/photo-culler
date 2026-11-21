@@ -49,31 +49,56 @@ component PhotoCullerProAction inherits Rectangle {
     border-radius: 14px;
     border-width: root.primary ? 0px : 1px;
     border-color: #ffffff26;
+    accessible-role: button;
+    accessible-label: root.action == "import" ? "Import photos" : "Export photos";
 
-    HorizontalLayout {
-        spacing: root.compact ? 0px : 5px;
-        padding-left: root.compact ? 0px : 10px;
-        padding-right: root.compact ? 0px : 10px;
-        alignment: center;
-
-        PhotoCullerProIcon {
-            name: root.icon-name;
-            size: 14px;
-            tint: root.primary ? #050505 : (root.action == "export" ? DesignTokens.best : #ffffff);
+    focus_scope := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.requested(root.action);
+                accept
+            } else { reject }
         }
-        if !root.compact: Text {
-            text: root.label;
-            color: root.primary ? #050505 : #ffffff;
-            font-family: DesignTokens.body-font;
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.8px;
-            vertical-alignment: center;
-        }
-    }
 
-    TouchArea {
-        clicked => { root.requested(root.action); }
+        HorizontalLayout {
+            spacing: root.compact ? 0px : 5px;
+            padding-left: root.compact ? 0px : 10px;
+            padding-right: root.compact ? 0px : 10px;
+            alignment: center;
+
+            PhotoCullerProIcon {
+                name: root.icon-name;
+                size: 14px;
+                tint: root.primary ? #050505 : (root.action == "export" ? DesignTokens.best : #ffffff);
+            }
+            if !root.compact: Text {
+                text: root.label;
+                color: root.primary ? #050505 : #ffffff;
+                font-family: DesignTokens.body-font;
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 0.8px;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle {
+            x: 2px;
+            y: 2px;
+            width: parent.width - 4px;
+            height: parent.height - 4px;
+            border-radius: 12px;
+            border-width: focus_scope.has-focus ? 2px : 0px;
+            border-color: DesignTokens.focus;
+            background: transparent;
+        }
+
+        TouchArea {
+            clicked => { focus_scope.focus(); root.requested(root.action); }
+        }
     }
 }
 
@@ -125,7 +150,7 @@ export component PhotoCullerProHeader inherits Rectangle {
         feedback-message = action == "import" ? "IMPORT · unavailable in Sprint 01" :
             (action == "export" ? "EXPORT · unavailable in Sprint 01" :
             (action == "performance" ? "SYSTEM STATUS · unavailable in Sprint 01" :
-            (action == "processing" ? "PROCESSING · unavailable in Sprint 01" :
+            (action == "processing" ? "PROCESSING · technical analysis" :
             (action == "shortcuts" ? "SHORTCUTS · unavailable in Sprint 01" :
             (action == "settings" ? "SETTINGS · unavailable in Sprint 01" :
             (action == "dashboard" ? "DASHBOARD · unavailable in Sprint 01" :
@@ -380,7 +405,7 @@ export component PhotoCullerProHeader inherits Rectangle {
                 }
             }
 
-            if root.width >= 600px: HorizontalLayout {
+            if root.width >= 360px: HorizontalLayout {
                 spacing: 8px;
                 PhotoCullerProAction {
                     label: "Import";
@@ -389,7 +414,7 @@ export component PhotoCullerProHeader inherits Rectangle {
                     primary: true;
                     compact: root.width < 900px;
                     requested(action) => {
-                        root.show-unavailable(action);
+                        if action != "import" { root.show-unavailable(action); }
                         root.action-requested(action);
                     }
                 }

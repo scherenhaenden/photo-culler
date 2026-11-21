@@ -1,6 +1,8 @@
 //! Catalog write adapter. The domain service owns validation, persistence and
 //! atomic revision checks. HTTP/Serde wiring awaits the shared API contract.
 
+pub mod decision;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Write {
     Decision {

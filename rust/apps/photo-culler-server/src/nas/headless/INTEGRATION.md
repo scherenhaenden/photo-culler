@@ -19,19 +19,19 @@ validation, explicit LAN binding, and remote administrator authorization.
 
 ## Integration boundary
 
-At the task 55 baseline, `rust/apps/photo-culler-server/Cargo.toml` and a server
-crate root/router do not exist, and `apps/photo-culler-server` is not a member
-of `rust/Cargo.toml`. Existing diagnostics, session, and origin modules are
-standalone contracts rather than a running Axum service. This task therefore
-does not claim an HTTP listener, REST status/configuration endpoints, SQLite
-catalog persistence, or shared session integration. The integrator must add
-the server package and adapt these contracts to the frozen API/session/router
-interfaces before those runtime properties can be accepted.
+The historical task-55 baseline predates the current server package. In the
+integration candidate, an Axum server and loopback-only lifecycle exist, but
+`nas::headless` is still not registered in `lib.rs` or mounted in
+`demo/runtime.rs`. It does not provide NAS HTTP status/configuration endpoints,
+NAS-specific storage permissions, or shared session authentication. The task
+55 module remains a standalone startup/policy contract, not an operational NAS
+service.
 
 The catalog callback in the harness is a double for the startup boundary, not
-a persistence implementation. LAN token handling is likewise an opaque
+a persistence implementation. LAN token handling is likewise only an opaque
 credential-presence check; secret loading, hashing, and session validation
-belong to the shared authentication layer.
+belong to the shared authentication layer. The current Axum lifecycle rejects
+non-loopback binds, and no NAS route is available to opt into LAN exposure.
 
 The write-scope helper rejects lexical `.` and `..` traversal. The filesystem
 adapter must still canonicalize configured roots and candidate paths and

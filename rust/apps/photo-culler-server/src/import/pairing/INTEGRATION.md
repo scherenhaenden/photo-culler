@@ -1,21 +1,18 @@
-# Pairing integration note (task 22)
+# Import pairing status
 
-This source directory is prepared for the planned `photo-culler-server` crate.
-At base commit `a68f360`, that crate, its crate manifest, root module tree, and
-the shared integration harness do not exist yet. This directory therefore
-contains a standalone Rust module and injected-record unit tests; the server
-module declaration and scanner/catalog adapters remain pending integrator work.
+`associate` groups source-relative media and sidecar paths without creating or
+changing catalog photo identities. It keeps matching stems from separate
+directories distinct, marks duplicate same-kind media as ambiguous, and leaves
+sidecars unattached when their media group is ambiguous.
 
-The caller should pass scanner records with source-root-relative paths and
-stable existing file IDs. Pairing never creates or changes a `PhotoId`; it
-returns association groups only. Path matching uses a lower-cased parent and
-stem for compatibility with the legacy pairer's case-insensitive grouping.
-Files with the same stem in different directories remain distinct. Duplicate
-RAW, JPEG, or other-raster candidates of the same kind are marked ambiguous.
-No candidate is selected by order or extension; sidecars for ambiguous media
-stay unattached with an explicit reason.
+The module is registered in `import::pairing`, but the current SQLite
+`finish_job` path resolves groups using its own `logical_key` and SQL checks;
+this function is not called by that finalizer. The two implementations must be
+kept behaviorally aligned or consolidated before declaring pairing complete.
+In particular, extension support and sidecar attachment rules need to remain
+consistent across discovery, pairing, and catalog finalization.
 
-When the crate is registered, add `pub mod pairing;` at the server import module
-and run this module's tests through the shared workspace harness. No crate
-manifest or root module was added here because those paths are outside task 22's
-exclusive area.
+Runtime import acceptance is still pending. Record the candidate commit SHA and
+verify RAW/JPEG association, sidecars, same-stem files in different folders,
+duplicate candidates, and unchanged/moved photo identities using the procedure
+in `docs/rust-slint-demo/RUN.md`.

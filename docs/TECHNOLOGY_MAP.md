@@ -19,14 +19,14 @@ that every path was built or exercised on each platform. See
 | Image and editing | `previews/`, `metadata/`, `editing/`, `restoration/`, `generative/` | `photo-culler-image-engine` has metric primitives and `image` JPEG/PNG/TIFF feature declarations | The Rust crate is not evidence of a complete image or RAW pipeline. Its codec feature list does not include a RAW decoder. |
 | API and web UI | `photo_culler/web/` routes, services, templates and static files | Rust server HTTP modules are tracked under `rust/apps/photo-culler-server/src/http/` | Python web is the current reference implementation. Rust route modules require integration and platform validation. |
 | Desktop | `photo_culler/desktop/`, `scripts/build_linux.sh`, desktop tests under `tests/` | `rust/apps/photo-culler-egui/` and `rust/apps/photo-culler-tauri/` | Python and Rust desktop source exists. Source presence alone does not establish package readiness, parity, or clean shutdown. |
-| CLI and NAS | `photo_culler/cli/`, `photo_culler/nas/` | `rust/apps/photo-culler-cli/`; Rust NAS and server modules under `rust/apps/photo-culler-server/src/nas/` | Python commands and NAS path are tracked. Rust CLI/server runtime wiring is not established by the workspace manifest. |
+| CLI and NAS | `photo_culler/cli/`, `photo_culler/nas/` | `rust/apps/photo-culler-cli/`; Rust NAS and server modules under `rust/apps/photo-culler-server/src/nas/` | The candidate CLI now calls a limited subset of real loopback catalog/import routes. Analysis/grouping, config, volumes, bulk actions and NAS commands remain unsupported; neither full CLI parity nor NAS deployment is accepted. |
 | Slint/WASM | No Slint implementation is tracked | No `photo-culler-slint` crate or generated WASM frontend is present | Target architecture only; no implementation or build evidence in this snapshot. |
 
 ## Evidence limits
 
-- The snapshot workspace lists the core, image-engine, CLI, egui, and Tauri
-  crates in `rust/Cargo.toml`. It does not list the server crate or a Slint
-  crate. Inspect the manifest before treating server source as a runnable app.
+- The integration-candidate workspace lists the core, image-engine, CLI, egui,
+  Tauri, server, and Slint crates in `rust/Cargo.toml`. A listed package and
+  tracked server source establish assembly intent, not runtime acceptance.
 - Rust `.rs` modules and Python package directories establish tracked source,
   not successful builds, correctness, startup, or cross-platform behavior.
 - The repository contains CI definitions and tests. They are not execution

@@ -12,10 +12,26 @@ pub const READY_PROTOCOL: u64 = 1;
 pub const HEALTH_PATH: &str = "/api/v1/health";
 const MAX_READY_LINE: usize = 4096;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct ReadyMessage {
     pub origin: String,
     pub port: u16,
+    /// Present only on the owned-server private ready pipe. Never log this value.
+    pub session_token: Option<String>,
+}
+
+impl std::fmt::Debug for ReadyMessage {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ReadyMessage")
+            .field("origin", &self.origin)
+            .field("port", &self.port)
+            .field(
+                "session_token",
+                &self.session_token.as_ref().map(|_| "[redacted]"),
+            )
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -190,6 +206,7 @@ pub fn parse_ready_line(line: &str) -> Result<ReadyMessage, String> {
     let mut event = None;
     let mut protocol = None;
     let mut origin = None;
+    let mut session_token = None;
     for field in json[1..json.len() - 1].split(',') {
         let (key, value) = field.split_once(':').ok_or("malformed ready field")?;
         let key = parse_json_string(key.trim()).ok_or("invalid ready field name")?;
@@ -223,6 +240,14 @@ pub fn parse_ready_line(line: &str) -> Result<ReadyMessage, String> {
                     return Err("duplicate origin".into());
                 }
             }
+            "session_token" => {
+                if session_token
+                    .replace(parse_json_string(value.trim()).ok_or("invalid session token")?)
+                    .is_some()
+                {
+                    return Err("duplicate session token".into());
+                }
+            }
             _ => return Err("unexpected ready field".into()),
         }
     }
@@ -232,7 +257,18 @@ pub fn parse_ready_line(line: &str) -> Result<ReadyMessage, String> {
     if protocol != Some(READY_PROTOCOL) {
         return Err("unsupported ready protocol".into());
     }
-    validate_origin(origin.as_deref().ok_or("missing origin")?)
+    let mut ready = validate_origin(origin.as_deref().ok_or("missing origin")?)?;
+    if let Some(token) = session_token {
+        if !valid_session_token(&token) {
+            return Err("invalid session token format".into());
+        }
+        ready.session_token = Some(token);
+    }
+    Ok(ready)
+}
+
+fn valid_session_token(token: &str) -> bool {
+    token.len() == 64 && token.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn parse_json_string(value: &str) -> Option<String> {
@@ -263,6 +299,7 @@ pub(crate) fn validate_origin(origin: &str) -> Result<ReadyMessage, String> {
     Ok(ReadyMessage {
         origin: origin.to_owned(),
         port,
+        session_token: None,
     })
 }
 

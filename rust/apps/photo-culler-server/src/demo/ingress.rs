@@ -1,4 +1,5 @@
-//! Axum adapter for the existing OriginPolicy. Demo requests are read-only.
+//! Axum adapter for the existing OriginPolicy. Only allowlisted decision,
+//! recipe, session, and configured import/analysis routes accept mutations.
 //! Source policy: `http::origin::OriginPolicy` at sprint base db9a00723da400c479c09f8381657874d620e845.
 
 use axum::{
@@ -37,11 +38,25 @@ async fn enforce(
     next: Next,
 ) -> Response {
     let method = request.method().as_str();
-    if !matches!(method, "GET" | "HEAD") {
+    let path = request.uri().path();
+    let allowed_decision_write = method == "PUT" && is_decision_path(path);
+    let allowed_recipe_write = (method == "PUT" && is_recipe_update_path(path))
+        || (method == "POST" && is_recipe_history_path(path));
+    let allowed_import_write = method == "POST" && is_import_post_path(path);
+    let allowed_analysis_write = method == "POST" && is_analysis_post_path(path);
+    let allowed_session_write = (method == "POST" && is_session_post_path(path))
+        || (method == "DELETE" && path == "/api/v1/session");
+    if !matches!(method, "GET" | "HEAD")
+        && !allowed_decision_write
+        && !allowed_recipe_write
+        && !allowed_import_write
+        && !allowed_analysis_write
+        && !allowed_session_write
+    {
         return rejection(
             StatusCode::METHOD_NOT_ALLOWED,
             "method_not_allowed",
-            "Only read requests are supported",
+            "Only reads and allowlisted catalog, recipe, import, or analysis actions are supported",
         );
     }
     let headers = request.headers();
@@ -77,6 +92,103 @@ async fn enforce(
             "Request authority or origin was rejected",
         ),
     }
+}
+
+fn is_session_post_path(path: &str) -> bool {
+    matches!(
+        exact_path_segments(path).as_deref(),
+        Some(["api", "v1", "session", "pair"] | ["api", "v1", "session", "pairing-codes"])
+    )
+}
+
+fn is_decision_path(path: &str) -> bool {
+    let Some(segments) = exact_path_segments(path) else {
+        return false;
+    };
+    match segments.as_slice() {
+        ["api", "v1", "photos", photo_id, "decision"] => valid_path_id(photo_id),
+        _ => false,
+    }
+}
+
+fn is_recipe_update_path(path: &str) -> bool {
+    let Some(segments) = exact_path_segments(path) else {
+        return false;
+    };
+    match segments.as_slice() {
+        ["api", "v1", "photos", photo_id, "recipe"] => valid_path_id(photo_id),
+        _ => false,
+    }
+}
+
+fn is_recipe_history_path(path: &str) -> bool {
+    let Some(segments) = exact_path_segments(path) else {
+        return false;
+    };
+    match segments.as_slice() {
+        ["api", "v1", "photos", photo_id, "recipe", action]
+            if valid_path_id(photo_id) && matches!(*action, "undo" | "redo") =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
+fn is_import_post_path(path: &str) -> bool {
+    let Some(segments) = exact_path_segments(path) else {
+        return false;
+    };
+    match segments.as_slice() {
+        ["api", "v2", "galleries", gallery_id, "imports"]
+        | ["api", "v2", "galleries", gallery_id, "rescan"] => valid_path_id(gallery_id),
+        ["api", "v2", "import-estimates"] => true,
+        ["api", "v2", "import-jobs", job_id, action]
+            if valid_path_id(job_id) && matches!(*action, "pause" | "resume" | "cancel") =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
+fn is_analysis_post_path(path: &str) -> bool {
+    let Some(segments) = exact_path_segments(path) else {
+        return false;
+    };
+    match segments.as_slice() {
+        ["api", "v1", "galleries", gallery_id, "analysis-jobs"] => valid_path_id(gallery_id),
+        ["api", "v1", "analysis-jobs", catalog_id, job_id, action]
+            if valid_path_id(catalog_id)
+                && valid_path_id(job_id)
+                && matches!(*action, "start" | "pause" | "resume" | "cancel") =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
+/// Parse a path only when it has one leading slash, no empty segments, and no
+/// trailing slash. Exact slice matching at each route then rejects extra paths.
+fn exact_path_segments(path: &str) -> Option<Vec<&str>> {
+    let path = path.strip_prefix('/')?;
+    if path.is_empty() || path.ends_with('/') {
+        return None;
+    }
+    let segments: Vec<_> = path.split('/').collect();
+    segments
+        .iter()
+        .all(|segment| !segment.is_empty())
+        .then_some(segments)
+}
+
+fn valid_path_id(id: &str) -> bool {
+    !id.is_empty()
+        && !id.contains("..")
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
 }
 
 fn values(headers: &HeaderMap, name: &'static str) -> Result<Vec<String>, ()> {

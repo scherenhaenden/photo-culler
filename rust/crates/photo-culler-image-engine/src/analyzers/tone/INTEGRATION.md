@@ -7,11 +7,16 @@ files. The decoder owns file-level decodability and corruption status; an invali
 pixel buffer returns `ToneInputError` rather than being reported as a decoded
 image.
 
-At base `1871eb9`, the crate root has not registered `analyzers::tone`. Add that
-module declaration and connect its `ToneAnalysis::metric_values()` to the shared
-`photo_culler_core::MetricResult` adapter in the integration-owned crate root.
-Set `implementation_version` from `IMPLEMENTATION_VERSION` and populate timing
-at the adapter boundary. This task does not edit root files or manifests.
+## Current candidate integration status
+
+The historical note for base `1871eb9` is no longer an instruction for the
+current candidate: `lib.rs` now registers `analyzers::tone`. Registration only
+makes the module available. `NativePixelEngine` still emits its existing
+`metrics::PixelFeatures` values with version `rust-pixels-0.1`; it does not call
+`ToneAnalysis::analyze` or adapt `ToneAnalysis::metric_values()` into
+`MetricResult`. See the parent `analyzers/INTEGRATION.md` for the audited
+runtime boundary and calibration gates. Keep the tone outputs standalone until
+the shared IDs, units, confidence policy, and golden-fixture parity are agreed.
 
 ## Metric contract
 

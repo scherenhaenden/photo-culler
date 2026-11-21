@@ -431,8 +431,10 @@ mod tests {
                 .count(),
             2
         );
-        assert!(!changes
-            .iter()
-            .any(|change| matches!(change, Change::Moved { .. })));
+        assert!(
+            !changes
+                .iter()
+                .any(|change| matches!(change, Change::Moved { .. }))
+        );
     }
 }

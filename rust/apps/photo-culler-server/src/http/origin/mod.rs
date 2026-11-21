@@ -88,8 +88,12 @@ impl OriginPolicy {
 /// value. Origins and Host headers commonly omit :80 and :443 respectively.
 fn parse_authority(authority: &str, scheme: &str) -> Option<(String, u16)> {
     if authority.is_empty()
-        || authority.bytes().any(|b| b.is_ascii_whitespace() || b.is_ascii_control())
-        || authority.bytes().any(|b| matches!(b, b'/' | b'?' | b'#' | b'@'))
+        || authority
+            .bytes()
+            .any(|b| b.is_ascii_whitespace() || b.is_ascii_control())
+        || authority
+            .bytes()
+            .any(|b| matches!(b, b'/' | b'?' | b'#' | b'@'))
     {
         return None;
     }
@@ -155,22 +159,24 @@ fn valid_host(host: &str) -> bool {
 /// Apply to successful frontend assets, replacing any conflicting header values.
 /// CSP permits same-origin WASM compilation without enabling arbitrary script eval.
 pub fn frontend_headers(is_wasm: bool) -> &'static [(&'static str, &'static str)] {
-    if is_wasm {
-        WASM_HEADERS
-    } else {
-        HTML_HEADERS
-    }
+    if is_wasm { WASM_HEADERS } else { HTML_HEADERS }
 }
 const HTML_HEADERS: &[(&str, &str)] = &[
     ("content-type", "text/html; charset=utf-8"),
     ("x-content-type-options", "nosniff"),
-    ("content-security-policy", "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"),
+    (
+        "content-security-policy",
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+    ),
     ("referrer-policy", "no-referrer"),
 ];
 const WASM_HEADERS: &[(&str, &str)] = &[
     ("content-type", "application/wasm"),
     ("x-content-type-options", "nosniff"),
-    ("content-security-policy", "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"),
+    (
+        "content-security-policy",
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+    ),
     ("referrer-policy", "no-referrer"),
 ];
 
@@ -293,39 +299,58 @@ mod tests {
         }
         assert!(OriginPolicy::new("http", "localhost", 0).is_err());
         let p = OriginPolicy::new("http", "[::1]", 12).unwrap();
-        assert!(p
-            .check("POST", &["[::1]:12"], &["http://[::1]:12"], &[], false)
-            .is_ok());
+        assert!(
+            p.check("POST", &["[::1]:12"], &["http://[::1]:12"], &[], false)
+                .is_ok()
+        );
     }
 
     #[test]
     fn accepts_canonical_default_port_host_and_origin_forms() {
         let http = OriginPolicy::new("http", "Example.COM", 80).unwrap();
-        assert!(http
-            .check("POST", &["example.com"], &["http://example.com"], &[], false)
-            .is_ok());
-        assert!(http
-            .check(
+        assert!(
+            http.check(
+                "POST",
+                &["example.com"],
+                &["http://example.com"],
+                &[],
+                false
+            )
+            .is_ok()
+        );
+        assert!(
+            http.check(
                 "POST",
                 &["example.com:80"],
                 &["http://example.com:80"],
                 &[],
                 false,
             )
-            .is_ok());
+            .is_ok()
+        );
 
         let https = OriginPolicy::new("https", "Example.COM", 443).unwrap();
-        assert!(https
-            .check("POST", &["example.com"], &["https://example.com"], &[], false)
-            .is_ok());
-        assert!(https
-            .check(
-                "POST",
-                &["example.com:443"],
-                &["https://example.com:443"],
-                &[],
-                false,
-            )
-            .is_ok());
+        assert!(
+            https
+                .check(
+                    "POST",
+                    &["example.com"],
+                    &["https://example.com"],
+                    &[],
+                    false
+                )
+                .is_ok()
+        );
+        assert!(
+            https
+                .check(
+                    "POST",
+                    &["example.com:443"],
+                    &["https://example.com:443"],
+                    &[],
+                    false,
+                )
+                .is_ok()
+        );
     }
 }

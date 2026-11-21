@@ -1,6 +1,10 @@
 # Arquitectura y contratos de la demo
 
-Las firmas, rutas y comandos de este documento son el diseño que la implementación debe entregar. La evidencia de funcionamiento se registrará con D34 en [BUILDS.md](../BUILDS.md).
+Este documento conserva el contrato histórico de la demo S01: galería sintética
+de solo lectura. La aceptación registrada en [BUILDS.md](../BUILDS.md) corresponde
+a ese alcance. El importador v2 del worktree candidato se describe por separado
+más abajo y en [RUN.md](RUN.md); todavía no tiene aceptación runtime. No uses los
+runs S01 como evidencia de importación.
 
 ## Componentes
 
@@ -23,9 +27,13 @@ flowchart LR
 | `photo-culler-server` | Binario Rust. Monta el router, la galería incluida y la distribución web. Reutiliza el módulo de diagnóstico y la política de origen a través de adaptadores. |
 | `photo-culler-slint` | Una ventana `.slint`, controlador Rust común y dos puntos de entrada. El transporte nativo y el de navegador permanecen detrás de `cfg` y features del paquete. |
 
-La composición de la demo vive en módulos dedicados. El adaptador de lecturas actual y el cliente existente serializan campos distintos. Los handlers de la demo proyectan al contrato común que sigue y conservan los módulos existentes para la integración del catálogo real. Se incluye una sola galería, sin SQLite ni acceso a bibliotecas del usuario.
+La composición S01 usa una galería incluida, sin SQLite ni acceso a bibliotecas
+del usuario. Esos límites describen únicamente el demo aceptado, no el candidato
+de importación.
 
 ## Contrato HTTP y fixture
+
+La tabla siguiente documenta únicamente las rutas `/api/v1` del demo S01.
 
 Origen canónico `http://127.0.0.1:<puerto>`. Rutas de la demo:
 
@@ -35,6 +43,83 @@ Origen canónico `http://127.0.0.1:<puerto>`. Rutas de la demo:
 | `GET /api/v1/galleries/demo/photos` | `200`, `DemoGalleryPage` con el fixture. | `404` para otra galería. `400` para parámetros ajenos al contrato. |
 | `GET /api/v1/photos/demo-001/thumbnail/800` | `200`, `image/jpeg`. El tamaño del JPEG se limita a 800 px en su lado mayor. | `404` para otro identificador o variante. |
 | `GET /` y rutas de distribución declaradas | `200`, `text/html`, JavaScript o `application/wasm` según corresponda. | `404` real para un recurso ausente. |
+
+## Importación REST v2 candidata: pendiente de aceptación runtime
+
+El candidato incorpora otro recorrido detrás de un catálogo SQLite persistente:
+el servidor registra raíces configuradas mediante `--authorized-root`, la UI
+trabaja con IDs opacos de fuente y trabajo, y el API ofrece lista de fuentes,
+estimate, start, seguimiento, pausa, reanudación, cancelación y rescan. Sus rutas
+principales son `GET /api/v2/galleries/{gallery_id}/sources`,
+`POST /api/v2/import-estimates`,
+`POST /api/v2/galleries/{gallery_id}/imports`,
+`GET /api/v2/import-jobs[?active_only=true]`,
+`GET /api/v2/import-jobs/{job_id}` y los subrecursos `pause`, `resume` y
+`cancel`. El detalle operativo y los cuerpos confirmados por los DTO están en
+[RUN.md](RUN.md).
+
+La frontera de acceso es configuración local del servidor: las raíces deben
+existir, ser directorios y no solaparse; el cliente envía `source_id`, nunca una
+ruta del sistema. El servidor permanece en loopback. La aceptación S01 citada
+arriba no demuestra estos contratos, la reconciliación SQLite, persistencia tras
+reinicio ni el comportamiento con bibliotecas grandes. Todo eso sigue pendiente
+de verificación runtime sobre un SHA identificado.
+
+El recorrido candidato construye un manifiesto durable por trabajo en lotes
+acotados, sin ordenar ni retener todos los nombres en RAM. SQLite proporciona
+las páginas de rutas con orden portable `/`; los archivos se verifican y se
+hashean después de completar el manifiesto. Si se reanuda un manifiesto parcial,
+se vacía y reconstruye; uno completo continúa desde el cursor guardado. La
+reconciliación final ahora copia observaciones y archivos existentes a tablas
+temporales SQLite mediante páginas de lectura, conserva una sola transacción de
+escritura y procesa las acciones en páginas acotadas. `adopt_legacy_files`
+recorre filas por ID y guarda candidatos en otra tabla temporal para deduplicar
+y comprobar colisiones sin retener todas las filas en Rust; mantiene en memoria
+la lista de raíces configuradas. Tampoco están medidos la latencia de la
+transacción ni el consumo pico. El modo de almacenamiento temporal tampoco está fijado:
+SQLite puede mantener esas tablas en RAM o escribir temporales según su
+configuración de compilación/`temp_store`. Falta ejecutar el benchmark de 10.000
+entradas y registrar tiempo, RAM pico y espacio temporal contra el SHA exacto.
+La estimación previa recorre las entradas sin conservarlas todas, pero mantiene
+en memoria una clave por foto lógica para contar grupos distintos; su consumo de
+RAM crece con el número de fotos. El recorrido mantiene un solo directorio
+abierto a la vez y conserva rutas de directorios pendientes; la memoria de esa
+pila puede crecer en árboles anchos. Este cambio aún requiere aceptación en
+ejecución con árboles profundos, anchos y modificados durante el recorrido.
+Las comprobaciones de enlaces y rutas no son atómicas frente a modificaciones
+concurrentes del árbol; esa carrera requiere una solución a nivel de acceso al
+sistema de archivos y permanece pendiente.
+La reconciliación rechaza una importación si una clave normalizada agruparía
+archivos cuyos directorios o nombres difieren en mayúsculas. La regla también
+rechaza pares y sidecars con esa diferencia aunque se pretendiera asociarlos.
+También rechaza grupos distintos que resuelvan a la misma identidad histórica;
+esto puede detener un rescan cuando solo se mueve el RAW de un par RAW/JPEG.
+No corrige asociaciones ya guardadas; esos casos requieren una política de
+identidad compatible.
+Al completar o cancelar un trabajo se eliminan sus observaciones y páginas
+temporales en la misma transacción. Si el worker marca un trabajo como fallido,
+la API también limpia el staging no reanudable en la transacción que persiste el
+estado terminal; el código de error y el log del servidor conservan el motivo.
+Si una cancelación ya se ha persistido cuando falla el worker, la transición
+terminal da prioridad a `cancelled` y registra el error del worker en el log.
+SQLite puede reutilizar páginas liberadas en scans futuros, aunque el archivo de
+base de datos no se reduce físicamente sin una operación de compactación.
+
+La UI consulta el historial reciente durante el seguimiento para detectar
+importaciones terminadas, incluso si no están seleccionadas; actualmente revisa
+como máximo 100 trabajos por consulta. La reconciliación y el coste de estas
+consultas siguen pendientes de aceptación en ejecución. Una respuesta tardía
+al inicio de una importación puede volver a cargar el diálogo y reiniciar la
+selección o estimación que se estuviera editando.
+
+El candidato de miniaturas aplica la orientación EXIF y prueba otras
+representaciones disponibles si una no puede decodificarse. La aceptación del
+escaneo no implica que exista un decodificador para cada formato: BMP, GIF y
+WebP tienen decodificadores habilitados, pendientes de aceptación runtime;
+RAW y HEIC/HEIF aún necesitan integración de decodificación.
+La verificación de la ruta de una miniatura y su apertura tampoco son atómicas
+frente a cambios concurrentes del árbol; la apertura relativa a una raíz con
+política de enlaces debe resolverse por plataforma.
 
 ```json
 {

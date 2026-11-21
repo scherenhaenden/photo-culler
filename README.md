@@ -98,6 +98,10 @@ identity for unambiguous moves without collapsing identical files that still
 exist at separate paths. Unavailable sources and their files are marked
 `offline`, not deleted or incorrectly reported as missing. Source-relative glob
 exclusions are persisted and reused by preflight, import, resume and rescan.
+Rescan receipts retain queued job IDs when another source hits a transient
+service-unavailable condition: `offline_source_ids` lists offline roots, while
+`deferred_source_ids` lists online roots that could not be enqueued on that
+attempt and may be retried with a later rescan.
 
 Technical analysis coordination is application-scoped rather than process
 global. Progress fan-out uses bounded queues, the production worker contains no
@@ -157,11 +161,30 @@ V√©ase [`docs/BUILDS.md`](docs/BUILDS.md) para el registro de builds y validaci√
 
 ```bash
 cd rust
-cargo test --workspace
 cargo run -p photo-culler-cli -- status
-cargo run -p photo-culler-cli -- backends
-cargo run -p photo-culler-cli -- frontends
+cargo run -p photo-culler-cli -- galleries
+cargo run -p photo-culler-cli -- photos <GALLERY_ID>
+cargo run -p photo-culler-cli -- sources <GALLERY_ID>
+cargo run -p photo-culler-cli -- estimate <SOURCE_ID>
+cargo run -p photo-culler-cli -- import <GALLERY_ID> <SOURCE_ID>
+cargo run -p photo-culler-cli -- scan <GALLERY_ID>
+cargo run -p photo-culler-cli -- jobs
+cargo run -p photo-culler-cli -- job <JOB_ID> [pause|resume|cancel]
+cargo run -p photo-culler-cli -- revisions <GALLERY_ID>
+cargo run -p photo-culler-cli -- decision <PHOTO_ID> <STATE> <REVISION>
+cargo run -p photo-culler-cli -- analyze <PHOTO_PATH> [MAX_DIMENSION]
+cargo run -p photo-culler-cli -- doctor
 ```
+
+The operational commands use the local Rust API at `http://127.0.0.1:8765`
+by default; select another API origin with `--server URL`. The integration is
+limited to routes already present in the Rust server. Configuration, volume
+management, analysis jobs, grouping, sessions, bulk decisions, preselection,
+verification, reports, and NAS operations remain unavailable from this CLI.
+`analyze PHOTO_PATH` is a local pixel-analysis command, not an API analysis job.
+The CLI returns usage errors for roadmap commands without server routes. Its
+HTTP adapter, route map, command limitations, and error codes are documented
+in [`rust/apps/photo-culler-cli/src/commands/INTEGRATION.md`](rust/apps/photo-culler-cli/src/commands/INTEGRATION.md).
 
 The Rust workspace keeps Tauri/WebGL as a bootstrap. The egui/wgpu client is a functional native alpha that connects to the local application API; its README documents the supported workflow and remaining parity gaps.
 

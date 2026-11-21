@@ -35,6 +35,7 @@ fn photo() -> Photo {
         session_id: Some("session-1".into()),
         burst_id: Some("burst-1".into()),
         decision: Some("KEEP".into()),
+        decision_revision: 0,
         score: Some(0.875),
         quality_tier: Some("good".into()),
         analysis_summary_json: r#"{"profile_id":"profile-1"}"#.into(),
