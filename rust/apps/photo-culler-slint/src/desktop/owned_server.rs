@@ -307,8 +307,16 @@ mod tests {
             .expect("CI must set PHOTO_CULLER_SERVER to the staged server binary");
         let server = DemoServer::start_owned_at(&executable).expect("owned server should start");
         let address = server.address();
-        let transport =
-            NativeHttpTransport::new(address, Duration::from_secs(2), 2 * 1024 * 1024).unwrap();
+        let transport = NativeHttpTransport::new_authenticated(
+            address,
+            Duration::from_secs(2),
+            2 * 1024 * 1024,
+            server
+                .session_token
+                .clone()
+                .expect("owned server must provide its editor credential"),
+        )
+        .unwrap();
 
         let gallery = transport
             .get("/api/v1/galleries/demo/photos")

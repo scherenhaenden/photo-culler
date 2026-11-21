@@ -55,6 +55,7 @@ export async function runLiveSmoke(browserName) {
         responses.push({
           origin: url.origin,
           path: url.pathname,
+          query: url.search,
           status: response.status(),
           mime: (response.headers()["content-type"] ?? "").split(";")[0].trim().toLowerCase(),
         });
@@ -114,9 +115,11 @@ export async function runLiveSmoke(browserName) {
     assert.deepEqual(pageErrors, [], "the actual Slint WASM application must not raise page errors");
 
     for (const [path, expectedMime] of MIME_BY_PATH) {
-      const response = responses.find((entry) => entry.path === path);
-      assert.ok(response, `the actual application must request ${path}`);
-      assert.equal(response.status, 200, `${path} must return HTTP 200`);
+      const response = responses.find((entry) => entry.path === path && entry.status === 200);
+      assert.ok(
+        response,
+        `${path} must return HTTP 200; observed ${JSON.stringify(responses.filter((entry) => entry.path === path))}`,
+      );
       assert.equal(response.mime, expectedMime, `${path} must have MIME ${expectedMime}`);
       assert.equal(response.origin, origin, `${path} must use the Rust server's same origin`);
     }
