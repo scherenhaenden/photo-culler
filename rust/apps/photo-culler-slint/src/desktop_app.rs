@@ -371,8 +371,8 @@ fn run_application(initial_config: LaunchConfig) -> Result<(), String> {
                 && let Err(error) = backup_profile_file(path)
             {
                 if let Some(window) = choose_window.upgrade() {
-                    window.set_service_status(error.into());
-                    window.set_error_message(error.clone().into());
+                    window.set_service_status(error.clone().into());
+                    window.set_error_message(error.into());
                     window.set_view_state(3);
                 }
                 return;

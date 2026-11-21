@@ -9,6 +9,7 @@ on:
       - feature/sprint-01-pro-icon-parity
       - feature/sprint-01-native-acceptance
       - feature/sprint-01-integration-candidate
+      - feature/sprint-02-linux-library
     paths:
       - 'rust/Cargo.toml'
       - 'rust/Cargo.lock'
@@ -29,6 +30,7 @@ on:
       - feature/sprint-01-native-acceptance
       - feature/sprint-01-ui-state-acceptance
       - feature/sprint-01-integration-candidate
+      - feature/sprint-02-linux-library
     paths:
       - 'rust/Cargo.toml'
       - 'rust/Cargo.lock'
