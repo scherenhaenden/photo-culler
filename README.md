@@ -8,33 +8,25 @@ It combines compiler-style analysis pipelines, RAW+JPEG logical file pairing, sp
 
 ---
 
-## Architecture Direction: Exchangeable Engines and Frontends
+## Product direction: Rust and Slint
 
-The [Rust and Slint migration roadmap](docs/RUST_SLINT_ROADMAP.md) defines the target architecture and the 64 implementation tasks for shared native and WebAssembly interfaces over REST.
+The active product path is a Rust server, catalog, analysis and CLI with one
+Slint interface shared by native desktop and WebAssembly browser builds. The
+[64-task migration roadmap](docs/RUST_SLINT_ROADMAP.md) tracks that work and
+its user-facing acceptance gates.
 
-The project deliberately supports parallel technology tracks while product behavior and performance requirements are still being validated. Domain models, catalog persistence, analysis pipelines, scoring, and selection rules remain independent of the presentation layer. Frontends must consume those boundaries instead of embedding culling logic, which lets an implementation be replaced without rewriting the product.
+The Python application and experimental Tauri/egui shells remain in the
+repository as legacy or historical source. They are not parallel product
+targets for new feature work. Feature completion and readiness are recorded in
+the [Rust integration candidate ledger](docs/INTEGRATION_CANDIDATE_STATUS.md);
+source presence or a green demo build does not mean the full product migration
+is accepted.
 
-### Engine tracks
-
-| Track | Snapshot status | Source evidence | Direction |
-|---|:---:|---|---|
-| **Python analysis engines** | Implemented reference path | `photo_culler/analysis/`, `scoring/`, `validation/`, and `tests/` | Preserve as the comparison implementation while migration behavior is validated |
-| **Rust analysis engines** | Contracts and image primitives tracked | `rust/crates/photo-culler-core/` and `rust/crates/photo-culler-image-engine/`; no analyzer parity result is recorded | Port individual hot paths only after the same corpus demonstrates a measured end-to-end gain |
-
-A Rust port must preserve the analyzer input/output contract and pass the same validation corpus before replacing a Python implementation. Python remains the orchestration and correctness reference until a Rust engine is measurably faster, equally accurate, and operationally simpler.
-
-### Frontend tracks
-
-| Frontend | Snapshot status | Tracked evidence | Intended role |
-|---|:---:|---|---|
-| **FastAPI + HTMX web UI** | Python reference UI is tracked | `photo_culler/web/` routes, templates, static assets, and web tests | Browser-accessible reference for behavior during migration |
-| **Python desktop shells** | Linux launcher and pywebview source are tracked; current run status is not recorded here | `photo_culler/desktop/`, `scripts/`, and desktop tests | Desktop packaging and platform behavior must be reported from dated runs |
-| **Rust + Tauri** | Experimental shell source is tracked; runtime status is not recorded here | `rust/apps/photo-culler-tauri/` and package test/CI definitions | Candidate for reuse of the web interaction model after runtime validation |
-| **Rust + egui + wgpu** | Experimental shell source is tracked; runtime status is not recorded here | `rust/apps/photo-culler-egui/` and launcher test source | Candidate native UI; parity and package readiness remain to be verified |
-
-The frontend implementations remain separate code paths. Shared behavior belongs in engines/services; frontend-specific rendering, windowing, and interaction stay in adapters. Any promotion decision should cite runs for catalog size, thumbnail/render latency, installer size, accessibility, platform support, development effort, and maintenance cost.
-
-This table describes tracked source at snapshot commit [`ad1bb99f50b0e46dd60dc2bb2b048291f064335a`](https://github.com/scherenhaenden/photo-culler/commit/ad1bb99f50b0e46dd60dc2bb2b048291f064335a), dated 2026-11-18. It is not a build or runtime report. See [`docs/TECHNOLOGY_MAP.md`](docs/TECHNOLOGY_MAP.md), [`docs/DESKTOP_READINESS.md`](docs/DESKTOP_READINESS.md), and [`docs/BUILDS.md`](docs/BUILDS.md) for evidence scope and platform execution records.
+The Rust/Slint product is being integrated around user journeys: import a
+photo folder, follow progress, browse the paginated library, inspect previews,
+and save review decisions. The [build record](docs/BUILDS.md) and
+[validation guide](docs/VALIDATION.md) distinguish tested demo behavior from
+product-level acceptance.
 
 Las releases usan el formato de calendario `yyyy.MM.dd-HH.mm.sss`; véase
 [`docs/VERSIONING.md`](docs/VERSIONING.md).

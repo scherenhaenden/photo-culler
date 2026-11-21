@@ -47,11 +47,20 @@ async fn start_owned(
 }
 
 async fn request(address: SocketAddr, path: &str) -> Vec<u8> {
+    request_with_token(address, path, None).await
+}
+
+async fn request_with_token(address: SocketAddr, path: &str, token: Option<&str>) -> Vec<u8> {
     let mut stream = TcpStream::connect(address).await.unwrap();
+    let authorization = token
+        .map(|token| format!("Authorization: Bearer {token}\r\n"))
+        .unwrap_or_default();
     stream
         .write_all(
-            format!("GET {path} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n")
-                .as_bytes(),
+            format!(
+                "GET {path} HTTP/1.1\r\nHost: {address}\r\n{authorization}Connection: close\r\n\r\n"
+            )
+            .as_bytes(),
         )
         .await
         .unwrap();
@@ -101,6 +110,7 @@ async fn owned_server_serves_health_gallery_and_bundled_thumbnail_then_stops_on_
     let ready: serde_json::Value = serde_json::from_str(ready_line.trim()).unwrap();
     assert_eq!(ready["event"], "ready");
     assert_eq!(ready["protocol"], 1);
+    let token = ready["session_token"].as_str().unwrap();
     let origin = ready["origin"].as_str().unwrap();
     let address: SocketAddr = origin.strip_prefix("http://").unwrap().parse().unwrap();
     assert_eq!(address.ip().to_string(), "127.0.0.1");
@@ -118,7 +128,7 @@ async fn owned_server_serves_health_gallery_and_bundled_thumbnail_then_stops_on_
     assert_eq!(health["status"], "ready");
     assert!(health["resources"].is_null());
 
-    let gallery = request(address, "/api/v1/galleries/demo/photos").await;
+    let gallery = request_with_token(address, "/api/v1/galleries/demo/photos", Some(token)).await;
     let (headers, body) = split_response(&gallery);
     assert!(headers.starts_with("HTTP/1.1 200"));
     let gallery: serde_json::Value = serde_json::from_slice(body).unwrap();
@@ -129,7 +139,12 @@ async fn owned_server_serves_health_gallery_and_bundled_thumbnail_then_stops_on_
         "/api/v1/photos/demo-001/thumbnail/800"
     );
 
-    let thumbnail = request(address, "/api/v1/photos/demo-001/thumbnail/800").await;
+    let thumbnail = request_with_token(
+        address,
+        "/api/v1/photos/demo-001/thumbnail/800",
+        Some(token),
+    )
+    .await;
     let (headers, body) = split_response(&thumbnail);
     assert!(headers.starts_with("HTTP/1.1 200"));
     assert!(

@@ -54,14 +54,13 @@ pub struct DecodedImage {
 /// Decode a supported raster format, enforcing dimensions before allocation
 /// and applying the container's EXIF orientation to the returned pixels.
 pub fn decode_raster(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, DecodeError> {
-    let mut reader = ImageReader::new(Cursor::new(bytes))
+    let reader = ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
         .map_err(|error| DecodeError::InvalidData(error.to_string()))?;
     let mut decoder_limits = Limits::default();
     decoder_limits.max_image_width = Some(limits.max_width);
     decoder_limits.max_image_height = Some(limits.max_height);
     decoder_limits.max_alloc = Some(limits.max_alloc_bytes);
-    reader.limits(decoder_limits.clone());
     let mut decoder = reader.into_decoder().map_err(map_error)?;
     let (width, height) = decoder.dimensions();
     if width > limits.max_width || height > limits.max_height {

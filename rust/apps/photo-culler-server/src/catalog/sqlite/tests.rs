@@ -96,6 +96,7 @@ async fn upsert_updates_all_legacy_fields() {
     updated.session_id = None;
     updated.burst_id = Some("burst-2".into());
     updated.decision = Some("REJECT".into());
+    updated.decision_revision = 1;
     updated.score = Some(0.125);
     updated.quality_tier = Some("poor".into());
     updated.analysis_summary_json = r#"{"profile_id":"profile-2"}"#.into();

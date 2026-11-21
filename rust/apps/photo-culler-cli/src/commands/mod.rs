@@ -906,10 +906,11 @@ fn photos_request(args: &[String]) -> Result<(Method, String, Option<String>), C
         index += 2;
     }
 
-    let cursor_decision = match cursor.as_deref() {
-        Some(value) => Some(validate_photo_cursor(value, gallery)?),
-        None => None,
-    };
+    let cursor_decision = cursor
+        .as_deref()
+        .map(|value| validate_photo_cursor(value, gallery))
+        .transpose()?
+        .flatten();
     if let (Some(requested), Some(from_cursor)) = (decision, cursor_decision) {
         if requested != from_cursor {
             return Err(CliError::Usage(
@@ -1174,10 +1175,10 @@ mod tests {
             "/data/library.sqlite",
             "--server",
             "http://nas:8080",
-            "status",
+            "doctor",
         ]))
         .unwrap();
-        assert_eq!(parsed.command, "status");
+        assert_eq!(parsed.command, "doctor");
         assert_eq!(parsed.catalog, "/data/library.sqlite");
         assert_eq!(parsed.server, "http://nas:8080");
     }
@@ -1190,6 +1191,34 @@ mod tests {
         assert_eq!(server.seen[0].method, Method::Post);
         assert_eq!(server.seen[0].path, "/api/v2/galleries/gallery-1/rescan");
         assert_eq!(server.seen[0].body, None);
+    }
+
+    #[test]
+    fn photos_cursor_without_decision_filter_builds_a_valid_request() {
+        let cursor = r#"{"after_id":"photo-1","filter":{"gallery_id":"gallery-1","decision":null}}"#;
+        let (_, path, _) = photos_request(&args(&[
+            "gallery-1",
+            "--limit",
+            "25",
+            "--cursor",
+            cursor,
+        ]))
+        .unwrap();
+        assert!(path.starts_with("/api/v1/galleries/gallery-1/photos?limit=25&cursor="));
+        assert!(!path.contains("decision="));
+    }
+
+    #[test]
+    fn photos_cursor_decision_must_match_explicit_filter() {
+        let cursor = r#"{"after_id":"photo-1","filter":{"gallery_id":"gallery-1","decision":"keep"}}"#;
+        assert!(photos_request(&args(&[
+            "gallery-1",
+            "--decision",
+            "reject",
+            "--cursor",
+            cursor,
+        ]))
+        .is_err());
     }
 
     #[test]
