@@ -39,8 +39,8 @@ await access(serverExecutable);
 await access(join(webRoot, "bundle.json"));
 await mkdir(outputDir, { recursive: true });
 
-const server = spawn(serverExecutable, ["--port", "0", "--web-root", webRoot], {
-  stdio: ["ignore", "pipe", "pipe"],
+const server = spawn(serverExecutable, ["--owned", "--port", "0", "--web-root", webRoot], {
+  stdio: ["pipe", "pipe", "pipe"],
 });
 let serverStderr = "";
 server.stderr.setEncoding("utf8");
@@ -50,7 +50,8 @@ let originForManifest = "not-ready";
 const captures = [];
 const scenarioResults = [];
 try {
-  const origin = await waitForOrigin(server);
+  const ready = await waitForReady(server);
+  const origin = ready.origin;
   originForManifest = origin;
   const browserType = browserName === "chromium" ? chromium : firefox;
   const launchOptions = { headless: browserName === "chromium" };
@@ -65,9 +66,9 @@ try {
   browser = await browserType.launch(launchOptions);
 
   for (const viewport of VIEWPORTS) {
-    captures.push(await captureLoading(browser, origin, viewport, outputDir));
-    scenarioResults.push(await captureEmpty(browser, origin, viewport, outputDir));
-    const retryResult = await captureErrorAndRetry(browser, origin, viewport, outputDir);
+    captures.push(await captureLoading(browser, origin, viewport, outputDir, ready.session_token));
+    scenarioResults.push(await captureEmpty(browser, origin, viewport, outputDir, ready.session_token));
+    const retryResult = await captureErrorAndRetry(browser, origin, viewport, outputDir, ready.session_token);
     captures.push(...retryResult.captures);
     scenarioResults.push(retryResult.result);
   }
@@ -116,19 +117,19 @@ try {
   await stopServer(server);
 }
 
-async function captureLoading(browser, origin, viewport, outputDir) {
+async function captureLoading(browser, origin, viewport, outputDir, sessionToken) {
   const page = await newPage(browser, viewport);
   const requestSeen = deferred();
   const releaseRequest = deferred();
   let galleryRequests = 0;
-  await page.route(`**${GALLERY_PATH}`, async (route) => {
+  await page.route(`**${GALLERY_PATH}**`, async (route) => {
     galleryRequests += 1;
     requestSeen.resolve();
     await releaseRequest.promise;
     await route.continue();
   });
   try {
-    await page.goto(origin, { waitUntil: "domcontentloaded" });
+    await navigateAndPair(page, origin, sessionToken);
     await withTimeout(requestSeen.promise, 45_000, "WASM did not request the gallery for loading capture");
     await waitForState(page, "loading");
     assert.equal(galleryRequests, 1, "the loading state must be held by the first real gallery request");
@@ -146,10 +147,10 @@ async function captureLoading(browser, origin, viewport, outputDir) {
   }
 }
 
-async function captureEmpty(browser, origin, viewport, outputDir) {
+async function captureEmpty(browser, origin, viewport, outputDir, sessionToken) {
   const page = await newPage(browser, viewport);
   let galleryRequests = 0;
-  await page.route(`**${GALLERY_PATH}`, async (route) => {
+  await page.route(`**${GALLERY_PATH}**`, async (route) => {
     galleryRequests += 1;
     await route.fulfill({
       status: 200,
@@ -158,7 +159,7 @@ async function captureEmpty(browser, origin, viewport, outputDir) {
     });
   });
   try {
-    await page.goto(origin, { waitUntil: "domcontentloaded" });
+    await navigateAndPair(page, origin, sessionToken);
     await waitForState(page, "empty");
     assert.equal(galleryRequests, 1, "empty state must use exactly one deterministic gallery response");
     const statusText = await statusTextOf(page);
@@ -175,14 +176,14 @@ async function captureEmpty(browser, origin, viewport, outputDir) {
   }
 }
 
-async function captureErrorAndRetry(browser, origin, viewport, outputDir) {
+async function captureErrorAndRetry(browser, origin, viewport, outputDir, sessionToken) {
   const page = await newPage(browser, viewport);
   let galleryRequests = 0;
   const initialRequestSeen = deferred();
   const releaseInitial = deferred();
   const retryRequestSeen = deferred();
   const releaseRetry = deferred();
-  await page.route(`**${GALLERY_PATH}`, async (route) => {
+  await page.route(`**${GALLERY_PATH}**`, async (route) => {
     galleryRequests += 1;
     if (galleryRequests === 1) {
       initialRequestSeen.resolve();
@@ -204,7 +205,7 @@ async function captureErrorAndRetry(browser, origin, viewport, outputDir) {
   });
 
   try {
-    await page.goto(origin, { waitUntil: "domcontentloaded" });
+    await navigateAndPair(page, origin, sessionToken);
     await withTimeout(initialRequestSeen.promise, 45_000, "WASM did not request the gallery for error/retry capture");
     await waitForState(page, "loading");
     releaseInitial.resolve();
@@ -271,6 +272,43 @@ async function newPage(browser, viewport) {
     Object.defineProperty(window, "__photoCullerStateHistory", { value: [] });
   });
   return page;
+}
+
+async function navigateAndPair(page, origin, sessionToken) {
+  const wasmLoaded = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === "/photo_culler_slint_bg.wasm" && response.status() === 200;
+  });
+  await page.goto(origin, { waitUntil: "domcontentloaded" });
+  await wasmLoaded;
+  const pairingCode = await issuePairingCode(origin, sessionToken);
+  await page.waitForTimeout(250);
+  await page.mouse.click(
+    Math.round((page.viewportSize()?.width ?? 1440) / 2),
+    Math.round((page.viewportSize()?.height ?? 900) / 2),
+  );
+  await page.keyboard.type(pairingCode);
+  const paired = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return url.pathname === "/api/v1/session/pair" && response.request().method() === "POST";
+  });
+  await page.keyboard.press("Enter");
+  assert.equal((await paired).status(), 200, "the browser must pair through the real Rust session route");
+}
+
+async function issuePairingCode(origin, sessionToken) {
+  assert.match(sessionToken, /^[0-9a-f]{64}$/i, "owned Rust server must return its private session token");
+  const response = await fetch(`${origin}/api/v1/session/pairing-codes`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${sessionToken}`,
+      origin,
+    },
+  });
+  assert.equal(response.status, 200, "the owned session must issue a one-time UI pairing code");
+  const payload = await response.json();
+  assert.match(payload.code, /^[0-9a-f]{64}$/i, "Rust server must issue a one-time pairing code");
+  return payload.code;
 }
 
 async function waitForState(page, expected) {
@@ -451,10 +489,10 @@ async function withTimeout(promise, timeoutMs, message) {
   }
 }
 
-function waitForOrigin(child) {
+function waitForReady(child) {
   return new Promise((resolve, reject) => {
     let stdout = "";
-    const timeout = setTimeout(() => reject(new Error("Rust server did not announce its origin")), 10_000);
+    const timeout = setTimeout(() => reject(new Error("Rust server did not announce owned readiness")), 10_000);
     const finish = (error, value) => {
       clearTimeout(timeout);
       if (error) reject(error);
@@ -467,8 +505,21 @@ function waitForOrigin(child) {
       stdout = lines.pop() ?? "";
       for (const line of lines) {
         if (!line) continue;
-        if (/^http:\/\/127\.0\.0\.1:\d+$/.test(line)) finish(null, line);
-        else finish(new Error(`unexpected Rust server stdout: ${line}`));
+        try {
+          const ready = JSON.parse(line);
+          if (
+            ready.event === "ready" &&
+            typeof ready.origin === "string" &&
+            /^http:\/\/127\.0\.0\.1:\d+$/.test(ready.origin) &&
+            typeof ready.session_token === "string"
+          ) {
+            finish(null, ready);
+          } else {
+            finish(new Error("Rust server returned an invalid owned-ready message"));
+          }
+        } catch {
+          finish(new Error("Rust server stdout was not a valid owned-ready message"));
+        }
       }
       if (stdout.length > 4096) finish(new Error("Rust server stdout line exceeded the protocol limit"));
     });

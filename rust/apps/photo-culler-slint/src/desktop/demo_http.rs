@@ -193,8 +193,7 @@ impl NativeHttpTransport {
         if (300..400).contains(&status) {
             return Err(HttpError::RedirectRejected);
         }
-        let content_type =
-            content_type.ok_or(HttpError::InvalidResponse("missing content type"))?;
+        let content_type = response_content_type(status, body.len(), content_type)?;
         Ok(HttpResponse {
             status,
             content_type,
@@ -356,6 +355,21 @@ fn map_io(error: std::io::Error) -> HttpError {
     }
 }
 
+fn response_content_type(
+    status: u16,
+    body_len: usize,
+    content_type: Option<String>,
+) -> Result<String, HttpError> {
+    match content_type {
+        Some(value) => Ok(value),
+        // Axum's unmounted-route 404 can be an empty response without a MIME
+        // header. Keep it distinguishable from a transport error so the
+        // fixture compatibility path can fall back to the legacy gallery.
+        None if status == 404 && body_len == 0 => Ok(String::new()),
+        None => Err(HttpError::InvalidResponse("missing content type")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -376,6 +390,19 @@ mod tests {
         ));
     }
     use std::net::TcpListener;
+
+    #[test]
+    fn accepts_empty_not_found_without_content_type_but_requires_success_mime() {
+        assert_eq!(response_content_type(404, 0, None), Ok(String::new()));
+        assert_eq!(
+            response_content_type(200, 0, None),
+            Err(HttpError::InvalidResponse("missing content type"))
+        );
+        assert_eq!(
+            response_content_type(404, 1, None),
+            Err(HttpError::InvalidResponse("missing content type"))
+        );
+    }
 
     fn serve(responses: Vec<(String, String, Vec<u8>)>) -> (SocketAddr, JoinHandle<Vec<String>>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
