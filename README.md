@@ -10,6 +10,8 @@ It combines compiler-style analysis pipelines, RAW+JPEG logical file pairing, sp
 
 ## Product direction: Rust and Slint
 
+Plan de escritorio: [Sprint 02 · importar mi primera carpeta](docs/sprints/SPRINT_02.md) y [diez entregas posteriores](docs/sprints/ROADMAP.md).
+
 The active product path is a Rust server, catalog, analysis and CLI with one
 Slint interface shared by native desktop and WebAssembly browser builds. The
 [64-task migration roadmap](docs/RUST_SLINT_ROADMAP.md) tracks that work and
