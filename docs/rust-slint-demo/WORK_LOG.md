@@ -1,0 +1,52 @@
+# Bitácora de integración
+
+## 21 de noviembre de 2026 — D34, flujo vertical sintético
+
+### Trabajo realizado
+
+- Se conectó el ejecutable Axum al ciclo loopback; anuncia el puerto asignado y
+  sirve salud, la galería `demo-001`, su JPEG y recursos web declarados.
+- Se conectó `DemoWindow` al flujo Rust compartido en escritorio y WASM. La
+  carga valida salud, DTO de galería y miniatura JPEG; muestra vacío, error y
+  reintento.
+- El escritorio inicia el servidor hermano, valida `ready` con límite de diez
+  segundos, hace las peticiones desde un worker y cierra el proceso propio al
+  salir.
+- Los reintentos descartan resultados anteriores. Las respuestas usan
+  `Cache-Control: no-store`; HTML/WASM reciben CSP, `nosniff` y
+  `no-referrer`; JavaScript conserva su MIME y recibe `nosniff`.
+- Se actualizó el estado de S01–S04 y se añadió la guía de reproducción en
+  [PC_HANDOFF.md](PC_HANDOFF.md).
+
+### Evidencia
+
+- `cargo test --offline --locked --manifest-path rust/Cargo.toml -p photo-culler-server`:
+  **26 tests pasan**, incluidos lifecycle loopback, router integrado, asset
+  headers, API `no-store` y política de origen.
+- `cargo check --offline --locked --manifest-path rust/Cargo.toml -p photo-culler-server -p photo-culler-slint`: pasa en macOS nativo.
+- `cargo check --offline --locked --manifest-path rust/Cargo.toml -p photo-culler-slint --target wasm32-unknown-unknown`: pasa.
+- `cargo build --offline --locked --manifest-path rust/Cargo.toml -p photo-culler-server -p photo-culler-slint`: pasa en macOS nativo.
+- `rustfmt --check` para los archivos Rust nuevos o modificados (excepto
+  `desktop/mod.rs`, que conserva formato histórico fuera de rustfmt) y
+  `git diff --check`: pasan.
+- El smoke loopback anterior confirmó `ready`, salud, fila `demo-001` y JPEG de
+  8.304 bytes. El nuevo test de router integrado verifica que HTML/API
+  reciben las cabeceras esperadas.
+
+### Límites pendientes
+
+- No se logró aceptación visual nativa en esta máquina: el entorno de ejecución
+  bloqueó el socket loopback con `Operation not permitted` al iniciar la demo.
+- `wasm-bindgen` CLI no está instalado aquí; no se generó ni sirvió el bundle
+  web real, ni se validó visualmente en Chromium/Firefox.
+- La galería sigue siendo una fixture sintética de una foto. La importación de
+  originales, SQLite, paginación y el flujo completo del producto no están en
+  esta entrega.
+
+### Limpieza de temporales
+
+- Se eliminó `/private/tmp/photo-culler-s01-final-target` después de verificar
+  los builds. Ocupaba 4,7 GB; el espacio libre de `/private/tmp` pasó de 55 GiB
+  a 59 GiB.
+- No se borraron cachés globales, worktrees existentes ni archivos previos del
+  usuario.

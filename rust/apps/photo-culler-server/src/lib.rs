@@ -1,15 +1,11 @@
-//! HTTP server package scaffold. D34 will connect the application router.
+//! Local, read-only server for the declared synthetic gallery fixture.
 
+pub mod demo;
 pub mod demo_args;
-
-/// Explicit result for an invocation that is valid but cannot be served yet.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RouterNotIntegrated;
-
-impl std::fmt::Display for RouterNotIntegrated {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str("server router is not integrated; service was not started")
+#[path = "http/origin/mod.rs"]
+pub mod origin;
+pub mod http {
+    pub mod runtime {
+        pub mod lifecycle;
     }
 }
-
-impl std::error::Error for RouterNotIntegrated {}

@@ -1,9 +1,14 @@
 # Task 44: native Slint desktop lifecycle
 
-This standalone module defines the desktop launcher, API connection and HTTP
-transport boundaries. The sprint base does not yet contain the
-`photo-culler-slint` crate, a Slint window, or a shared REST client, so platform
-process spawning and the real HTTP adapter remain integration work.
+The demo desktop binary now opens `DemoWindow`, starts the sibling read-only
+fixture server, reads its bounded JSON readiness line, fetches the health,
+gallery and JPEG responses on a worker thread, and closes the owned child when
+the window exits. See the server's [fixture flow guide](../../../photo-culler-server/src/demo/README.md)
+for the build and launch command.
+
+The generic session-authenticated launcher and API connection contract below
+remains separate from this read-only demo flow. The production catalog runtime
+must use that contract when it replaces the synthetic fixture.
 
 The ownership rules are explicit:
 

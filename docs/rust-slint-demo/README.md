@@ -1,8 +1,8 @@
 # Primera demo de Photo Culler en Rust y Slint
 
-**Estado:** borrador para aprobación. 34 fichas preparadas. El envío y la implementación empiezan tras la aprobación del usuario.
+**Estado al 21 de noviembre de 2026:** D01–D33 integradas. D34 ya conecta un flujo sintético local de servidor, galería y miniatura con Slint nativo y WASM; faltan bundle real servido por Axum, aceptación visual y la matriz de plataformas. El [estado del Sprint 01](SPRINT_01_REMAINING.md) recoge lo que falta y la evidencia disponible.
 
-**Base revisada:** `db9a00723da400c479c09f8381657874d620e845` en `feature/sprint-01-rust-foundation`. Cargo incorpora core, motor de imágenes, CLI, egui y Tauri. El código de servidor, cliente REST y Slint existe por módulos. Todavía requiere registro en Cargo, ensamblaje y validación de arranque.
+**Base al redactar el plan:** `db9a00723da400c479c09f8381657874d620e845` en `feature/sprint-01-rust-foundation`. Desde entonces el workspace registra los paquetes del servidor, API, cliente y Slint. Quedan el ensamblaje y la validación de arranque.
 
 ## Resultado que se va a entregar
 
@@ -15,8 +15,10 @@ La demo trabaja con una galería incluida, por loopback y en modo de lectura. La
 | Documento | Decisión que permite revisar |
 |---|---|
 | [Arquitectura y contratos](ARCHITECTURE.md) | Límites de la demo, API, ciclo del servidor, interfaz compartida, build, artefactos y condiciones de aceptación. |
+| [Trabajo pendiente del Sprint 01](SPRINT_01_REMAINING.md) | Bloqueos actuales, dependencias, criterios de cierre y pruebas por plataforma. |
+| [Roadmap de paridad visual](DESIGN_PARITY_ROADMAP.md) | Referencias de escritorio y web, componentes a portar y criterios para aceptar el diseño en Slint. |
 | [Orden de envío y pipeline](PIPELINE.md) | Las 34 fichas en orden de despacho, cuándo se puede empezar, requisitos para integrar y quién escribe los archivos compartidos. |
-| [34 fichas listas para enviar](TASKS.md) | Cada ficha tiene alcance, rutas bajo su propiedad y pruebas que debe aportar. |
+| [34 fichas de implementación](TASKS.md) | Cada ficha tiene alcance, rutas bajo su propiedad y pruebas que debe aportar. |
 
 ## Alcance y origen del conteo
 

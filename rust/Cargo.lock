@@ -4782,7 +4782,10 @@ version = "2026.11.18+18.43.40"
 dependencies = [
  "axum",
  "photo-culler-api",
+ "serde",
+ "serde_json",
  "tokio",
+ "tower",
 ]
 
 [[package]]
@@ -4791,6 +4794,7 @@ version = "2026.11.18+18.43.40"
 dependencies = [
  "image",
  "js-sys",
+ "serde_json",
  "slint",
  "slint-build",
  "wasm-bindgen",

@@ -6,6 +6,10 @@
 
 use std::future::Future;
 use std::pin::Pin;
+#[cfg(target_arch = "wasm32")]
+use std::{cell::Cell, rc::Rc};
+
+use crate::{DemoWindow, demo::flow};
 
 #[cfg(target_arch = "wasm32")]
 use super::demo_fetch;
@@ -154,34 +158,66 @@ impl DemoFetcher for BrowserFetcher {
 pub fn start() -> Result<(), wasm_bindgen::JsValue> {
     use slint::ComponentHandle;
 
-    let window = crate::DemoScaffold::new()
-        .map_err(|error| wasm_bindgen::JsValue::from_str(&error.to_string()))?;
+    let window =
+        DemoWindow::new().map_err(|error| wasm_bindgen::JsValue::from_str(&error.to_string()))?;
+    let retry_window = window.as_weak();
+    let generation = Rc::new(Cell::new(0_u64));
+    let retry_generation = Rc::clone(&generation);
+    window.on_retry(move || {
+        if let Err(error) = spawn_load(retry_window.clone(), Rc::clone(&retry_generation))
+            && let Some(window) = retry_window.upgrade()
+        {
+            flow::show_error(&window, error);
+        }
+    });
+    spawn_load(window.as_weak(), generation)
+        .map_err(|error| wasm_bindgen::JsValue::from_str(&error))?;
+    window
+        .run()
+        .map_err(|error| wasm_bindgen::JsValue::from_str(&error.to_string()))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn spawn_load(window: slint::Weak<DemoWindow>, generation: Rc<Cell<u64>>) -> Result<(), String> {
+    let request_generation = generation.get().wrapping_add(1);
+    generation.set(request_generation);
+    if let Some(window) = window.upgrade() {
+        window.set_view_state(0);
+    }
     slint::spawn_local(async move {
-        match load_demo(&BrowserFetcher).await {
+        let result = load_demo(&BrowserFetcher).await;
+        if generation.get() != request_generation {
+            return;
+        }
+        let Some(window) = window.upgrade() else {
+            return;
+        };
+        match result {
             Ok(payload) => {
-                // D13 replaces this handoff with its shared controller/view model.
-                web_sys::console::debug_1(
-                    &format!(
-                        "Photo Culler demo API ready (gallery {} bytes, thumbnail {} bytes)",
-                        payload.gallery_json.len(),
-                        payload.thumbnail_jpeg.len()
-                    )
-                    .into(),
-                );
+                if let Err(error) = flow::render(
+                    &window,
+                    &payload.health_json,
+                    &payload.gallery_json,
+                    &payload.thumbnail_jpeg,
+                ) {
+                    flow::show_error(&window, error);
+                }
             }
             Err(error) => {
                 let diagnostic = super::StartupDiagnostic::ApiUnavailable;
-                web_sys::console::error_2(
-                    &diagnostic.title().into(),
-                    &format!("{}: {error:?}", diagnostic.message()).into(),
+                flow::show_error(
+                    &window,
+                    format!(
+                        "{}: {error:?}. {}",
+                        diagnostic.title(),
+                        diagnostic.message()
+                    ),
                 );
             }
         }
     })
-    .map_err(|error| wasm_bindgen::JsValue::from_str(&error.to_string()))?;
-    window
-        .run()
-        .map_err(|error| wasm_bindgen::JsValue::from_str(&error.to_string()))
+    .map(|_| ())
+    .map_err(|error| error.to_string())
 }
 
 #[cfg(test)]

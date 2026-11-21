@@ -72,7 +72,23 @@ where
     F: FnOnce(SocketAddr) -> Result<Router, E>,
     E: std::fmt::Display,
 {
-    let listener = TcpListener::bind(("127.0.0.1", port)).await?;
+    start_on(SocketAddr::from(([127, 0, 0, 1], port)), make_router).await
+}
+
+pub async fn start_on<F, E>(
+    address: SocketAddr,
+    make_router: F,
+) -> Result<RunningServer, LifecycleError>
+where
+    F: FnOnce(SocketAddr) -> Result<Router, E>,
+    E: std::fmt::Display,
+{
+    if !address.ip().is_loopback() {
+        return Err(LifecycleError(
+            "server must bind to a loopback address".into(),
+        ));
+    }
+    let listener = TcpListener::bind(address).await?;
     let address = listener.local_addr()?;
     let app = make_router(address)
         .map_err(|e| LifecycleError(format!("router preparation failed: {e}")))?;
@@ -101,11 +117,29 @@ where
     E: std::fmt::Display,
     W: Write,
 {
-    let server = start(port, make_router).await?;
+    start_and_announce_on(
+        SocketAddr::from(([127, 0, 0, 1], port)),
+        make_router,
+        output,
+    )
+    .await
+}
+
+pub async fn start_and_announce_on<F, E, W>(
+    address: SocketAddr,
+    make_router: F,
+    output: &mut W,
+) -> Result<RunningServer, LifecycleError>
+where
+    F: FnOnce(SocketAddr) -> Result<Router, E>,
+    E: std::fmt::Display,
+    W: Write,
+{
+    let server = start_on(address, make_router).await?;
     let mut line =
         serde_json::to_vec(&server.ready_message()).map_err(|e| LifecycleError(e.to_string()))?;
     line.push(b'\n');
-    if let Err(error) = output.write_all(&line) {
+    if let Err(error) = output.write_all(&line).and_then(|()| output.flush()) {
         let _ = server.shutdown().await;
         return Err(error.into());
     }

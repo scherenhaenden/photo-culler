@@ -1,8 +1,11 @@
 //! Native desktop server lifecycle and same-origin API transport boundary.
 //!
-//! The Slint crate, launcher and shared REST client are not present in the
-//! sprint base. This module keeps their ownership contract testable without
-//! importing unregistered workspace crates; see README.md for adapters.
+//! The demo window owns a read-only local fixture server. Session-authenticated
+//! production contracts remain separate until the persistent catalog runtime is wired.
+
+#[path = "demo_http.rs"]
+pub mod demo_http;
+pub mod native_flow;
 
 use std::fmt;
 

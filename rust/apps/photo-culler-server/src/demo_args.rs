@@ -42,13 +42,13 @@ impl std::fmt::Display for ArgsError {
 
 impl std::error::Error for ArgsError {}
 
-pub const HELP: &str = "Photo Culler demo server scaffold\n\
+pub const HELP: &str = "Photo Culler read-only fixture server\n\
 Usage: photo-culler-server [OPTIONS]\n\
 \n\
 Options:\n\
   --bind <IP>          Loopback address (default: 127.0.0.1)\n\
   --port <PORT>        TCP port (default: 8765)\n\
-  --data-dir <PATH>    Writable catalog and cache directory\n\
+  --data-dir <PATH>    Reserved for persistent catalogs; rejected by this fixture server\n\
   --static-dir <PATH>  Generated Slint web assets directory\n\
   -h, --help           Print this help\n";
 
