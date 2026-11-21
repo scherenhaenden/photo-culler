@@ -1,8 +1,10 @@
 # Reproducir la demo en otra PC
 
-Esta guía reproduce la integración local del Sprint 01 en otra máquina. Está
-pensada para trabajar desde el commit publicado en la rama
-`feature/sprint-01-rust-foundation`.
+Esta guía reproduce la integración local del Sprint 01 en otra máquina. El
+flujo de código se integró en `846fb58`; el handoff y roadmap visual se
+publicaron en `5b5449b`, y la versión subida con el snapshot incluido fue
+`6846558`. Usa la punta más reciente de la rama
+`feature/sprint-01-rust-foundation` y conserva el SHA que imprima `git rev-parse`.
 
 ## Qué entrega este commit
 
@@ -32,8 +34,8 @@ git switch --track origin/feature/sprint-01-rust-foundation
 git rev-parse HEAD
 ```
 
-El último comando debe mostrar el SHA registrado en el commit de integración
-que se compartió junto con esta guía. Para un checkout existente, confirma
+El último comando debe coincidir con la punta remota obtenida en el `fetch`.
+Para un checkout existente, confirma
 primero que `git status --short` no contiene trabajo que quieras conservar; no
 uses `reset --hard` para cambiar de versión.
 

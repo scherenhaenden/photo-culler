@@ -52,6 +52,11 @@
   solo contenía dos capturas idénticas, por SHA-256, a las de
   `/private/tmp/photo-culler-pro-design-artifacts-final`; se eliminó la copia
   duplicada (aprox. 196 KiB).
+- Después de comparar todos los archivos, también se borraron tres copias
+  idénticas de `photo-culler-s02-state` (`photo-culler-baseline`,
+  `photo-culler-patch-check`, `photo-culler-verify-v2`) y la copia duplicada
+  `photo-culler-native-macos-debug` de `photo-culler-native-macos-artifact`.
+  Se liberaron unos 14.6 MiB; se conservaron `s02-state` y `native-macos-artifact`.
 - No se borraron cachés globales, worktrees existentes ni archivos previos del
   usuario. Se conservaron los demás temporales que contienen artefactos de
   aceptación, referencias visuales o ramas/cambios locales sin publicar.
@@ -61,4 +66,7 @@
 - `846fb58` — conecta el flujo sintético de servidor y Slint, corrige las
   cabeceras/cache, los reintentos y el timeout de inicio; incluye el handoff.
 - `5b5449b` — publica el roadmap de paridad visual referenciado por el handoff.
-- Ambos commits están en `origin/feature/sprint-01-rust-foundation`.
+- `bd1a608` — registra la primera limpieza y publicación.
+- `6846558` — incorpora el ZIP de Photo Culler Pro para reproducir la referencia
+  en la otra PC. El archivo solo contiene variables de ejemplo.
+- Todos estos commits están en `origin/feature/sprint-01-rust-foundation`.
