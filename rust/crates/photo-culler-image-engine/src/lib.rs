@@ -8,9 +8,9 @@ use image::{DynamicImage, imageops::FilterType};
 use photo_culler_core::{AnalysisEngine, AnalysisRequest, MetricResult};
 
 pub mod algorithms {
-    pub mod noise;
     pub mod edges;
     pub mod fft;
+    pub mod noise;
 }
 pub mod analyzers {
     pub mod composition;

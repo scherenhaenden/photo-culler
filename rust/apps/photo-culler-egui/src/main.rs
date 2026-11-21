@@ -450,7 +450,9 @@ impl NativeApp {
     }
 
     fn load_preview_texture(&mut self, ctx: &egui::Context) {
-        let Some(photo_id) = self.selected_photo.clone() else { return };
+        let Some(photo_id) = self.selected_photo.clone() else {
+            return;
+        };
         let url = if self.showing_original {
             format!("/thumbnails/{photo_id}/800")
         } else {
@@ -498,8 +500,14 @@ impl NativeApp {
         match self.get_json::<serde_json::Value>(&format!("/api/v1/photos/{photo_id}/edit")) {
             Ok(edit_doc) => {
                 if let Some(recipe) = edit_doc.get("recipe") {
-                    self.exposure = recipe.get("exposure").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-                    self.temperature = recipe.get("temperature").and_then(|v| v.as_i64()).unwrap_or(6500) as i32;
+                    self.exposure = recipe
+                        .get("exposure")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0) as f32;
+                    self.temperature = recipe
+                        .get("temperature")
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(6500) as i32;
                     self.tint = recipe.get("tint").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
                 }
             }
@@ -527,7 +535,9 @@ impl NativeApp {
                 self.refresh_catalog();
 
                 // Live refresh detail to immediately reflect badge change
-                if let Ok(detail) = self.get_json::<PhotoDetail>(&format!("/api/v1/photos/{photo_id}")) {
+                if let Ok(detail) =
+                    self.get_json::<PhotoDetail>(&format!("/api/v1/photos/{photo_id}"))
+                {
                     self.selected_photo_detail = Some(detail);
                 }
             }
@@ -595,8 +605,14 @@ impl NativeApp {
             Ok(edit_doc) => {
                 self.status = format!("Edición: {action}.");
                 if let Some(recipe) = edit_doc.get("recipe") {
-                    self.exposure = recipe.get("exposure").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-                    self.temperature = recipe.get("temperature").and_then(|v| v.as_i64()).unwrap_or(6500) as i32;
+                    self.exposure = recipe
+                        .get("exposure")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0) as f32;
+                    self.temperature = recipe
+                        .get("temperature")
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(6500) as i32;
                     self.tint = recipe.get("tint").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
                 }
             }
@@ -638,7 +654,10 @@ impl NativeApp {
             if let Some(items) = jobs_val["items"].as_array() {
                 let any_active = items.iter().any(|job| {
                     let state = job["state"].as_str().unwrap_or("");
-                    state == "queued" || state == "discovering" || state == "previewing" || state == "analyzing"
+                    state == "queued"
+                        || state == "discovering"
+                        || state == "previewing"
+                        || state == "analyzing"
                 });
                 if self.import_job_active && !any_active {
                     self.refresh();
@@ -1260,10 +1279,12 @@ impl eframe::App for NativeApp {
                             );
                         } else {
                             ui.label(
-                                RichText::new("Aún no hay mediciones guardadas para explicar esta nota.")
-                                    .size(10.0)
-                                    .color(TEXT_MUTED)
-                                    .italics(),
+                                RichText::new(
+                                    "Aún no hay mediciones guardadas para explicar esta nota.",
+                                )
+                                .size(10.0)
+                                .color(TEXT_MUTED)
+                                .italics(),
                             );
                         }
 
@@ -1372,8 +1393,7 @@ impl eframe::App for NativeApp {
                                     ui.label(RichText::new("ISO").color(TEXT_SECONDARY));
                                     ui.label(
                                         RichText::new(
-                                            meta.iso
-                                                .map_or("N/A".to_string(), |i| i.to_string()),
+                                            meta.iso.map_or("N/A".to_string(), |i| i.to_string()),
                                         )
                                         .strong(),
                                     );
@@ -1436,7 +1456,11 @@ impl eframe::App for NativeApp {
                         ui.heading("Set Status Decision");
                         ui.add_space(4.0);
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new("Current State:").size(11.0).color(TEXT_SECONDARY));
+                            ui.label(
+                                RichText::new("Current State:")
+                                    .size(11.0)
+                                    .color(TEXT_SECONDARY),
+                            );
                             let category = DecisionCategory::from_decision(&detail.decision);
                             ui.label(
                                 RichText::new(detail.decision.to_uppercase())
@@ -1596,9 +1620,7 @@ impl eframe::App for NativeApp {
                     ui.add_space(6.0);
 
                     ui.collapsing(
-                        RichText::new("Importar desde Carpeta")
-                            .size(12.0)
-                            .strong(),
+                        RichText::new("Importar desde Carpeta").size(12.0).strong(),
                         |ui| {
                             ui.add_space(4.0);
                             ui.checkbox(&mut self.create_new_gallery, "Crear galería nueva");
@@ -1618,10 +1640,8 @@ impl eframe::App for NativeApp {
                             if ui
                                 .add_sized(
                                     [ui.available_width(), 32.0],
-                                    egui::Button::new(
-                                        RichText::new("Importar carpeta").strong(),
-                                    )
-                                    .fill(ACCENT_ORANGE),
+                                    egui::Button::new(RichText::new("Importar carpeta").strong())
+                                        .fill(ACCENT_ORANGE),
                                 )
                                 .clicked()
                             {

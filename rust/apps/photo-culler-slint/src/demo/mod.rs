@@ -1,7 +1,7 @@
 //! Shared gallery transport adapter and Slint view binding.
 
-pub mod controller;
 pub mod analysis_flow;
+pub mod controller;
 pub mod import_flow;
 pub mod rest;
 pub mod slint_view;

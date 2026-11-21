@@ -349,11 +349,7 @@ mod tests {
         let width = 72;
         let height = 72;
         let focused = gray_frame(width, height, |x, y| {
-            if (x / 2 + y / 2) % 2 == 0 {
-                0
-            } else {
-                255
-            }
+            if (x / 2 + y / 2) % 2 == 0 { 0 } else { 255 }
         });
         let blurred = box_blur(&focused, width, height);
         let sharp = analyze_frame(&focused, width, height, 0.8);
@@ -390,11 +386,7 @@ mod tests {
         let height = 64;
         let directional = gray_frame(width, height, |x, _| if (x / 2) % 2 == 0 { 0 } else { 255 });
         let defocus = gray_frame(width, height, |x, y| {
-            if (x / 2 + y / 2) % 2 == 0 {
-                0
-            } else {
-                255
-            }
+            if (x / 2 + y / 2) % 2 == 0 { 0 } else { 255 }
         });
         let directional_metrics = analyze_frame(&directional, width, height, 0.0);
         let defocus_metrics = analyze_frame(&defocus, width, height, 0.0);

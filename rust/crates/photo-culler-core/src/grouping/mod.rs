@@ -242,14 +242,18 @@ mod tests {
                 .map(|f| (f.photo_id, f.session_id, f.captured_at_ms))
                 .collect::<Vec<_>>()
         );
-        assert!(result
-            .groups
-            .iter()
-            .all(|g| !g.photo_ids.contains(&"e".to_string())
-                || g.photo_ids.iter().all(|id| id == "e")));
-        assert!(result
-            .groups
-            .iter()
-            .all(|g| !g.photo_ids.contains(&"f".to_string())));
+        assert!(
+            result
+                .groups
+                .iter()
+                .all(|g| !g.photo_ids.contains(&"e".to_string())
+                    || g.photo_ids.iter().all(|id| id == "e"))
+        );
+        assert!(
+            result
+                .groups
+                .iter()
+                .all(|g| !g.photo_ids.contains(&"f".to_string()))
+        );
     }
 }

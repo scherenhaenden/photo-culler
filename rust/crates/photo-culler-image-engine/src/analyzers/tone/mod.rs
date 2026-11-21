@@ -413,10 +413,12 @@ mod tests {
     }
 
     fn assert_all_numeric_metrics_finite(result: &ToneAnalysis) {
-        assert!(result
-            .metric_values()
-            .iter()
-            .all(|metric| metric.1.is_finite()));
+        assert!(
+            result
+                .metric_values()
+                .iter()
+                .all(|metric| metric.1.is_finite())
+        );
         assert!(result.percentile_1.is_finite());
         assert!(result.percentile_99.is_finite());
         assert!(result.luminance_entropy_bits.is_finite());
@@ -502,12 +504,16 @@ mod tests {
         assert!((result.aspect_ratio - (4.0 / 3.0)).abs() < f64::EPSILON);
         assert_eq!(result.megapixels, 12.0 / 1_000_000.0);
         let values = result.metric_values();
-        assert!(values
-            .iter()
-            .any(|metric| metric.0 == "histogram.luminance_entropy"));
-        assert!(values
-            .iter()
-            .any(|metric| metric.0 == "clipping.highlight_ratio"));
+        assert!(
+            values
+                .iter()
+                .any(|metric| metric.0 == "histogram.luminance_entropy")
+        );
+        assert!(
+            values
+                .iter()
+                .any(|metric| metric.0 == "clipping.highlight_ratio")
+        );
         assert!((0.0..=1.0).contains(&result.highlight_clipping_ratio));
     }
 }

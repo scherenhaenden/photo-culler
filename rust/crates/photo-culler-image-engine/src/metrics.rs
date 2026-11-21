@@ -3,10 +3,10 @@
 use image::{DynamicImage, GenericImageView};
 use serde::Serialize;
 
-use crate::normalize;
-use crate::algorithms::noise::noise_standard_deviations;
 use crate::algorithms::edges::edge_statistics;
 use crate::algorithms::fft::fft_high_frequency_ratio;
+use crate::algorithms::noise::noise_standard_deviations;
+use crate::normalize;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PixelFeatures {

@@ -738,9 +738,7 @@ fn request_for(invocation: &Invocation) -> Result<Request, CliError> {
                 None,
             )
         }
-        "photos" => {
-            photos_request(&invocation.args)?
-        }
+        "photos" => photos_request(&invocation.args)?,
         "sources" => {
             ensure_arg_count(&invocation.args, 1, "sources expects GALLERY_ID")?;
             let gallery = path_id(arg(0, "sources GALLERY_ID needs a gallery ID")?)?;
@@ -875,9 +873,9 @@ fn photos_request(args: &[String]) -> Result<(Method, String, Option<String>), C
             .ok_or(CliError::Usage("photos option needs a value"))?;
         match option {
             "--limit" if limit.is_none() => {
-                let parsed = value
-                    .parse::<usize>()
-                    .map_err(|_| CliError::Usage("photos --limit must be an integer from 1 to 200"))?;
+                let parsed = value.parse::<usize>().map_err(|_| {
+                    CliError::Usage("photos --limit must be an integer from 1 to 200")
+                })?;
                 if !(1..=200).contains(&parsed) {
                     return Err(CliError::Usage(
                         "photos --limit must be an integer from 1 to 200",
@@ -955,11 +953,15 @@ fn validate_photo_cursor(value: &str, gallery_id: &str) -> Result<Option<&'stati
     let filter = cursor
         .get("filter")
         .and_then(serde_json::Value::as_object)
-        .ok_or(CliError::Usage("photos cursor is missing its filter object"))?;
+        .ok_or(CliError::Usage(
+            "photos cursor is missing its filter object",
+        ))?;
     let cursor_gallery = filter
         .get("gallery_id")
         .and_then(serde_json::Value::as_str)
-        .ok_or(CliError::Usage("photos cursor is missing filter.gallery_id"))?;
+        .ok_or(CliError::Usage(
+            "photos cursor is missing filter.gallery_id",
+        ))?;
     if cursor_gallery != gallery_id {
         return Err(CliError::Usage(
             "photos cursor belongs to a different gallery",
@@ -973,7 +975,9 @@ fn validate_photo_cursor(value: &str, gallery_id: &str) -> Result<Option<&'stati
     match filter.get("decision") {
         None | Some(serde_json::Value::Null) => Ok(None),
         Some(serde_json::Value::String(value)) => Ok(Some(normalize_photo_decision(value)?)),
-        _ => Err(CliError::Usage("photos cursor has an invalid decision filter")),
+        _ => Err(CliError::Usage(
+            "photos cursor has an invalid decision filter",
+        )),
     }
 }
 
@@ -1195,30 +1199,28 @@ mod tests {
 
     #[test]
     fn photos_cursor_without_decision_filter_builds_a_valid_request() {
-        let cursor = r#"{"after_id":"photo-1","filter":{"gallery_id":"gallery-1","decision":null}}"#;
-        let (_, path, _) = photos_request(&args(&[
-            "gallery-1",
-            "--limit",
-            "25",
-            "--cursor",
-            cursor,
-        ]))
-        .unwrap();
+        let cursor =
+            r#"{"after_id":"photo-1","filter":{"gallery_id":"gallery-1","decision":null}}"#;
+        let (_, path, _) =
+            photos_request(&args(&["gallery-1", "--limit", "25", "--cursor", cursor])).unwrap();
         assert!(path.starts_with("/api/v1/galleries/gallery-1/photos?limit=25&cursor="));
         assert!(!path.contains("decision="));
     }
 
     #[test]
     fn photos_cursor_decision_must_match_explicit_filter() {
-        let cursor = r#"{"after_id":"photo-1","filter":{"gallery_id":"gallery-1","decision":"keep"}}"#;
-        assert!(photos_request(&args(&[
-            "gallery-1",
-            "--decision",
-            "reject",
-            "--cursor",
-            cursor,
-        ]))
-        .is_err());
+        let cursor =
+            r#"{"after_id":"photo-1","filter":{"gallery_id":"gallery-1","decision":"keep"}}"#;
+        assert!(
+            photos_request(&args(&[
+                "gallery-1",
+                "--decision",
+                "reject",
+                "--cursor",
+                cursor,
+            ]))
+            .is_err()
+        );
     }
 
     #[test]
