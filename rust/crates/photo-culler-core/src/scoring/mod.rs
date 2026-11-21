@@ -121,20 +121,20 @@ pub fn score(
         }
     }
 
-    if let Some(corruption) = by_name.get("corruption_status") {
-        if corruption.value != 1.0 {
-            return ScoreExplanation {
-                profile,
-                profile_version: profile.version(),
-                contract_version: SCORING_CONTRACT_VERSION,
-                score: 0.0,
-                confidence: corruption.confidence.clamp(0.0, 1.0),
-                quality_tier: "corrupted",
-                components: vec![],
-                raw_recoverability: valid_recoverability(raw_recoverability),
-                corruption: Some("File is corrupted or unreadable".into()),
-            };
-        }
+    if let Some(corruption) = by_name.get("corruption_status")
+        && corruption.value != 1.0
+    {
+        return ScoreExplanation {
+            profile,
+            profile_version: profile.version(),
+            contract_version: SCORING_CONTRACT_VERSION,
+            score: 0.0,
+            confidence: corruption.confidence.clamp(0.0, 1.0),
+            quality_tier: "corrupted",
+            components: vec![],
+            raw_recoverability: valid_recoverability(raw_recoverability),
+            corruption: Some("File is corrupted or unreadable".into()),
+        };
     }
 
     let weights = profile.weights();

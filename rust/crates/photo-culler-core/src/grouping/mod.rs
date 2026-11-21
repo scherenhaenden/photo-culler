@@ -76,19 +76,19 @@ pub fn group(frames: &[Frame<'_>], config: Config) -> Grouping {
                 if gap <= config.burst_gap_ms {
                     union(&mut parent, i, j);
                     evidence.push((i, j, Evidence::Temporal { gap_ms: gap }));
-                } else if gap <= config.perceptual_window_ms {
-                    if let (Some(x), Some(y)) = (frames[i].dhash, frames[j].dhash) {
-                        let distance = (x ^ y).count_ones();
-                        if distance <= config.max_hamming_distance {
-                            union(&mut parent, i, j);
-                            evidence.push((
-                                i,
-                                j,
-                                Evidence::Perceptual {
-                                    hamming_distance: distance,
-                                },
-                            ));
-                        }
+                } else if gap <= config.perceptual_window_ms
+                    && let (Some(x), Some(y)) = (frames[i].dhash, frames[j].dhash)
+                {
+                    let distance = (x ^ y).count_ones();
+                    if distance <= config.max_hamming_distance {
+                        union(&mut parent, i, j);
+                        evidence.push((
+                            i,
+                            j,
+                            Evidence::Perceptual {
+                                hamming_distance: distance,
+                            },
+                        ));
                     }
                 }
             }
