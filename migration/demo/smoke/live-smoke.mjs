@@ -177,7 +177,7 @@ export async function runLiveSmoke(browserName) {
   }
 }
 
-async function issuePairingCode(origin, sessionToken) {
+export async function issuePairingCode(origin, sessionToken) {
   assert.match(sessionToken, /^[0-9a-f]{64}$/i, "owned server must return its private session token");
   const response = await fetch(`${origin}/api/v1/session/pairing-codes`, {
     method: "POST",
@@ -202,7 +202,7 @@ async function waitForHtmlState(page, expectedState, timeoutMs) {
   throw new Error(`document did not reach ${expectedState} state within ${timeoutMs} ms`);
 }
 
-function waitForReady(child) {
+export function waitForReady(child) {
   return new Promise((resolve, reject) => {
     let stdout = "";
     const timeout = setTimeout(() => reject(new Error("Rust server did not announce owned readiness")), 10_000);

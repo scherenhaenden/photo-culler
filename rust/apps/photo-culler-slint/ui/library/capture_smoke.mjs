@@ -24,6 +24,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
+import { issuePairingCode, waitForReady } from "../../../../../migration/demo/smoke/live-smoke.mjs";
 
 const EXPECTED_JPEG_SHA256 = "cc20c24844d2fc6fca729fcb66cfe661960f7b56be41a3dd462a0f1b22cfb4f2";
 const THUMBNAIL_PATH = "/api/v1/photos/demo-001/thumbnail/800";
@@ -34,15 +35,16 @@ assert.ok(serverExecutable, "PHOTO_CULLER_SERVER must point to photo-culler-serv
 assert.ok(webRoot, "PHOTO_CULLER_WEB_ROOT must point to the staged Slint WASM bundle");
 await mkdir(outputDir, { recursive: true });
 
-const server = spawn(serverExecutable, ["--port", "0", "--web-root", webRoot], {
-  stdio: ["ignore", "pipe", "pipe"],
+const server = spawn(serverExecutable, ["--owned", "--port", "0", "--web-root", webRoot], {
+  stdio: ["pipe", "pipe", "pipe"],
 });
 let stderr = "";
 server.stderr.setEncoding("utf8");
 server.stderr.on("data", (chunk) => { stderr += chunk; });
 let browser;
 try {
-  const origin = await waitForOrigin(server);
+  const ready = await waitForReady(server);
+  const origin = ready.origin;
   browser = await chromium.launch({
     headless: true,
     args: ["--enable-webgl", "--use-gl=angle", "--use-angle=swiftshader"],
@@ -60,17 +62,28 @@ try {
       (response) => new URL(response.url()).pathname === THUMBNAIL_PATH,
       { timeout: 45_000 },
     );
+    const wasmLoaded = page.waitForResponse((response) => new URL(response.url()).pathname === "/photo_culler_slint_bg.wasm" && response.status() === 200);
     await page.goto(`${origin}/?photo-culler-smoke=1`, { waitUntil: "domcontentloaded" });
+    await wasmLoaded;
+    const pairingCode = await issuePairingCode(origin, ready.session_token);
+    await page.waitForTimeout(250);
+    await page.mouse.click(Math.round(viewport.width / 2), Math.round(viewport.height / 2));
+    await page.keyboard.type(pairingCode);
+    const paired = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/v1/session/pair");
+    await page.keyboard.press("Enter");
+    assert.equal((await paired).status(), 200, "the UI must pair with the Rust server");
     const applicationThumbnailResponse = await thumbnailResponsePromise;
     assert.equal(applicationThumbnailResponse.status(), 200, "the application thumbnail route must return HTTP 200");
-    const fixtureResponse = await page.request.get(new URL(THUMBNAIL_PATH, origin).toString());
+    const fixtureResponse = await page.request.get(new URL(THUMBNAIL_PATH, origin).toString(), {
+      headers: { Authorization: `Bearer ${ready.session_token}` },
+    });
     assert.equal(fixtureResponse.status(), 200, "the same-origin fixture route must return HTTP 200");
     const thumbnailHash = createHash("sha256").update(await fixtureResponse.body()).digest("hex");
-    await page.waitForFunction(
-      () => document.documentElement.dataset.photoCullerState === "ready",
-      undefined,
-      { timeout: 45_000 },
-    );
+    const deadline = Date.now() + 45_000;
+    while (Date.now() < deadline && await page.locator("html").getAttribute("data-photo-culler-state") !== "ready") {
+      await delay(100);
+    }
+    assert.equal(await page.locator("html").getAttribute("data-photo-culler-state"), "ready");
     const browserViewport = await page.evaluate(() => ({
       inner_width: window.innerWidth,
       inner_height: window.innerHeight,
