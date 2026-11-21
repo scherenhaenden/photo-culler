@@ -84,7 +84,7 @@ pub fn select(
             });
         }
     }
-    frames.sort_by_key(|frame| sort_key(frame));
+    frames.sort_by_key(sort_key);
     if frames.is_empty() {
         return Ok(Vec::new());
     }
