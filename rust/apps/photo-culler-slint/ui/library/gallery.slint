@@ -361,18 +361,20 @@ export component LibraryGallery inherits Rectangle {
     if root.view-state == 2: StatusPanel {
         state: PanelState.empty;
         show-folder-action: !root.web-layout;
-        title: root.web-layout ? "Your catalog will appear here" : "Your library starts with a folder";
-        detail: root.web-layout ? "Import a folder or open a photo archive to get started." : "Choose the folder that contains your photos. Photo Culler will keep your originals in place.";
+        title: root.web-layout ? "Your catalog will appear here" : "Tu biblioteca empieza con una carpeta";
+        detail: root.web-layout ? "Import a folder or open a photo archive to get started." : "Elige la carpeta que contiene tus fotos. Photo Culler mantendrá los originales en su sitio.";
         choose-folder => { root.choose-folder-requested(); }
         width: parent.width;
         height: parent.height;
     }
     if root.view-state == 3: StatusPanel {
         state: PanelState.error;
+        show-folder-action: !root.web-layout;
         title: "Galería no disponible";
         detail: root.error-message;
         action-label: "Reintentar";
         retry => { root.retry(); }
+        choose-folder => { root.choose-folder-requested(); }
         width: parent.width;
         height: parent.height;
     }

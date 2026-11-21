@@ -7,6 +7,7 @@
 pub mod demo_http;
 pub mod demo_launch;
 pub mod owned_server;
+pub mod profile;
 
 use std::fmt;
 

@@ -178,11 +178,11 @@ export component StatusPanel inherits Rectangle {
             primary: false;
             clicked => { root.retry(); }
         }
-        if root.state == PanelState.empty && root.show-folder-action: ActionButton {
-            label: "Choose a folder";
+        if root.show-folder-action && (root.state == PanelState.empty || root.state == PanelState.error): ActionButton {
+            label: root.state == PanelState.error ? "Elegir otra carpeta" : "Elegir carpeta";
             primary: true;
             accessible-role: button;
-            accessible-label: "Choose a photo folder";
+            accessible-label: root.state == PanelState.error ? "Elegir otra carpeta de fotos" : "Elegir carpeta de fotos";
             clicked => { root.choose-folder(); }
         }
     }

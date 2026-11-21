@@ -9,5 +9,8 @@ pub mod recipe_rest;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod desktop;
 
+#[cfg(not(target_arch = "wasm32"))]
+pub mod file_selection;
+
 #[cfg(target_arch = "wasm32")]
 mod browser;

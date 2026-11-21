@@ -13,6 +13,8 @@ use photo_culler_slint::{
         slint_view::{SlintDemoView, SlintDispatcher},
     },
     desktop::owned_server::DemoServer,
+    desktop::profile::{self, DesktopProfile},
+    file_selection::{Intent, NativePicker, desktop_pick, native::SystemNativePicker},
     recipe_flow::{self, RecipePanelController},
     recipe_rest::RecipeRestClient,
 };
@@ -32,24 +34,26 @@ type AppController = DemoController<SlintDemoView, SlintDispatcher>;
 type AppClient = DemoRestClient<NativeDemoTransport>;
 
 fn main() {
-    let (data_dir, authorized_roots, gallery_id) =
-        match parse_desktop_args(std::env::args_os().skip(1)) {
-            Ok(DesktopCommand::Version) => {
-                println!("photo-culler-desktop {}", env!("CARGO_PKG_VERSION"));
-                return;
-            }
-            Ok(DesktopCommand::Run {
-                data_dir,
-                authorized_roots,
-                gallery_id,
-            }) => (data_dir, authorized_roots, gallery_id),
-            Err(error) => {
-                eprintln!("photo-culler-desktop: {error}");
-                std::process::exit(2);
-            }
-        };
+    let command = match parse_desktop_args(std::env::args_os().skip(1)) {
+        Ok(DesktopCommand::Version) => {
+            println!("photo-culler-desktop {}", env!("CARGO_PKG_VERSION"));
+            return;
+        }
+        Ok(command) => command,
+        Err(error) => {
+            eprintln!("photo-culler-desktop: {error}");
+            std::process::exit(2);
+        }
+    };
 
-    if let Err(error) = run_application(data_dir, authorized_roots, gallery_id) {
+    let config = match resolve_launch_config(command) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("photo-culler-desktop: {error}");
+            std::process::exit(1);
+        }
+    };
+    if let Err(error) = run_application(config) {
         eprintln!("photo-culler-desktop failed: {error}");
         std::process::exit(1);
     }
@@ -61,7 +65,58 @@ enum DesktopCommand {
         data_dir: Option<PathBuf>,
         authorized_roots: Vec<PathBuf>,
         gallery_id: Option<String>,
+        demo: bool,
     },
+}
+
+#[derive(Clone)]
+struct LaunchConfig {
+    data_dir: Option<PathBuf>,
+    authorized_roots: Vec<PathBuf>,
+    gallery_id: Option<String>,
+    profile_file: Option<PathBuf>,
+    choose_folder_first: bool,
+    startup_error: Option<String>,
+}
+
+fn resolve_launch_config(command: DesktopCommand) -> Result<LaunchConfig, String> {
+    let DesktopCommand::Run {
+        data_dir,
+        authorized_roots,
+        gallery_id,
+        demo,
+    } = command
+    else {
+        unreachable!("version command returned before launch config resolution")
+    };
+    let explicit =
+        demo || data_dir.is_some() || !authorized_roots.is_empty() || gallery_id.is_some();
+    if explicit {
+        return Ok(LaunchConfig {
+            data_dir,
+            authorized_roots,
+            gallery_id,
+            profile_file: None,
+            choose_folder_first: false,
+            startup_error: None,
+        });
+    }
+
+    let profile_dir = profile::default_profile_dir().map_err(|error| error.to_string())?;
+    let profile_file = profile::profile_file_path(&profile_dir);
+    let (profile, startup_error) = match profile::load(&profile_file) {
+        Ok(stored) => (stored.unwrap_or_else(DesktopProfile::empty), None),
+        Err(error) => (DesktopProfile::empty(), Some(error.to_string())),
+    };
+    let root = profile.authorized_root_path();
+    Ok(LaunchConfig {
+        data_dir: Some(profile_dir),
+        authorized_roots: root.iter().cloned().collect(),
+        gallery_id: profile.gallery_id.clone(),
+        profile_file: Some(profile_file),
+        choose_folder_first: root.is_none() || startup_error.is_some(),
+        startup_error,
+    })
 }
 
 fn parse_desktop_args<I>(arguments: I) -> Result<DesktopCommand, &'static str>
@@ -72,9 +127,17 @@ where
     let mut data_dir = None;
     let mut authorized_roots = Vec::new();
     let mut gallery_id = None;
+    let mut demo = false;
     while let Some(argument) = arguments.next() {
         if argument == OsStr::new("--version") || argument == OsStr::new("-V") {
             return Ok(DesktopCommand::Version);
+        }
+        if argument == OsStr::new("--demo") {
+            if demo {
+                return Err("--demo may only be specified once");
+            }
+            demo = true;
+            continue;
         }
         if argument == OsStr::new("--data-dir") {
             if data_dir.is_some() {
@@ -113,8 +176,11 @@ where
             continue;
         }
         return Err(
-            "unknown option; supported options are --data-dir, --authorized-root, and --gallery-id",
+            "unknown option; supported options are --demo, --data-dir, --authorized-root, and --gallery-id",
         );
+    }
+    if demo && (data_dir.is_some() || !authorized_roots.is_empty() || gallery_id.is_some()) {
+        return Err("--demo cannot be combined with persistent catalog options");
     }
     if (!authorized_roots.is_empty() || gallery_id.is_some()) && data_dir.is_none() {
         return Err("--authorized-root and --gallery-id require --data-dir");
@@ -126,6 +192,7 @@ where
         data_dir,
         authorized_roots,
         gallery_id,
+        demo,
     })
 }
 
@@ -134,6 +201,7 @@ fn is_desktop_option(value: &OsStr) -> bool {
         "--data-dir",
         "--authorized-root",
         "--gallery-id",
+        "--demo",
         "--version",
         "-V",
     ]
@@ -141,11 +209,22 @@ fn is_desktop_option(value: &OsStr) -> bool {
     .any(|option| value == OsStr::new(option))
 }
 
-fn run_application(
-    data_dir: Option<PathBuf>,
-    authorized_roots: Vec<PathBuf>,
-    gallery_id: Option<String>,
-) -> Result<(), String> {
+fn backup_profile_file(path: &std::path::Path) -> Result<(), String> {
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|error| format!("could not timestamp profile backup: {error}"))?
+        .as_nanos();
+    let name = path
+        .file_name()
+        .and_then(OsStr::to_str)
+        .ok_or_else(|| "desktop profile filename is not valid UTF-8".to_owned())?;
+    let backup = path.with_file_name(format!("{name}.invalid-{timestamp}-{}", std::process::id()));
+    std::fs::copy(path, &backup)
+        .map(|_| ())
+        .map_err(|error| format!("could not preserve the unreadable profile: {error}"))
+}
+
+fn run_application(initial_config: LaunchConfig) -> Result<(), String> {
     let window = DemoWindow::new().map_err(|error| error.to_string())?;
     write_smoke_event("desktop-starting", &std::process::id().to_string(), "");
     let endpoint = Arc::new(Mutex::new(None::<SocketAddr>));
@@ -157,22 +236,35 @@ fn run_application(
     let view = Arc::new(SlintDemoView::new(window.as_weak(), false));
     let controller = Arc::new(DemoController::new(view.clone(), Arc::new(SlintDispatcher)));
     let server = Rc::new(RefCell::new(None));
+    let launch_config = Rc::new(RefCell::new(initial_config.clone()));
 
     let analysis_gallery_changed = analysis_flow::bind(&window, controller.clone(), client.clone());
     import_flow::bind(&window, controller.clone(), client.clone());
 
-    start_load(
-        &window,
-        controller.clone(),
-        client.clone(),
-        endpoint.clone(),
-        session_token.clone(),
-        server.clone(),
-        data_dir.clone(),
-        authorized_roots.clone(),
-        gallery_id.clone(),
-        false,
-    );
+    if initial_config.choose_folder_first {
+        window.set_view_state(2);
+        let status = initial_config.startup_error.as_deref().map_or_else(
+            || "Elige una carpeta para crear tu catálogo local.".to_owned(),
+            |error| format!("No se pudo leer la configuración guardada ({error}). El archivo se conservará como copia antes de continuar."),
+        );
+        window.set_service_status(status.into());
+    } else {
+        start_load(
+            &window,
+            controller.clone(),
+            client.clone(),
+            endpoint.clone(),
+            session_token.clone(),
+            server.clone(),
+            initial_config.data_dir.clone(),
+            initial_config.authorized_roots.clone(),
+            initial_config.gallery_id.clone(),
+            initial_config.profile_file.clone(),
+            initial_config.authorized_roots.first().cloned(),
+            false,
+            false,
+        );
+    }
     recipe_flow::bind(
         &window,
         Arc::new(RecipePanelController::new(RecipeRestClient::new(
@@ -186,11 +278,10 @@ fn run_application(
     let retry_endpoint = endpoint.clone();
     let retry_session_token = session_token.clone();
     let retry_server = server.clone();
-    let retry_data_dir = data_dir.clone();
-    let retry_authorized_roots = authorized_roots.clone();
-    let retry_gallery_id = gallery_id.clone();
+    let retry_config = launch_config.clone();
     window.on_retry(move || {
         if let Some(window) = weak_window.upgrade() {
+            let config = retry_config.borrow().clone();
             start_load(
                 &window,
                 retry_controller.clone(),
@@ -198,10 +289,118 @@ fn run_application(
                 retry_endpoint.clone(),
                 retry_session_token.clone(),
                 retry_server.clone(),
-                retry_data_dir.clone(),
-                retry_authorized_roots.clone(),
-                retry_gallery_id.clone(),
+                config.data_dir,
+                config.authorized_roots.clone(),
+                config.gallery_id,
+                config.profile_file,
+                config.authorized_roots.first().cloned(),
+                false,
                 true,
+            );
+        }
+    });
+    let choose_window = window.as_weak();
+    let choose_controller = controller.clone();
+    let choose_client = client.clone();
+    let choose_endpoint = endpoint.clone();
+    let choose_token = session_token.clone();
+    let choose_server = server.clone();
+    let choose_config = launch_config.clone();
+    window.on_choose_folder_requested(move || {
+        let picked = match desktop_pick(&mut SystemNativePicker, Intent::Source) {
+            Ok(path) => path,
+            Err(photo_culler_slint::file_selection::SelectionError::Cancelled) => return,
+            Err(error) => {
+                if let Some(window) = choose_window.upgrade() {
+                    window.set_service_status(error.to_string().into());
+                    window.set_error_message(error.to_string().into());
+                    window.set_view_state(2);
+                }
+                return;
+            }
+        };
+        let root = PathBuf::from(picked.as_str());
+        if !root.is_dir() {
+            if let Some(window) = choose_window.upgrade() {
+                window.set_service_status("La carpeta seleccionada ya no está disponible.".into());
+                window.set_error_message("La carpeta seleccionada ya no está disponible.".into());
+                window.set_view_state(2);
+            }
+            return;
+        }
+        let Ok(root) = root.canonicalize() else {
+            if let Some(window) = choose_window.upgrade() {
+                window.set_service_status("No se pudo acceder a la carpeta seleccionada.".into());
+                window.set_error_message("No se pudo acceder a la carpeta seleccionada.".into());
+                window.set_view_state(2);
+            }
+            return;
+        };
+        let profile_file = choose_config.borrow().profile_file.clone();
+        if let Some(path) = profile_file.as_deref() {
+            if choose_config.borrow().startup_error.is_some()
+                && let Err(error) = backup_profile_file(path)
+            {
+                if let Some(window) = choose_window.upgrade() {
+                    window.set_service_status(error.into());
+                    window.set_view_state(2);
+                }
+                return;
+            }
+            match DesktopProfile::for_selection(&root, None)
+                .and_then(|profile| profile::save(path, &profile))
+            {
+                Ok(()) => {}
+                Err(error) => {
+                    if let Some(window) = choose_window.upgrade() {
+                        window.set_service_status(error.to_string().into());
+                        window.set_error_message(error.to_string().into());
+                        window.set_view_state(2);
+                    }
+                    return;
+                }
+            }
+        }
+        let fallback_data_dir = choose_config.borrow().data_dir.clone();
+        let mut config = choose_config.borrow_mut();
+        config.data_dir = Some(
+            profile_file
+                .as_ref()
+                .and_then(|path| path.parent())
+                .map(PathBuf::from)
+                .or(fallback_data_dir)
+                .unwrap_or_else(|| PathBuf::from(".")),
+        );
+        config.authorized_roots = vec![root.clone()];
+        config.gallery_id = None;
+        config.choose_folder_first = false;
+        config.startup_error = None;
+        drop(config);
+        choose_server.borrow_mut().take();
+        if let Ok(mut endpoint) = choose_endpoint.lock() {
+            *endpoint = None;
+        }
+        if let Ok(mut token) = choose_token.lock() {
+            *token = None;
+        }
+        if let Some(window) = choose_window.upgrade() {
+            window.set_view_state(0);
+            window.set_service_status("Preparando tu catálogo…".into());
+            let config = choose_config.borrow().clone();
+            start_load(
+                &window,
+                choose_controller.clone(),
+                choose_client.clone(),
+                choose_endpoint.clone(),
+                choose_token.clone(),
+                choose_server.clone(),
+                config.data_dir,
+                config.authorized_roots,
+                config.gallery_id,
+                config.profile_file,
+                Some(root),
+                true,
+                false,
             );
         }
     });
@@ -350,6 +549,9 @@ fn start_load(
     data_dir: Option<PathBuf>,
     authorized_roots: Vec<PathBuf>,
     gallery_id: Option<String>,
+    profile_file: Option<PathBuf>,
+    profile_root: Option<PathBuf>,
+    open_import_after_load: bool,
     retry: bool,
 ) {
     if server.borrow().is_none() {
@@ -390,6 +592,10 @@ fn start_load(
         controller.begin_load("active")
     };
     let task_controller = controller.clone();
+    let profile_controller = task_controller.clone();
+    let profile_file_after_load = profile_file.clone();
+    let profile_root_after_load = profile_root.clone();
+    let open_import_window = window.as_weak();
     let smoke_context = server.borrow().as_ref().map(|connection| {
         (
             connection.origin.clone(),
@@ -400,6 +606,20 @@ fn start_load(
     });
     if let Err(error) = slint::spawn_local(async move {
         let _ = task_controller.execute(client.as_ref(), ticket).await;
+        if let (Some(path), Some(root), Some(gallery_id)) = (
+            profile_file_after_load,
+            profile_root_after_load,
+            profile_controller.active_gallery_id(),
+        ) {
+            if let Ok(profile) = DesktopProfile::for_selection(&root, Some(&gallery_id)) {
+                if let Err(error) = profile::save(&path, &profile) {
+                    eprintln!("could not persist desktop profile: {error}");
+                }
+            }
+        }
+        if open_import_after_load && let Some(window) = open_import_window.upgrade() {
+            window.invoke_import_open_requested();
+        }
         if let (Some(status_file), Some((origin, server_pid))) =
             (smoke_status_file(), smoke_context)
         {
@@ -456,5 +676,34 @@ fn write_smoke_event_to(path: &std::path::Path, event: &str, first: &str, second
             }
         }
         Err(error) => eprintln!("could not open native smoke status file: {error}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(values: &[&str]) -> Result<DesktopCommand, &'static str> {
+        parse_desktop_args(values.iter().map(OsString::from))
+    }
+
+    #[test]
+    fn demo_mode_is_explicit_and_cannot_enable_persistent_import() {
+        assert!(matches!(
+            parse(&["--demo"]),
+            Ok(DesktopCommand::Run { demo: true, .. })
+        ));
+        assert!(matches!(
+            parse(&["--demo", "--data-dir", "/tmp/catalog"]),
+            Err("--demo cannot be combined with persistent catalog options")
+        ));
+    }
+
+    #[test]
+    fn no_arguments_select_normal_profile_mode_instead_of_demo_mode() {
+        assert!(matches!(
+            parse(&[]),
+            Ok(DesktopCommand::Run { demo: false, .. })
+        ));
     }
 }
