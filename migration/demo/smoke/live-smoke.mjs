@@ -88,11 +88,21 @@ export async function runLiveSmoke(browserName) {
       return url.pathname === "/api/v1/session/pair" && response.request().method() === "POST";
     });
     await page.keyboard.press("Enter");
-    assert.equal(
-      (await paired).status(),
-      200,
-      "the browser must pair through the real session route",
-    );
+    const pairResponse = await paired;
+    if (pairResponse.status() !== 200) {
+      const requestHeaders = await pairResponse.request().allHeaders();
+      const error = await pairResponse.json().catch(() => ({}));
+      throw new Error(
+        `the browser must pair through the real session route: ` +
+          `status=${pairResponse.status()}, ` +
+          `error=${JSON.stringify({ code: error.code, message: error.message })}, ` +
+          `request-headers=${JSON.stringify({
+            host: requestHeaders.host,
+            origin: requestHeaders.origin,
+            sec_fetch_site: requestHeaders["sec-fetch-site"],
+          })}`,
+      );
+    }
     try {
       await waitForHtmlState(page, "ready", 45_000);
     } catch (error) {
