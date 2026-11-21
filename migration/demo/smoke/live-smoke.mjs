@@ -77,7 +77,10 @@ export async function runLiveSmoke(browserName) {
     });
     await page.goto(origin, { waitUntil: "domcontentloaded" });
     await wasmLoaded;
-    await page.waitForTimeout(250);
+    // Firefox's headed WebGL initialization can finish fetching WASM before
+    // the Slint pairing overlay is ready to receive focus.
+    await page.waitForTimeout(browserName === "firefox" ? 2000 : 250);
+    await page.bringToFront();
     await page.mouse.click(720, 450);
     await page.keyboard.type(pairingCode);
     const paired = page.waitForResponse((response) => {
