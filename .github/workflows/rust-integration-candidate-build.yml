@@ -1,0 +1,188 @@
+name: Rust Sprint 01 integration gates
+
+on:
+  push:
+    branches:
+      - feature/sprint-01-integration-candidate
+      - feature/sprint-01-rust-foundation
+    paths:
+      - 'rust/Cargo.toml'
+      - 'rust/Cargo.lock'
+      - 'rust/crates/**'
+      - 'rust/apps/photo-culler-server/**'
+      - 'rust/apps/photo-culler-cli/**'
+      - 'rust/apps/photo-culler-slint/**'
+      - '.github/workflows/rust-integration-candidate-build.yml'
+  pull_request:
+    branches:
+      - feature/sprint-01-integration-candidate
+      - feature/sprint-01-rust-foundation
+    paths:
+      - 'rust/Cargo.toml'
+      - 'rust/Cargo.lock'
+      - 'rust/crates/**'
+      - 'rust/apps/photo-culler-server/**'
+      - 'rust/apps/photo-culler-cli/**'
+      - 'rust/apps/photo-culler-slint/**'
+      - '.github/workflows/rust-integration-candidate-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch-branch-guard:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require the candidate or Sprint 01 branch
+        env:
+          SELECTED_BRANCH: ${{ github.ref_name }}
+        run: |
+          test "$SELECTED_BRANCH" = 'feature/sprint-01-integration-candidate' \
+            || test "$SELECTED_BRANCH" = 'feature/sprint-01-rust-foundation'
+
+  native-check:
+    if: github.ref_name == 'feature/sprint-01-integration-candidate' || github.base_ref == 'feature/sprint-01-integration-candidate' || github.ref_name == 'feature/sprint-01-rust-foundation' || github.base_ref == 'feature/sprint-01-rust-foundation'
+    name: ${{ matrix.name }} Rust package check
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            runner: macos-15
+            target: aarch64-apple-darwin
+          - name: Linux x86-64
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - name: Windows x86-64
+            runner: windows-2025
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Create evidence directory
+        shell: bash
+        run: mkdir -p artifacts/candidate-check/${{ matrix.target }}
+      - name: Install Slint native build dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          packages=(build-essential pkg-config libfontconfig1-dev libx11-dev libx11-xcb-dev libxcb1-dev libxcursor-dev libxkbcommon-dev libxkbcommon-x11-dev libinput-dev libgbm-dev libwayland-dev)
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y "${packages[@]}"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Check server, CLI, and Slint packages
+        shell: bash
+        run: |
+          set +e
+          cargo check --locked --manifest-path rust/Cargo.toml \
+            --target '${{ matrix.target }}' \
+            -p photo-culler-server -p photo-culler-cli -p photo-culler-slint \
+            2>&1 | tee 'artifacts/candidate-check/${{ matrix.target }}/cargo-check.log'
+          status=${PIPESTATUS[0]}
+          python - '${{ matrix.target }}' "$status" <<'PY'
+          import hashlib, json, pathlib, sys
+
+          target, status = sys.argv[1], int(sys.argv[2])
+          root = pathlib.Path.cwd()
+          files = sorted(path for path in (root / "rust").rglob("*")
+                         if path.is_file() and path.suffix.lower() != ".md")
+          manifest = []
+          for path in files:
+              rel = path.relative_to(root).as_posix()
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              manifest.append(f"{digest}  {rel}")
+          evidence = root / "artifacts" / "candidate-check" / target
+          (evidence / "source-manifest.sha256").write_text("\n".join(manifest) + "\n")
+          (evidence / "result.json").write_text(json.dumps({
+              "commit": "${{ github.sha }}",
+              "target": target,
+              "check_exit_code": status,
+              "non_markdown_rust_files": len(manifest),
+              "source_manifest_sha256": hashlib.sha256(
+                  ("\n".join(manifest) + "\n").encode()).hexdigest(),
+              "scope": "cargo check only; no tests or runtime acceptance",
+          }, indent=2) + "\n")
+          PY
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rust-candidate-check-${{ matrix.target }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/candidate-check/${{ matrix.target }}/
+          if-no-files-found: warn
+
+  wasm-check:
+    if: github.ref_name == 'feature/sprint-01-integration-candidate' || github.base_ref == 'feature/sprint-01-integration-candidate' || github.ref_name == 'feature/sprint-01-rust-foundation' || github.base_ref == 'feature/sprint-01-rust-foundation'
+    name: Slint WASM package check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Create evidence directory
+        run: mkdir -p artifacts/candidate-check/wasm32-unknown-unknown
+      - name: Check Slint for WASM
+        shell: bash
+        run: |
+          set +e
+          cargo check --locked --manifest-path rust/Cargo.toml \
+            -p photo-culler-slint --target wasm32-unknown-unknown \
+            2>&1 | tee artifacts/candidate-check/wasm32-unknown-unknown/cargo-check.log
+          status=${PIPESTATUS[0]}
+          python - "$status" <<'PY'
+          import hashlib, json, pathlib, sys
+
+          status = int(sys.argv[1])
+          root = pathlib.Path.cwd()
+          files = sorted(path for path in (root / "rust").rglob("*")
+                         if path.is_file() and path.suffix.lower() != ".md")
+          manifest = []
+          for path in files:
+              rel = path.relative_to(root).as_posix()
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              manifest.append(f"{digest}  {rel}")
+          evidence = root / "artifacts" / "candidate-check" / "wasm32-unknown-unknown"
+          (evidence / "source-manifest.sha256").write_text("\n".join(manifest) + "\n")
+          (evidence / "result.json").write_text(json.dumps({
+              "commit": "${{ github.sha }}",
+              "target": "wasm32-unknown-unknown",
+              "check_exit_code": status,
+              "non_markdown_rust_files": len(manifest),
+              "source_manifest_sha256": hashlib.sha256(
+                  ("\n".join(manifest) + "\n").encode()).hexdigest(),
+              "scope": "cargo check only; no tests or runtime acceptance",
+          }, indent=2) + "\n")
+          PY
+          exit "$status"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rust-candidate-check-wasm32-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/candidate-check/wasm32-unknown-unknown/
+          if-no-files-found: warn
+
+  product-tests:
+    if: github.ref_name == 'feature/sprint-01-integration-candidate' || github.base_ref == 'feature/sprint-01-integration-candidate' || github.ref_name == 'feature/sprint-01-rust-foundation' || github.base_ref == 'feature/sprint-01-rust-foundation'
+    name: Rust and Slint product tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux build dependencies
+        run: |
+          packages=(build-essential pkg-config libglib2.0-dev libgtk-3-dev libfontconfig1-dev libx11-dev libx11-xcb-dev libxcb1-dev libxcursor-dev libxkbcommon-dev libxkbcommon-x11-dev libinput-dev libgbm-dev libwayland-dev)
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y "${packages[@]}"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Test every active Rust and Slint package
+        run: cargo test --locked --manifest-path rust/Cargo.toml --workspace --exclude photo-culler-egui --exclude photo-culler-tauri

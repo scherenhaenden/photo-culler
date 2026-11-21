@@ -1,0 +1,660 @@
+import { DesignTokens, PanelState, StatusPanel } from "../components/components.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export struct GalleryPhoto {
+    id: string,
+    filename: string,
+    decision: string,
+    quality: string,
+    score: string,
+    thumbnail: image,
+    rating: int,
+    iso: int,
+    is-raw: bool,
+    camera: string,
+    capture-time: string,
+    sharpness: int,
+    metadata-known: bool,
+    selected: bool,
+}
+
+component DensityButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected: false;
+    callback activated();
+
+    height: 24px;
+    min-width: 34px;
+    background: selected ? DesignTokens.accent : transparent;
+    border-radius: 999px;
+    Text {
+        text: root.label;
+        color: root.selected ? #ffffff : #ffffff66;
+        font-family: DesignTokens.body-font;
+        font-size: 9px;
+        font-weight: 800;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    TouchArea { clicked => { root.activated(); } }
+}
+
+component PhotoNavigationButton inherits FocusScope {
+    in property <string> label;
+    in property <string> accessible-name;
+    in property <bool> can-activate: true;
+    callback activated();
+
+    width: 30px;
+    height: 22px;
+    opacity: root.can-activate ? 1 : 0.38;
+    focus-on-tab-navigation: true;
+    accessible-role: button;
+    accessible-label: root.accessible-name;
+    key-pressed(event) => {
+        if (root.can-activate && (event.text == Key.Return || event.text == " ")) {
+            root.activated();
+            accept
+        } else { reject }
+    }
+
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        border-radius: 5px;
+        background: #ffffff12;
+        border-width: root.has-focus ? 2px : 1px;
+        border-color: root.has-focus ? DesignTokens.focus : #ffffff33;
+        Text {
+            text: root.label;
+            color: #ffffff;
+            font-family: DesignTokens.body-font;
+            font-size: 12px;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        TouchArea {
+            enabled: root.can-activate;
+            mouse-cursor: pointer;
+            clicked => { root.focus(); root.activated(); }
+        }
+    }
+}
+
+component DecisionAction inherits Rectangle {
+    in property <string> label;
+    in property <string> decision;
+    in property <color> fill-color: #ffffff19;
+    in property <color> text-color: #ffffff;
+    callback activated(decision: string);
+
+    height: 18px;
+    min-width: 34px;
+    background: root.fill-color;
+    border-radius: 999px;
+    opacity: 0.92;
+    Text {
+        text: root.label;
+        color: root.text-color;
+        font-family: DesignTokens.body-font;
+        font-size: 8px;
+        font-weight: 900;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.activated(root.decision); }
+    }
+}
+
+component GalleryCard inherits Rectangle {
+    in property <GalleryPhoto> photo;
+    in property <bool> selected: false;
+    in property <bool> web-layout: false;
+    in property <string> search-query: "";
+    in property <length> card-width: 240px;
+    callback activated(string);
+    callback selection-requested(photo-id: string, multi: bool);
+    property <bool> multi-select-click: false;
+
+    property <string> filename-lower: root.photo.filename.to-lowercase();
+    property <string> query-lower: root.search-query.to-lowercase();
+    property <bool> matches-search: root.query-lower == "" ||
+        root.filename-lower.replace-all(root.query-lower, "") != root.filename-lower;
+    property <bool> is-keep: root.photo.decision == "BEST" || root.photo.decision == "KEEP" ||
+        root.photo.decision == "best" || root.photo.decision == "keep";
+    property <bool> is-alternate: root.photo.decision == "ALTERNATE" || root.photo.decision == "REVIEW" ||
+        root.photo.decision == "alternate" || root.photo.decision == "review" || root.photo.decision == "alt";
+    property <bool> is-rejected: root.photo.decision.starts-with("REJECT") || root.photo.decision.starts-with("reject");
+    property <color> status-color: root.is-keep ? #25a18e :
+        (root.is-alternate ? #f7c59f : (root.is-rejected ? #ff6b35 : #ffffff66));
+
+    width: root.card-width;
+    height: root.card-width * 3 / 4;
+    background: #111111;
+    border-radius: 16px;
+    border-width: root.selected ? 2px : 1px;
+    border-color: root.selected ? #ff6b35 : (root.is-rejected ? #ff6b3566 : (root.is-keep ? #25a18e99 : (root.is-alternate ? #f7c59f99 : #ffffff19)));
+    opacity: root.is-rejected && !root.selected ? 0.78 : 1;
+    clip: true;
+
+    Image {
+        source: root.photo.thumbnail;
+        image-fit: cover;
+        width: parent.width;
+        height: parent.height;
+    }
+
+    if root.photo.metadata-known && root.photo.is-raw: Rectangle {
+        x: 8px;
+        y: 8px;
+        width: 38px;
+        height: 19px;
+        background: #000000cc;
+        border-radius: 5px;
+        border-width: 1px;
+        border-color: #ffffff19;
+        Text {
+            text: "RAW";
+            color: #ffffff;
+            font-family: DesignTokens.body-font;
+            font-size: 8px;
+            font-weight: 900;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    Rectangle {
+        x: parent.width - 52px;
+        y: 8px;
+        width: 44px;
+        height: 20px;
+        background: #000000cc;
+        border-radius: 5px;
+        border-width: 1px;
+        border-color: #ffffff26;
+        Text {
+            text: root.photo.score;
+            color: #25a18e;
+            font-family: DesignTokens.body-mono-font;
+            font-size: 9px;
+            font-weight: 800;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    Rectangle {
+        x: 0px;
+        y: parent.height - 72px;
+        width: parent.width;
+        height: 72px;
+        background: #000000e6;
+        visible: hover-area.has-hover;
+        VerticalLayout {
+            padding-left: 10px;
+            padding-right: 10px;
+            padding-top: 8px;
+            padding-bottom: 7px;
+            spacing: 4px;
+            HorizontalLayout {
+                spacing: 4px;
+                Text {
+                    text: root.photo.metadata-known ? (root.photo.rating >= 1 ? "★" : "☆") + (root.photo.rating >= 2 ? "★" : "☆") +
+                        (root.photo.rating >= 3 ? "★" : "☆") + (root.photo.rating >= 4 ? "★" : "☆") +
+                        (root.photo.rating >= 5 ? "★" : "☆") : "RATING —";
+                    color: #ff6b35;
+                    font-family: DesignTokens.body-font;
+                    font-size: 11px;
+                    font-weight: 800;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: root.photo.filename;
+                    color: #ffffffe6;
+                    font-family: DesignTokens.body-mono-font;
+                    font-size: 8px;
+                    horizontal-alignment: right;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    horizontal-stretch: 1;
+                }
+            }
+            HorizontalLayout {
+                spacing: 4px;
+                Text {
+                    text: root.photo.metadata-known && root.photo.iso > 0 ? root.photo.iso + " ISO" : "ISO —";
+                    color: #ffffff99;
+                    font-family: DesignTokens.body-mono-font;
+                    font-size: 8px;
+                    vertical-alignment: center;
+                }
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+                Text {
+                    text: "◉  INSPECT";
+                    color: #ff6b35;
+                    font-family: DesignTokens.body-font;
+                    font-size: 8px;
+                    font-weight: 900;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+
+    if root.is-keep || root.is-alternate || root.is-rejected: Rectangle {
+        x: parent.width - 34px;
+        y: parent.height - 34px;
+        width: 24px;
+        height: 24px;
+        background: root.status-color;
+        border-radius: 999px;
+        Text {
+            text: root.is-keep ? "✓" : (root.is-alternate ? "◆" : "×");
+            color: root.is-alternate ? #111111 : #ffffff;
+            font-family: DesignTokens.body-font;
+            font-size: root.is-alternate ? 9px : 14px;
+            font-weight: 900;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    focus_scope := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.activated(root.photo.id);
+                root.selection-requested(
+                    root.photo.id,
+                    event.modifiers.shift || event.modifiers.control || event.modifiers.meta,
+                );
+                accept
+            } else { reject }
+        }
+        Rectangle {
+            x: 3px;
+            y: 3px;
+            width: parent.width - 6px;
+            height: parent.height - 6px;
+            border-radius: 9px;
+            border-width: focus_scope.has-focus ? 2px : 0px;
+            border-color: DesignTokens.focus;
+            background: transparent;
+        }
+        hover-area := TouchArea {
+            mouse-cursor: pointer;
+            pointer-event(event) => {
+                if (event.kind == PointerEventKind.down) {
+                    root.multi-select-click = event.modifiers.shift || event.modifiers.control || event.modifiers.meta;
+                }
+            }
+            clicked => {
+                focus_scope.focus();
+                root.activated(root.photo.id);
+                root.selection-requested(root.photo.id, root.multi-select-click);
+            }
+        }
+    }
+}
+
+export component LibraryGallery inherits Rectangle {
+    in property <bool> web-layout: false;
+    in property <int> viewport-width: 0;
+    in property <string> search-query: "";
+    in property <int> view-state: 1; // 0 loading, 1 ready, 2 empty, 3 error
+    in property <[GalleryPhoto]> photos: [];
+    in property <string> fallback-id: "demo-001";
+    in property <string> fallback-name: "demo-001.jpg";
+    in property <image> fallback-thumbnail;
+    in property <string> fallback-decision: "UNRATED";
+    in property <string> selected-id: "";
+    in property <string> error-message: "No se pudo cargar la galería.";
+    in property <int> selected-photo-count: 0;
+    in property <bool> all-visible-selected: false;
+    in property <string> navigation-label: "Foto 1 de 1";
+    in property <string> navigation-error: "";
+    in property <bool> can-previous-photo: false;
+    in property <bool> can-next-photo: false;
+    in-out property <int> grid-density: 1; // 0 small, 1 medium, 2 large
+    in-out property <bool> sort-descending: true;
+    callback retry();
+    callback refresh-gallery();
+    callback previous-photo();
+    callback next-photo();
+    callback select-photo(string);
+    callback selection-requested(photo-id: string, multi: bool);
+    callback select-all-requested();
+    callback sort-direction-changed(descending: bool);
+    callback density-changed(density: int);
+    callback decision-requested(decision: string);
+
+    background: #050505;
+    property <int> effective-viewport-width: root.viewport-width > 0 ? root.viewport-width : round(root.width / 1px);
+    property <int> medium-columns: root.effective-viewport-width >= 1280 ? 5 :
+        (root.effective-viewport-width >= 1024 ? 4 : (root.effective-viewport-width >= 768 ? 3 : (root.effective-viewport-width >= 640 ? 2 : 1)));
+    property <int> grid-columns: root.grid-density == 0 ?
+        (root.effective-viewport-width >= 1024 ? 6 : (root.effective-viewport-width >= 768 ? 4 : (root.effective-viewport-width >= 640 ? 3 : 2))) :
+        (root.grid-density == 2 ? (root.effective-viewport-width >= 1024 ? 3 : (root.effective-viewport-width >= 640 ? 2 : 1)) : root.medium-columns);
+    property <int> item-count: root.photos.length;
+    property <int> selected-count: root.selected-photo-count;
+    property <bool> all-selected: root.all-visible-selected;
+    property <length> card-width: (root.width - 32px - (root.grid-columns - 1) * 12px) / root.grid-columns;
+    property <length> card-height: root.card-width * 3 / 4;
+    property <int> grid-rows: (root.item-count + root.grid-columns - 1) / root.grid-columns;
+    property <length> grid-content-height: root.grid-rows * (root.card-height + 12px) - 12px;
+    property <string> query-lower: root.search-query.to-lowercase();
+
+    if root.view-state == 0: StatusPanel {
+        state: PanelState.loading;
+        title: "Cargando galería";
+        detail: "Conectando con el catálogo local y preparando miniaturas.";
+        width: parent.width;
+        height: parent.height;
+    }
+    if root.view-state == 2: StatusPanel {
+        state: PanelState.empty;
+        title: "Tu catálogo aparecerá aquí";
+        detail: "Elige una galería del archivo o importa una carpeta para empezar.";
+        width: parent.width;
+        height: parent.height;
+    }
+    if root.view-state == 3: StatusPanel {
+        state: PanelState.error;
+        title: "Galería no disponible";
+        detail: root.error-message;
+        action-label: "Reintentar";
+        retry => { root.retry(); }
+        width: parent.width;
+        height: parent.height;
+    }
+
+    if root.view-state == 1: VerticalLayout {
+        spacing: 0px;
+
+        Rectangle {
+            height: 46px;
+            background: #111111;
+            Rectangle { y: parent.height - 1px; width: parent.width; height: 1px; background: #ffffff19; }
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 16px;
+                spacing: 12px;
+                Text {
+                    text: root.item-count + " ON THIS PAGE";
+                    color: #ffffff66;
+                    font-family: DesignTokens.body-font;
+                    font-size: 9px;
+                    font-weight: 900;
+                    letter-spacing: 1.4px;
+                    vertical-alignment: center;
+                }
+                Rectangle {
+                    height: 25px;
+                    min-width: 118px;
+                    background: #050505;
+                    border-radius: 999px;
+                    border-width: 1px;
+                    border-color: #ffffff19;
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 8px;
+                        spacing: 5px;
+                        Text {
+                            text: "SORT:";
+                            color: #ffffff66;
+                            font-family: DesignTokens.body-font;
+                            font-size: 8px;
+                            font-weight: 800;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            text: root.sort-descending ? "CAPTURE TIME ↓" : "CAPTURE TIME ↑";
+                            color: #ffffffcc;
+                            font-family: DesignTokens.body-font;
+                            font-size: 8px;
+                            font-weight: 800;
+                            vertical-alignment: center;
+                        }
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.sort-descending = !root.sort-descending;
+                                root.sort-direction-changed(root.sort-descending);
+                            }
+                        }
+                    }
+                }
+                Rectangle { horizontal-stretch: 1; background: transparent; }
+                if root.selected-count > 0: Rectangle {
+                    height: 24px;
+                    background: #111111;
+                    border-radius: 999px;
+                    border-width: 1px;
+                    border-color: #ff6b3580;
+                    HorizontalLayout {
+                        padding-left: 9px;
+                        padding-right: 4px;
+                        spacing: 4px;
+                        Text {
+                            text: root.selected-count + " SEL:";
+                            color: #ffffff;
+                            font-family: DesignTokens.body-font;
+                            font-size: 8px;
+                            font-weight: 900;
+                            vertical-alignment: center;
+                        }
+                        DecisionAction {
+                            label: "KEEP"; decision: "keep"; fill-color: #25a18e;
+                            activated(decision) => { root.decision-requested(decision); }
+                        }
+                        DecisionAction {
+                            label: "ALT"; decision: "alt"; fill-color: #f7c59f; text-color: #111111;
+                            activated(decision) => { root.decision-requested(decision); }
+                        }
+                        DecisionAction {
+                            label: "REJECT"; decision: "reject"; fill-color: #ff6b35;
+                            activated(decision) => { root.decision-requested(decision); }
+                        }
+                        DecisionAction {
+                            label: "CLEAR"; decision: "undecided";
+                            activated(decision) => { root.decision-requested(decision); }
+                        }
+                    }
+                }
+                Rectangle {
+                    height: 24px;
+                    min-width: 92px;
+                    background: #050505;
+                    border-radius: 999px;
+                    border-width: 1px;
+                    border-color: #ffffff19;
+                    opacity: 1;
+                    Text {
+                        text: root.all-selected ? "DESELECT ALL" : "SELECT ALL";
+                        color: #ffffffb3;
+                        font-family: DesignTokens.body-font;
+                        font-size: 8px;
+                        font-weight: 900;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.select-all-requested(); }
+                    }
+                }
+                Rectangle {
+                    width: 112px;
+                    height: 28px;
+                    background: #050505;
+                    border-radius: 999px;
+                    border-width: 1px;
+                    border-color: #ffffff19;
+                    HorizontalLayout {
+                        padding: 2px;
+                        spacing: 2px;
+                        DensityButton { label: "SMALL"; selected: root.grid-density == 0; activated => { root.grid-density = 0; root.density-changed(0); } }
+                        DensityButton { label: "MED"; selected: root.grid-density == 1; activated => { root.grid-density = 1; root.density-changed(1); } }
+                        DensityButton { label: "LARGE"; selected: root.grid-density == 2; activated => { root.grid-density = 2; root.density-changed(2); } }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            height: 24px;
+            background: #111111;
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 12px;
+                spacing: 6px;
+                Text {
+                    text: root.navigation-error == "" ? "Search and filters apply to this page." : "No se pudo cargar la página. Pulsa la flecha para reintentar. " + root.navigation-error;
+                    color: root.navigation-error == "" ? #ffffffb3 : #ffb08c;
+                    font-family: DesignTokens.body-font;
+                    font-size: 10px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    horizontal-stretch: 1;
+                }
+                PhotoNavigationButton {
+                    label: "‹";
+                    accessible-name: "Previous photo";
+                    can-activate: root.can-previous-photo;
+                    activated => { root.previous-photo(); }
+                }
+                Text {
+                    text: root.navigation-label;
+                    color: #ffffffb3;
+                    font-family: DesignTokens.body-mono-font;
+                    font-size: 9px;
+                    vertical-alignment: center;
+                }
+                PhotoNavigationButton {
+                    label: "›";
+                    accessible-name: "Next photo";
+                    can-activate: root.can-next-photo;
+                    activated => { root.next-photo(); }
+                }
+                refresh := FocusScope {
+                    width: 68px;
+                    height: parent.height;
+                    focus-on-tab-navigation: true;
+                    accessible-role: button;
+                    accessible-label: "Reload gallery from the first page";
+                    key-pressed(event) => {
+                        if (event.text == Key.Return || event.text == " ") {
+                            root.refresh-gallery();
+                            accept
+                        } else { reject }
+                    }
+                    Rectangle {
+                        width: parent.width;
+                        height: parent.height;
+                        border-radius: 4px;
+                        background: #ffffff12;
+                        border-width: refresh.has-focus ? 2px : 1px;
+                        border-color: refresh.has-focus ? DesignTokens.focus : #ffffff33;
+                        Text {
+                            text: "RELOAD";
+                            color: #ffffff;
+                            font-family: DesignTokens.body-font;
+                            font-size: 9px;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                        TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => { refresh.focus(); root.refresh-gallery(); }
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            vertical-stretch: 1;
+            background: #050505;
+
+            if root.photos.length > 0: ScrollView {
+                width: parent.width;
+                height: parent.height;
+                content-width: parent.width;
+                content-height: max(root.grid-content-height + 32px, parent.height);
+                horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+                vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
+
+                Rectangle {
+                    width: parent.width;
+                    height: max(root.grid-content-height + 32px, root.height - 46px);
+                    background: transparent;
+
+                    // The original Library uses a very faint centered wordmark
+                    // behind its cards; keep it decorative and non-interactive.
+                    Text {
+                        x: 0px;
+                        y: max(0px, (parent.height - 220px) / 2);
+                        width: parent.width;
+                        height: 220px;
+                        text: "CULL";
+                        color: #ffffff04;
+                        font-family: DesignTokens.heading-font;
+                        font-size: 180px;
+                        font-weight: 900;
+                        font-italic: true;
+                        letter-spacing: -9px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    GridLayout {
+                        x: 16px;
+                        y: 16px;
+                        width: parent.width - 32px;
+                        spacing: 12px;
+
+                        for photo[index] in root.photos: GalleryCard {
+                            row: index / root.grid-columns;
+                            col: Math.mod(index, root.grid-columns);
+                            photo: photo;
+                            selected: photo.selected;
+                            web-layout: root.web-layout;
+                            search-query: root.search-query;
+                            card-width: root.card-width;
+                            activated(id) => { root.select-photo(id); }
+                            selection-requested(id, multi) => { root.selection-requested(id, multi); }
+                        }
+                    }
+                }
+            }
+
+            if root.photos.length == 0: VerticalLayout {
+                vertical-stretch: 1;
+                alignment: center;
+                spacing: 6px;
+                Text {
+                    text: "No photos on this page match the current filters.";
+                    color: #ffffff66;
+                    font-family: DesignTokens.body-font;
+                    font-size: 14px;
+                    font-weight: 800;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: "Try resetting search or threshold limits.";
+                    color: #ffffff4d;
+                    font-family: DesignTokens.body-mono-font;
+                    font-size: 10px;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+    }
+}

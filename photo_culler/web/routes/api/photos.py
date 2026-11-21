@@ -1,66 +1,19 @@
-"""Versioned REST application API for frontends and local integrations."""
+"""REST API routes for photos, catalog, analysis control, sessions and system metrics."""
 
 import threading
-from pathlib import Path
-from typing import Literal, cast
+from typing import cast
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
-from pydantic import BaseModel, Field, field_validator
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from photo_culler.catalog.repositories.photo_repository import PhotoRepository
-from photo_culler.importing import CancelResult, GalleryImportService, PauseResult, ResumeResult
 from photo_culler.sessions import SessionManagementService
 from photo_culler.web.services.decision_service import DecisionService
+from photo_culler.web.routes.api.schemas import (
+    NativeAnalysisStartRequest,
+    NativeDecisionRequest,
+)
 
-router = APIRouter(prefix="/api")
-
-
-def _gallery_import_service(request: Request) -> GalleryImportService:
-    """Return the application-scoped import service with its concrete type."""
-    return cast(GalleryImportService, request.app.state.gallery_imports)
-
-
-class GalleryCreateRequest(BaseModel):
-    """Create-gallery API request."""
-
-    name: str = Field(min_length=1, max_length=255)
-
-    @field_validator("name")
-    @classmethod
-    def name_must_not_be_blank(cls, value: str) -> str:
-        """Reject names that contain only whitespace."""
-        if not value.strip():
-            raise ValueError("Gallery name cannot be empty")
-        return value
-
-
-class GalleryImportRequest(BaseModel):
-    """Non-copying import request."""
-
-    path: str = Field(min_length=1, max_length=2048)
-    recursive: bool = True
-    exclude_patterns: list[str] = Field(default_factory=list, max_length=50)
-
-
-class GalleryImportEstimateRequest(BaseModel):
-    """Read-only import preflight request."""
-
-    path: str = Field(min_length=1, max_length=2048)
-    recursive: bool = True
-    exclude_patterns: list[str] = Field(default_factory=list, max_length=50)
-
-
-class NativeDecisionRequest(BaseModel):
-    """Decision mutation used by native delivery adapters."""
-
-    decision: Literal["best", "keep", "alternate", "review", "reject", "recover"]
-
-
-class NativeAnalysisStartRequest(BaseModel):
-    """JSON equivalent of the analysis form used by native delivery adapters."""
-
-    profile: str = Field(default="fast", min_length=1, max_length=128)
-    scope: str = Field(default="remaining", pattern="^(remaining|all)$")
+router = APIRouter()
 
 
 @router.get("/health")
@@ -218,143 +171,6 @@ def list_similarity_groups_for_native_clients(request: Request) -> dict[str, obj
     }
 
 
-@router.get("/v1/galleries")
-def list_galleries(request: Request) -> dict[str, object]:
-    """List logical galleries without exposing ORM records."""
-    return {"contract_version": 1, "items": _gallery_import_service(request).list_galleries()}
-
-
-@router.post("/v1/galleries", status_code=status.HTTP_201_CREATED)
-def create_gallery(request: Request, payload: GalleryCreateRequest) -> dict[str, object]:
-    """Create a logical gallery."""
-    gallery_id = _gallery_import_service(request).create_gallery(payload.name)
-    return {"contract_version": 1, "id": gallery_id, "name": payload.name.strip()}
-
-
-@router.get("/v1/galleries/{gallery_id}/sources")
-def list_gallery_sources(gallery_id: str, request: Request) -> dict[str, object]:
-    """List configured physical sources for one logical gallery."""
-    galleries = _gallery_import_service(request).list_galleries()
-    if not any(gallery["id"] == gallery_id for gallery in galleries):
-        raise HTTPException(status_code=404, detail="Gallery not found")
-    return {
-        "contract_version": 1,
-        "items": _gallery_import_service(request).list_sources(gallery_id),
-    }
-
-
-@router.post("/v1/galleries/{gallery_id}/imports", status_code=status.HTTP_202_ACCEPTED)
-def import_gallery(gallery_id: str, request: Request, payload: GalleryImportRequest) -> dict[str, object]:
-    """Queue a persistent import job."""
-    try:
-        job_id = _gallery_import_service(request).start_import(
-            gallery_id,
-            Path(payload.path),
-            recursive=payload.recursive,
-            exclude_patterns=payload.exclude_patterns,
-        )
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Import source does not exist") from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return {"contract_version": 1, "job_id": job_id, "state": "queued"}
-
-
-@router.post("/v1/galleries/{gallery_id}/rescan", status_code=status.HTTP_202_ACCEPTED)
-def rescan_gallery(gallery_id: str, request: Request) -> dict[str, object]:
-    """Rescan all configured sources and report unavailable ones."""
-    try:
-        return _gallery_import_service(request).rescan_gallery(gallery_id)
-    except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-
-@router.post("/v1/import-estimates")
-def estimate_gallery_import(request: Request, payload: GalleryImportEstimateRequest) -> dict[str, object]:
-    """Return a lightweight source estimate before import confirmation."""
-    try:
-        return _gallery_import_service(request).estimate_import(
-            Path(payload.path),
-            recursive=payload.recursive,
-            exclude_patterns=payload.exclude_patterns,
-        )
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="Import source does not exist") from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-
-@router.get("/v1/import-jobs/{job_id}")
-def get_import_job(job_id: str, request: Request) -> dict[str, object]:
-    """Return persisted progress for an import job."""
-    job = _gallery_import_service(request).get_job(job_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail="Import job not found")
-    return job
-
-
-@router.get("/v1/import-jobs")
-def list_import_jobs(request: Request, limit: int = 20) -> dict[str, object]:
-    """List recent persisted jobs for frontend recovery."""
-    return {
-        "contract_version": 1,
-        "items": _gallery_import_service(request).list_jobs(limit=limit),
-    }
-
-
-@router.get("/v1/scan-revisions")
-def list_scan_revisions(
-    request: Request,
-    gallery_id: str | None = None,
-    limit: int = 20,
-) -> dict[str, object]:
-    """List persisted source reconciliation results."""
-    return {
-        "contract_version": 1,
-        "items": _gallery_import_service(request).list_scan_revisions(
-            gallery_id=gallery_id,
-            limit=limit,
-        ),
-    }
-
-
-@router.post("/v1/import-jobs/{job_id}/cancel", status_code=status.HTTP_202_ACCEPTED)
-def cancel_import_job(job_id: str, request: Request) -> dict[str, object]:
-    """Request cooperative cancellation."""
-    result = _gallery_import_service(request).cancel(job_id)
-    if result is CancelResult.NOT_FOUND:
-        raise HTTPException(status_code=404, detail="Import job not found")
-    if result is CancelResult.NOT_CANCELLABLE:
-        raise HTTPException(status_code=409, detail="Import job cannot be cancelled")
-    return {"contract_version": 1, "job_id": job_id, "cancel_requested": True}
-
-
-@router.post("/v1/import-jobs/{job_id}/pause", status_code=status.HTTP_202_ACCEPTED)
-def pause_import_job(job_id: str, request: Request) -> dict[str, object]:
-    """Request a durable cooperative pause."""
-    result = _gallery_import_service(request).pause(job_id)
-    if result is PauseResult.NOT_FOUND:
-        raise HTTPException(status_code=404, detail="Import job not found")
-    if result is PauseResult.NOT_PAUSABLE:
-        raise HTTPException(status_code=409, detail="Import job cannot be paused")
-    return {"contract_version": 1, "job_id": job_id, "pause_requested": True}
-
-
-@router.post("/v1/import-jobs/{job_id}/resume", status_code=status.HTTP_202_ACCEPTED)
-def resume_import_job(job_id: str, request: Request) -> dict[str, object]:
-    """Resume a paused import from its persisted source."""
-    result = _gallery_import_service(request).resume(job_id)
-    if result is ResumeResult.NOT_FOUND:
-        raise HTTPException(status_code=404, detail="Import job not found")
-    if result is ResumeResult.NOT_RESUMABLE:
-        raise HTTPException(status_code=409, detail="Import job cannot be resumed")
-    if result is ResumeResult.SOURCE_UNAVAILABLE:
-        raise HTTPException(status_code=409, detail="Import source is unavailable")
-    return {"contract_version": 1, "job_id": job_id, "state": "queued"}
-
-
 @router.get("/v1/system-usage")
 def get_system_usage(request: Request) -> dict[str, object]:
     """Retrieve system-wide and application-specific CPU and GPU utilization."""
@@ -418,3 +234,46 @@ def get_system_usage(request: Request) -> dict[str, object]:
         "gpu_system": round(gpu_sys, 1),
         "gpu_name": gpu_name,
     }
+
+
+@router.get("/v1/summary")
+def get_catalog_summary_api(request: Request) -> dict[str, object]:
+    """Return high-level catalog statistics and summary metrics."""
+    from photo_culler.web.services.library_service import LibraryService
+    return LibraryService(request.app.state.db_engine).get_summary()
+
+
+@router.get("/v1/photos/{photo_id}")
+def get_photo_detail_api(photo_id: str, request: Request) -> dict[str, object]:
+    """Return full JSON details for a single photo including metadata and analysis summary."""
+    with request.app.state.db_engine.session() as session:
+        repo = PhotoRepository(session)
+        photo = repo.get_by_id(photo_id)
+        if not photo:
+            raise HTTPException(status_code=404, detail="Photo not found")
+
+        analysis_summary = repo.get_analysis_summary(photo_id)
+
+        metadata = None
+        if photo.metadata_record:
+            m = photo.metadata_record
+            metadata = {
+                "camera_model": m.camera_model,
+                "lens": m.lens,
+                "iso": m.iso,
+                "aperture": m.aperture,
+                "shutter_speed": m.shutter_speed,
+                "focal_length": m.focal_length,
+                "capture_time": m.capture_time.strftime('%Y-%m-%d %H:%M:%S') if m.capture_time else None,
+            }
+
+        return {
+            "contract_version": 1,
+            "id": photo.photo_id,
+            "name": photo.stem_name,
+            "decision": photo.decision.value if hasattr(photo.decision, "value") else str(photo.decision),
+            "score": photo.score,
+            "quality_tier": photo.quality_tier.value if hasattr(photo.quality_tier, "value") else str(photo.quality_tier),
+            "analysis_summary": analysis_summary,
+            "metadata": metadata,
+        }

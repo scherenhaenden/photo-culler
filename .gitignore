@@ -42,3 +42,5 @@ rust/apps/photo-culler-tauri/gen/
 .photo-culler/
 previews_cache/
 demo_photos/
+artifacts/
+tmp/

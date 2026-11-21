@@ -1,0 +1,140 @@
+import { Button, HorizontalBox, Slider, VerticalBox } from "std-widgets.slint";
+
+/// Isolated non-destructive recipe editor. The Slint host maps callbacks to
+/// RecipeEditor commands and renders REST-provided preview images.
+export component RecipeEditor inherits Rectangle {
+    in property <image> original-image;
+    in property <image> edited-image;
+    in property <string> photo-label: "";
+    in property <string> original-hash: "";
+    in property <string> revision-label: "";
+    in property <string> status: "";
+    in property <string> export-plan-summary: "";
+    in property <bool> can-undo: false;
+    in property <bool> can-redo: false;
+    in property <bool> preview-available: false;
+    in property <bool> export-available: false;
+    in property <bool> dirty: false;
+    in-out property <float> exposure-value: 0;
+    in-out property <float> temperature-value: 6500;
+    in-out property <float> tint-value: 0;
+    in-out property <string> destination: "";
+    in property <bool> busy: false;
+    in-out property <bool> destination-confirmed: false;
+
+    callback recipe-changed(float, float, float);
+    callback undo-requested();
+    callback redo-requested();
+    callback preview-requested();
+    callback save-requested();
+    callback revert-requested();
+    callback export-plan-requested(string);
+    callback destination-changed(string);
+    callback destination-confirmation-requested(string);
+    callback export-requested();
+
+    background: #17191d;
+    VerticalBox {
+        padding: 16px;
+        spacing: 10px;
+
+        Text { text: root.photo-label; color: #f4f4f5; font-size: 20px; }
+        Text { text: root.revision-label + " · original hash " + root.original-hash; color: #aeb4bd; }
+
+        HorizontalBox {
+            spacing: 10px;
+            VerticalBox {
+                Text { text: "Original · solo lectura"; color: #d5d9df; }
+                Image { source: root.original-image; image-fit: contain; }
+            }
+            VerticalBox {
+                Text { text: root.preview-available ? "Vista previa derivada" : "Vista previa pendiente"; color: #d5d9df; }
+                if root.preview-available: Image { source: root.edited-image; image-fit: contain; }
+                if !root.preview-available: Text { text: "El motor de previsualización aún no está conectado."; color: #aeb4bd; wrap: word-wrap; }
+            }
+        }
+
+        HorizontalBox {
+            spacing: 8px;
+            Text { text: "Exposición (EV)"; color: #d5d9df; }
+            Slider {
+                enabled: !root.busy;
+                minimum: -5;
+                maximum: 5;
+                value: root.exposure-value;
+                changed => {
+                    root.exposure-value = self.value;
+                    root.recipe-changed(root.exposure-value, root.temperature-value, root.tint-value);
+                }
+            }
+        }
+        HorizontalBox {
+            spacing: 8px;
+            Text { text: "Temperatura (K)"; color: #d5d9df; }
+            Slider {
+                enabled: !root.busy;
+                minimum: 2000;
+                maximum: 12000;
+                value: root.temperature-value;
+                changed => {
+                    root.temperature-value = self.value;
+                    root.recipe-changed(root.exposure-value, root.temperature-value, root.tint-value);
+                }
+            }
+        }
+        HorizontalBox {
+            spacing: 8px;
+            Text { text: "Matiz"; color: #d5d9df; }
+            Slider {
+                enabled: !root.busy;
+                minimum: -100;
+                maximum: 100;
+                value: root.tint-value;
+                changed => {
+                    root.tint-value = self.value;
+                    root.recipe-changed(root.exposure-value, root.temperature-value, root.tint-value);
+                }
+            }
+        }
+
+        HorizontalBox {
+            spacing: 8px;
+            Button { text: "Previsualizar"; enabled: !root.busy && root.preview-available; clicked => { root.preview-requested(); } }
+            Button { text: "Guardar"; enabled: !root.busy && root.dirty; clicked => { root.save-requested(); } }
+            Button { text: "Revertir"; enabled: !root.busy; clicked => { root.revert-requested(); } }
+            Button { text: "Deshacer"; enabled: !root.busy && !root.dirty && root.can-undo; clicked => { root.undo-requested(); } }
+            Button { text: "Rehacer"; enabled: !root.busy && !root.dirty && root.can-redo; clicked => { root.redo-requested(); } }
+        }
+
+        Text { text: "Destino de derivados"; color: #d5d9df; }
+        HorizontalBox {
+            spacing: 8px;
+            TextInput {
+                text: root.destination;
+                enabled: !root.busy;
+                edited => {
+                    root.destination = self.text;
+                    root.destination-confirmed = false;
+                    root.destination-changed(self.text);
+                }
+            }
+            Button {
+                text: "Previsualizar nombres";
+                enabled: !root.busy && root.export-available && root.destination != "";
+                clicked => { root.export-plan-requested(root.destination); }
+            }
+            Button {
+                text: "Confirmar destino";
+                enabled: !root.busy && root.export-available && root.export-plan-summary != "";
+                clicked => { root.destination-confirmation-requested(root.destination); }
+            }
+            Button {
+                text: "Exportar derivados";
+                enabled: !root.busy && root.export-available && root.destination-confirmed;
+                clicked => { root.export-requested(); }
+            }
+        }
+        Text { text: root.export-plan-summary; color: #d5d9df; wrap: word-wrap; }
+        Text { text: root.status; color: #aeb4bd; wrap: word-wrap; }
+    }
+}

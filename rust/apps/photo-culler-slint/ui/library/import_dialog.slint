@@ -1,0 +1,538 @@
+// Controller-driven presentation for the API v2 local import workflow.
+// This component owns no networking or job state; the host supplies snapshots
+// and handles each callback.
+import { DesignTokens } from "../components/components.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export struct ImportSource {
+    id: string, // Opaque API source_id. Never a filesystem path.
+    name: string,
+    status: string,
+}
+
+export struct ImportJobSummary {
+    id: string,
+    source_name: string,
+    state: string,
+    discovered: string,
+    imported: string,
+    issues: string,
+}
+
+component ImportSourceOption inherits Rectangle {
+    in property <ImportSource> source;
+    in property <bool> selected: false;
+    in property <bool> enabled: true;
+    callback selected-source(id: string);
+
+    height: 48px;
+    background: root.selected ? #ff6b3524 : DesignTokens.surface;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: root.selected ? DesignTokens.accent : DesignTokens.border;
+    accessible-role: button;
+    accessible-label: root.source.name + (root.source.status == "online" ? ", available" : ", offline") + (root.selected ? ", selected" : "");
+
+    focus_scope := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.enabled;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.selected-source(root.source.id);
+                accept
+            } else { reject }
+        }
+
+        Rectangle {
+            x: 2px;
+            y: 2px;
+            width: parent.width - 4px;
+            height: parent.height - 4px;
+            border-radius: 6px;
+            border-width: focus_scope.has-focus ? 2px : 0px;
+            border-color: DesignTokens.focus;
+            background: transparent;
+        }
+
+        VerticalLayout {
+            padding-left: 12px;
+            padding-right: 12px;
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.source.name;
+                color: root.enabled ? DesignTokens.foreground : DesignTokens.subdued;
+                font-family: DesignTokens.body-font;
+                font-size: 12px;
+                font-weight: 700;
+                overflow: elide;
+            }
+            Text {
+                text: root.source.status == "online" ? "Available" : "Offline — unavailable";
+                color: root.source.status == "online" ? DesignTokens.best : DesignTokens.subdued;
+                font-family: DesignTokens.body-font;
+                font-size: 10px;
+            }
+        }
+
+        TouchArea {
+            enabled: root.enabled;
+            clicked => { focus_scope.focus(); root.selected-source(root.source.id); }
+        }
+    }
+}
+
+component ImportJobOption inherits Rectangle {
+    in property <ImportJobSummary> job;
+    in property <bool> selected: false;
+    in property <bool> enabled: true;
+    callback selected-job(id: string);
+
+    height: 48px;
+    background: root.selected ? #ff6b3524 : DesignTokens.surface;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: root.selected ? DesignTokens.accent : DesignTokens.border;
+    accessible-role: button;
+    accessible-label: root.job.source_name + ", import " + root.job.state + ", "
+        + root.job.discovered + " discovered, " + root.job.imported + " imported, "
+        + root.job.issues + " issues" + (root.selected ? ", selected" : "");
+
+    focus_scope := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.enabled;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.selected-job(root.job.id);
+                accept
+            } else { reject }
+        }
+
+        Rectangle {
+            x: 2px;
+            y: 2px;
+            width: parent.width - 4px;
+            height: parent.height - 4px;
+            border-radius: 6px;
+            border-width: focus_scope.has-focus ? 2px : 0px;
+            border-color: DesignTokens.focus;
+            background: transparent;
+        }
+
+        VerticalLayout {
+            padding-left: 12px;
+            padding-right: 12px;
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.job.source_name;
+                color: DesignTokens.foreground;
+                font-family: DesignTokens.body-font;
+                font-size: 11px;
+                font-weight: 700;
+                overflow: elide;
+            }
+            Text {
+                text: root.job.state + " · " + root.job.discovered + " discovered · "
+                    + root.job.imported + " imported · " + root.job.issues + " issues";
+                color: DesignTokens.muted;
+                font-family: DesignTokens.body-font;
+                font-size: 9px;
+                overflow: elide;
+            }
+        }
+
+        TouchArea {
+            enabled: root.enabled;
+            clicked => { focus_scope.focus(); root.selected-job(root.job.id); }
+        }
+    }
+}
+
+component ImportButton inherits Rectangle {
+    in property <string> label;
+    in property <string> accessible-name;
+    in property <length> button-width: 84px;
+    in property <bool> enabled: true;
+    in property <bool> primary: true;
+    callback clicked();
+
+    width: root.button-width;
+    height: DesignTokens.control-height;
+    background: root.primary ? DesignTokens.accent : DesignTokens.surface;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: root.primary ? DesignTokens.accent : DesignTokens.border;
+    opacity: root.enabled ? 1 : 0.45;
+    accessible-role: button;
+    accessible-label: root.accessible-name;
+
+    focus_scope := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.enabled;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == Key.Return || event.text == " ") {
+                root.clicked();
+                accept
+            } else { reject }
+        }
+        Rectangle {
+            x: 2px;
+            y: 2px;
+            width: parent.width - 4px;
+            height: parent.height - 4px;
+            border-radius: 4px;
+            border-width: focus_scope.has-focus ? 2px : 0px;
+            border-color: DesignTokens.focus;
+            background: transparent;
+        }
+        Text {
+            width: parent.width - 8px;
+            height: parent.height;
+            x: 4px;
+            text: root.label;
+            color: root.primary ? #ffffff : DesignTokens.foreground;
+            font-family: DesignTokens.body-font;
+            font-size: 10px;
+            font-weight: 700;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        TouchArea {
+            enabled: root.enabled;
+            clicked => { focus_scope.focus(); root.clicked(); }
+        }
+    }
+}
+
+export component ImportDialog inherits Rectangle {
+    in property <bool> open: false;
+    in property <bool> web-layout: false;
+    in property <[ImportSource]> sources: [];
+    in property <[ImportJobSummary]> active-jobs: [];
+    in-out property <string> selected-source-id: "";
+    in property <bool> sources-loading: false;
+    in property <string> source-error: "";
+
+    // estimate-state: idle | loading | ready | error
+    in property <string> estimate-state: "idle";
+    in property <string> estimate-error: "";
+    in property <string> estimate-total-files: "";
+    in property <string> estimate-total-bytes: "";
+    in property <string> estimate-logical-photos: "";
+    in property <string> estimate-details: "";
+
+    // job-state is the API v2 state string; common active values are queued,
+    // running, paused, completed, cancelled, and failed.
+    in property <string> job-id: "";
+    in property <string> job-state: "";
+    in property <string> job-discovered: "0";
+    in property <string> job-imported: "0";
+    in property <string> job-issues: "0";
+    in property <string> job-error: "";
+    // A queued state without an ID represents the in-flight start request.
+    private property <bool> start-pending: root.job-state == "queued" && root.job-id == "";
+
+    callback dismissed();
+    callback source-selected(id: string);
+    callback job-selected(job-id: string);
+    callback estimate-requested(source-id: string);
+    callback start-requested(source-id: string);
+    callback pause-requested(job-id: string);
+    callback resume-requested(job-id: string);
+    callback cancel-requested(job-id: string);
+
+    visible: root.open;
+    background: #000000aa;
+    changed open => {
+        if (root.open) { dialog_scope.focus(); }
+    }
+
+    // The scope provides modal keyboard dismissal; individual controls have
+    // their own tab stops and visible focus rings.
+    dialog_scope := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        focus-on-tab-navigation: true;
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                root.dismissed();
+                accept
+            } else { reject }
+        }
+
+        TouchArea {
+            width: parent.width;
+            height: parent.height;
+            clicked => { }
+        }
+
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: min(parent.width - 24px, 560px);
+            height: min(parent.height - 24px, 720px);
+            background: DesignTokens.canvas;
+            border-radius: 14px;
+            border-width: 1px;
+            border-color: DesignTokens.border;
+            accessible-role: groupbox;
+            accessible-label: "Import photos from an authorized local source";
+
+            ScrollView {
+                width: parent.width;
+                height: parent.height;
+                content-width: parent.width;
+                horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+                vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
+
+                VerticalLayout {
+                width: parent.width;
+                padding: root.web-layout ? 12px : 20px;
+                spacing: root.web-layout ? 8px : 12px;
+
+                HorizontalLayout {
+                    height: 34px;
+                    spacing: 12px;
+                    VerticalLayout {
+                        vertical-stretch: 1;
+                        spacing: 2px;
+                        Text {
+                            text: "Import photos";
+                            color: DesignTokens.foreground;
+                            font-family: DesignTokens.heading-font;
+                            font-size: 18px;
+                            font-weight: 800;
+                        }
+                        Text {
+                            text: "Choose a source already authorized by this server.";
+                            color: DesignTokens.muted;
+                            font-family: DesignTokens.body-font;
+                            font-size: 10px;
+                            overflow: elide;
+                        }
+                    }
+                    ImportButton {
+                        button-width: root.web-layout ? 52px : 64px;
+                        label: "Close";
+                        accessible-name: "Close import dialog";
+                        primary: false;
+                        clicked => { root.dismissed(); }
+                    }
+                }
+
+                Text {
+                    text: "SOURCE";
+                    color: DesignTokens.muted;
+                    font-family: DesignTokens.body-font;
+                    font-size: 10px;
+                    font-weight: 800;
+                    letter-spacing: 1px;
+                }
+
+                if root.sources-loading: Text {
+                    text: "Loading authorized sources…";
+                    color: DesignTokens.muted;
+                    font-family: DesignTokens.body-font;
+                    font-size: 12px;
+                }
+                if !root.sources-loading && root.sources.length == 0 && root.source-error == "": Text {
+                    text: "No authorized sources are configured.";
+                    color: DesignTokens.muted;
+                    font-family: DesignTokens.body-font;
+                    font-size: 12px;
+                }
+                if root.source-error != "": Text {
+                    text: root.source-error;
+                    color: DesignTokens.danger;
+                    font-family: DesignTokens.body-font;
+                    font-size: 12px;
+                }
+
+                if root.sources.length > 0: ScrollView {
+                    width: parent.width;
+                    height: min(root.sources.length * 52px, root.web-layout ? 120px : 180px);
+                    content-width: parent.width;
+                    content-height: root.sources.length * 52px;
+                    horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+                    vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
+                    VerticalLayout {
+                        width: parent.width;
+                        spacing: 4px;
+                        for source in root.sources: ImportSourceOption {
+                            width: parent.width;
+                            source: source;
+                            selected: source.id == root.selected-source-id;
+                            enabled: source.status == "online" && !root.sources-loading && !root.start-pending;
+                            selected-source(id) => { root.source-selected(id); }
+                        }
+                    }
+                }
+
+                if root.active-jobs.length > 0: VerticalLayout {
+                    spacing: 6px;
+                    Text {
+                        text: "ACTIVE IMPORTS";
+                        color: DesignTokens.muted;
+                        font-family: DesignTokens.body-font;
+                        font-size: 10px;
+                        font-weight: 800;
+                        letter-spacing: 1px;
+                    }
+                    ScrollView {
+                        width: parent.width;
+                        height: min(root.active-jobs.length * 52px, root.web-layout ? 120px : 180px);
+                        content-width: parent.width;
+                        content-height: root.active-jobs.length * 52px;
+                        horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+                        vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
+                        VerticalLayout {
+                            width: parent.width;
+                            spacing: 4px;
+                            for job in root.active-jobs: ImportJobOption {
+                                width: parent.width;
+                                job: job;
+                                selected: job.id == root.job-id;
+                                enabled: !root.start-pending;
+                                selected-job(id) => { root.job-selected(id); }
+                            }
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    height: DesignTokens.control-height;
+                    spacing: root.web-layout ? 4px : 8px;
+                    ImportButton {
+                        button-width: root.web-layout ? 82px : 112px;
+                        label: root.estimate-state == "loading" ? "Estimating…" : "Estimate";
+                        accessible-name: "Estimate the selected source";
+                        enabled: root.selected-source-id != "" && root.estimate-state != "loading" && root.job-state != "running" && root.job-state != "queued";
+                        clicked => { root.estimate-requested(root.selected-source-id); }
+                    }
+                    Text {
+                        text: root.estimate-error;
+                        color: DesignTokens.danger;
+                        font-family: DesignTokens.body-font;
+                        font-size: 10px;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+
+                if root.estimate-state == "ready": Rectangle {
+                    height: 86px;
+                    background: DesignTokens.surface;
+                    border-radius: 8px;
+                    border-width: 1px;
+                    border-color: DesignTokens.border;
+                    VerticalLayout {
+                        padding: 12px;
+                        spacing: 5px;
+                        Text {
+                            text: "Estimate: " + root.estimate-total-files + " files · " + root.estimate-total-bytes + " bytes";
+                            color: DesignTokens.foreground;
+                            font-family: DesignTokens.body-font;
+                            font-size: 12px;
+                            font-weight: 700;
+                        }
+                        Text {
+                            text: root.estimate-logical-photos + " logical photos";
+                            color: DesignTokens.muted;
+                            font-family: DesignTokens.body-font;
+                            font-size: 11px;
+                        }
+                        Text {
+                            text: root.estimate-details;
+                            color: DesignTokens.subdued;
+                            font-family: DesignTokens.body-font;
+                            font-size: 10px;
+                            overflow: elide;
+                        }
+                    }
+                }
+
+                if root.job-id != "": Rectangle {
+                    height: root.job-error == "" ? 104px : 150px;
+                    background: DesignTokens.surface;
+                    border-radius: 8px;
+                    border-width: 1px;
+                    border-color: DesignTokens.border;
+                    VerticalLayout {
+                        padding: 12px;
+                        spacing: 5px;
+                        Text {
+                            text: "Import " + root.job-state;
+                            color: root.job-state == "failed" ? DesignTokens.danger : DesignTokens.foreground;
+                            font-family: DesignTokens.body-font;
+                            font-size: 12px;
+                            font-weight: 800;
+                        }
+                        Text {
+                            text: root.job-discovered + " discovered · " + root.job-imported + " imported · " + root.job-issues + " issues";
+                            color: DesignTokens.muted;
+                            font-family: DesignTokens.body-font;
+                            font-size: 11px;
+                        }
+                        Text {
+                            text: root.job-error;
+                            color: DesignTokens.danger;
+                            font-family: DesignTokens.body-font;
+                            font-size: 10px;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    height: DesignTokens.control-height;
+                    spacing: root.web-layout ? 4px : 8px;
+                    ImportButton {
+                        button-width: root.web-layout ? 62px : 104px;
+                        label: root.job-state == "queued" ? "Starting…" : (root.web-layout ? "Start" : "Start import");
+                        accessible-name: "Start importing from the selected source";
+                        enabled: root.estimate-state == "ready"
+                            && root.selected-source-id != ""
+                            && root.job-state != "unknown"
+                            && root.job-state != "queued"
+                            && (root.job-id == "" || root.job-state == "completed"
+                                || root.job-state == "cancelled" || root.job-state == "failed");
+                        clicked => { root.start-requested(root.selected-source-id); }
+                    }
+                    ImportButton {
+                        button-width: root.web-layout ? 56px : 78px;
+                        label: "Pause";
+                        accessible-name: "Pause import";
+                        primary: false;
+                        enabled: root.job-state == "running";
+                        clicked => { root.pause-requested(root.job-id); }
+                    }
+                    ImportButton {
+                        button-width: root.web-layout ? 56px : 78px;
+                        label: "Resume";
+                        accessible-name: "Resume import";
+                        enabled: root.job-state == "paused";
+                        clicked => { root.resume-requested(root.job-id); }
+                    }
+                    ImportButton {
+                        button-width: root.web-layout ? 56px : 78px;
+                        label: "Cancel";
+                        accessible-name: "Cancel import";
+                        primary: false;
+                        enabled: root.job-id != ""
+                            && (root.job-state == "queued" || root.job-state == "running" || root.job-state == "paused");
+                        clicked => { root.cancel-requested(root.job-id); }
+                    }
+                }
+            }
+            }
+        }
+    }
+}

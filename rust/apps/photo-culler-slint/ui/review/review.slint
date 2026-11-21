@@ -1,0 +1,149 @@
+// Standalone group review panel. The integrating Slint app binds this component
+// to ReviewController and forwards callbacks through the shared REST client.
+import { ActionButton, DesignTokens } from "../components/components.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export struct ReviewCard {
+    photo_id: string,
+    name: string,
+    score_text: string,
+    reasons_text: string,
+    decision_text: string,
+    representative: bool,
+    recommended: bool,
+}
+
+export component ReviewPanel inherits Rectangle {
+    in property <string> group_title: "Group review";
+    in property <string> status_text: "";
+    in property <string> active_filter: "all";
+    in property <[ReviewCard]> items: [];
+    in property <bool> write_pending: false;
+    in property <bool> has_conflict: false;
+
+    callback filter_changed(string);
+    callback representative_selected(string);
+    callback decision_selected(string, string);
+    callback save_review();
+    callback reload_confirmed();
+
+    background: DesignTokens.canvas;
+    min-width: 720px;
+    min-height: 480px;
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 10px;
+
+        Text {
+            text: root.group_title;
+            color: DesignTokens.foreground;
+            font-family: DesignTokens.heading-font;
+            font-size: DesignTokens.text-heading;
+        }
+
+        Text {
+            text: root.has_conflict ? "The group changed on the server. Reload to compare confirmed state with your local proposal." : root.status_text;
+            color: root.has_conflict ? DesignTokens.danger : DesignTokens.muted;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: "Decision filter:";
+                color: DesignTokens.muted;
+                font-family: DesignTokens.body-font;
+                font-size: DesignTokens.text-body;
+            }
+            for filter in ["all", "best", "keep", "review", "reject", "unprocessed"]: ActionButton {
+                label: filter;
+                primary: root.active_filter == filter;
+                clicked => { root.filter_changed(filter); }
+            }
+        }
+
+        ScrollView {
+            VerticalLayout {
+                spacing: 8px;
+                for item in root.items: Rectangle {
+                    border-width: item.representative ? 2px : 1px;
+                    border-color: item.representative ? DesignTokens.accent : DesignTokens.border;
+                    border-radius: 6px;
+                    background: DesignTokens.surface;
+                    min-height: 120px;
+
+                    HorizontalLayout {
+                        padding: 10px;
+                        spacing: 12px;
+
+                        VerticalLayout {
+                            spacing: 4px;
+                            Text {
+                                text: item.name + (item.recommended ? "  ·  Recommended" : "");
+                                color: DesignTokens.foreground;
+                                font-family: DesignTokens.body-font;
+                                font-size: DesignTokens.text-body;
+                            }
+                            Text {
+                                text: "Score: " + item.score_text;
+                                color: DesignTokens.muted;
+                                font-family: DesignTokens.body-font;
+                                font-size: DesignTokens.text-body;
+                            }
+                            Text {
+                                text: item.reasons_text;
+                                color: DesignTokens.muted;
+                                font-family: DesignTokens.body-font;
+                                font-size: DesignTokens.text-small;
+                                wrap: word-wrap;
+                            }
+                            Text {
+                                text: "Decision: " + item.decision_text;
+                                color: DesignTokens.muted;
+                                font-family: DesignTokens.body-font;
+                                font-size: DesignTokens.text-body;
+                            }
+                        }
+
+                        VerticalLayout {
+                            spacing: 5px;
+                            ActionButton {
+                                label: item.representative ? "Representative ✓" : "Set representative";
+                                enabled: !root.write_pending;
+                                primary: item.representative;
+                                clicked => { root.representative_selected(item.photo_id); }
+                            }
+                            HorizontalLayout {
+                                spacing: 4px;
+                                for decision in ["best", "keep", "review", "reject"]: ActionButton {
+                                    label: decision;
+                                    enabled: !root.write_pending;
+                                    primary: item.decision_text == decision;
+                                    clicked => { root.decision_selected(item.photo_id, decision); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        HorizontalLayout {
+            alignment: end;
+            spacing: 8px;
+            ActionButton {
+                label: "Reload confirmed";
+                enabled: !root.write_pending;
+                primary: false;
+                clicked => { root.reload_confirmed(); }
+            }
+            ActionButton {
+                label: root.write_pending ? "Saving…" : "Save proposal";
+                enabled: !root.write_pending;
+                primary: true;
+                clicked => { root.save_review(); }
+            }
+        }
+    }
+}

@@ -25,7 +25,12 @@ def inspect_photo(photo_id: str, request: Request, group: str | None = Query(def
         photo = repo.get_by_id(photo_id)
         if not photo:
             raise HTTPException(status_code=404, detail="Photo not found")
+        display_file = photo.display_file("jpeg")
         analysis_summary = repo.get_analysis_summary(photo_id)
+        similarity_group_id = photo.burst_id if (photo.burst_id or "").startswith("similar-") else None
+        similarity_group_photos = repo.list_by_burst_ids([similarity_group_id]) if similarity_group_id else []
+        similarity_group_photos.sort(key=lambda item: (-item.score, item.stem_name.lower()))
+        recommended_group_photo = similarity_group_photos[0] if similarity_group_photos else None
 
         # Query only adjacent records. Loading and converting the entire catalog made
         # opening an inspector page increasingly slow as the catalog grew.
@@ -47,20 +52,29 @@ def inspect_photo(photo_id: str, request: Request, group: str | None = Query(def
             row[0]
             for row in navigation_query.filter(previous_filter)
             .order_by(PhotoDB.stem_name.desc(), PhotoDB.id.desc())
-            .limit(2)
+            .limit(10)
             .all()
         ]
         next_ids = [
             row[0]
             for row in navigation_query.filter(next_filter)
             .order_by(PhotoDB.stem_name.asc(), PhotoDB.id.asc())
-            .limit(2)
+            .limit(10)
             .all()
         ]
 
         prev_photo_id = previous_ids[0] if previous_ids else None
         next_photo_id = next_ids[0] if next_ids else None
-        prefetch_ids = list(reversed(previous_ids)) + next_ids
+        prefetch_ids = list(reversed(previous_ids[:2])) + next_ids[:2]
+
+        # Fetch filmstrip photo objects
+        filmstrip_ids = list(reversed(previous_ids)) + [photo_id] + next_ids
+        db_filmstrip_photos = session.query(PhotoDB).filter(PhotoDB.photo_id.in_(filmstrip_ids)).all()
+        db_photo_map = {p.photo_id: p for p in db_filmstrip_photos}
+        filmstrip_photos = []
+        for fid in filmstrip_ids:
+            if fid in db_photo_map:
+                filmstrip_photos.append(repo._to_domain(db_photo_map[fid]))
 
     return templates.TemplateResponse(
         request=request,
@@ -68,11 +82,16 @@ def inspect_photo(photo_id: str, request: Request, group: str | None = Query(def
         context={
             "active_tab": "library",
             "photo": photo,
+            "display_file": display_file,
             "analysis_summary": analysis_summary,
             "prev_photo_id": prev_photo_id,
             "next_photo_id": next_photo_id,
             "prefetch_ids": prefetch_ids,
             "active_group_id": active_group_id,
+            "similarity_group_id": similarity_group_id,
+            "similarity_group_photos": similarity_group_photos,
+            "recommended_group_photo": recommended_group_photo,
+            "filmstrip_photos": filmstrip_photos,
         },
     )
 
@@ -125,7 +144,9 @@ def get_full_preview(photo_id: str, request: Request):
 
 
 @router.post("/photos/{photo_id}/decision", response_class=HTMLResponse)
-def update_photo_decision(photo_id: str, request: Request, decision: str = Form(...)):
+def update_photo_decision(
+    photo_id: str, request: Request, decision: str = Form(...), group: str | None = Query(default=None)
+):
     db_engine = request.app.state.db_engine
     templates = request.app.state.templates
 
@@ -135,8 +156,65 @@ def update_photo_decision(photo_id: str, request: Request, decision: str = Form(
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
 
+    with db_engine.session() as session:
+        repo = PhotoRepository(session)
+        display_file = photo.display_file("jpeg")
+        analysis_summary = repo.get_analysis_summary(photo_id)
+
+        active_group_id = group if group and group.startswith("similar-") else None
+        current = session.query(PhotoDB).filter(PhotoDB.photo_id == photo_id).one()
+        navigation_query = session.query(PhotoDB.photo_id)
+        if active_group_id:
+            navigation_query = navigation_query.filter(PhotoDB.burst_id == active_group_id)
+
+        previous_filter = or_(
+            PhotoDB.stem_name < current.stem_name,
+            and_(PhotoDB.stem_name == current.stem_name, PhotoDB.id < current.id),
+        )
+        next_filter = or_(
+            PhotoDB.stem_name > current.stem_name,
+            and_(PhotoDB.stem_name == current.stem_name, PhotoDB.id > current.id),
+        )
+        previous_ids = [
+            row[0]
+            for row in navigation_query.filter(previous_filter)
+            .order_by(PhotoDB.stem_name.desc(), PhotoDB.id.desc())
+            .limit(10)
+            .all()
+        ]
+        next_ids = [
+            row[0]
+            for row in navigation_query.filter(next_filter)
+            .order_by(PhotoDB.stem_name.asc(), PhotoDB.id.asc())
+            .limit(10)
+            .all()
+        ]
+
+        prev_photo_id = previous_ids[0] if previous_ids else None
+        next_photo_id = next_ids[0] if next_ids else None
+        prefetch_ids = list(reversed(previous_ids[:2])) + next_ids[:2]
+
+        # Fetch filmstrip photo objects
+        filmstrip_ids = list(reversed(previous_ids)) + [photo_id] + next_ids
+        db_filmstrip_photos = session.query(PhotoDB).filter(PhotoDB.photo_id.in_(filmstrip_ids)).all()
+        db_photo_map = {p.photo_id: p for p in db_filmstrip_photos}
+        filmstrip_photos = []
+        for fid in filmstrip_ids:
+            if fid in db_photo_map:
+                filmstrip_photos.append(repo._to_domain(db_photo_map[fid]))
+
     return templates.TemplateResponse(
         request=request,
         name="photo_detail.html",
-        context={"active_tab": "library", "photo": photo},
+        context={
+            "active_tab": "library",
+            "photo": photo,
+            "display_file": display_file,
+            "analysis_summary": analysis_summary,
+            "prev_photo_id": prev_photo_id,
+            "next_photo_id": next_photo_id,
+            "prefetch_ids": prefetch_ids,
+            "active_group_id": active_group_id,
+            "filmstrip_photos": filmstrip_photos,
+        },
     )
