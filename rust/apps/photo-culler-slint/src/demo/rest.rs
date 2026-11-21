@@ -457,7 +457,14 @@ fn map_client_error(error: ClientError) -> DemoError {
                 None => format!("Falló la solicitud al servicio local (HTTP {status})."),
             }
         }
-        ClientError::Transport(_) => "No se pudo conectar con el servicio local.".into(),
+        ClientError::Transport(detail) => {
+            // The hosted desktop acceptance log needs the transport failure
+            // class to diagnose connectivity without exposing it in the UI.
+            if std::env::var_os("PHOTO_CULLER_SMOKE_STATUS_FILE").is_some() {
+                eprintln!("Photo Culler smoke transport detail: {detail}");
+            }
+            "No se pudo conectar con el servicio local.".into()
+        }
         ClientError::Redirect { .. } | ClientError::Redirected => {
             "El servicio local redirigió una solicitud inesperadamente.".into()
         }

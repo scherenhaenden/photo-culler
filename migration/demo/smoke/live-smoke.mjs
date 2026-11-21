@@ -7,8 +7,13 @@ import { chromium, firefox } from "playwright";
 const MIME_BY_PATH = new Map([
   ["/api/v1/health", "application/json"],
   ["/api/v1/galleries/demo/photos", "application/json"],
+  ["/api/v1/photos/demo-001/preview", "image/jpeg"],
   ["/api/v1/photos/demo-001/thumbnail/800", "image/jpeg"],
   ["/photo_culler_slint_bg.wasm", "application/wasm"],
+]);
+const IMAGE_ROUTES = new Set([
+  "/api/v1/photos/demo-001/preview",
+  "/api/v1/photos/demo-001/thumbnail/800",
 ]);
 
 export async function runLiveSmoke(browserName) {
@@ -51,7 +56,7 @@ export async function runLiveSmoke(browserName) {
     const consoleErrors = [];
     page.on("response", (response) => {
       const url = new URL(response.url());
-      if (MIME_BY_PATH.has(url.pathname)) {
+      if (MIME_BY_PATH.has(url.pathname) || url.pathname.startsWith("/api/v1/")) {
         responses.push({
           origin: url.origin,
           path: url.pathname,
@@ -115,14 +120,23 @@ export async function runLiveSmoke(browserName) {
     assert.deepEqual(pageErrors, [], "the actual Slint WASM application must not raise page errors");
 
     for (const [path, expectedMime] of MIME_BY_PATH) {
+      if (IMAGE_ROUTES.has(path)) continue;
       const response = responses.find((entry) => entry.path === path && entry.status === 200);
       assert.ok(
         response,
-        `${path} must return HTTP 200; observed ${JSON.stringify(responses.filter((entry) => entry.path === path))}`,
+        `${path} must return HTTP 200; observed ${JSON.stringify(responses)}`,
       );
       assert.equal(response.mime, expectedMime, `${path} must have MIME ${expectedMime}`);
       assert.equal(response.origin, origin, `${path} must use the Rust server's same origin`);
     }
+    const displayedImage = responses.find(
+      (entry) => IMAGE_ROUTES.has(entry.path) && entry.status === 200 && entry.mime === "image/jpeg",
+    );
+    assert.ok(
+      displayedImage,
+      `the gallery must load its bounded preview or fixture thumbnail: ${JSON.stringify(responses)}`,
+    );
+    assert.equal(displayedImage.origin, origin, "the JPEG must come from the Rust server origin");
 
     const screenshot = await page.screenshot({ fullPage: true });
     assert.ok(screenshot.length > 1024, "the rendered Slint screen must produce a non-empty capture");
