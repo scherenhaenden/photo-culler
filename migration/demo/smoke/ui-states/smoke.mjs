@@ -16,10 +16,9 @@ const ERROR_BODY = {
 const EXPECTED_THUMBNAIL_SHA256 = "cc20c24844d2fc6fca729fcb66cfe661960f7b56be41a3dd462a0f1b22cfb4f2";
 const { PNG } = pngjs;
 const EMPTY_BODY = {
-  gallery_id: "demo",
+  contract_version: 1,
   items: [],
   next_cursor: null,
-  total: 0,
 };
 const VIEWPORTS = [
   { name: "1440x900", width: 1440, height: 900 },
