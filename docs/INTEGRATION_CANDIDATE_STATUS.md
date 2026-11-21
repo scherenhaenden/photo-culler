@@ -18,11 +18,12 @@ Este ledger distingue **aceptación runtime** (flujo ejecutado sobre el SHA indi
 
 ## Validación del candidato — 2026-11-21
 
-- SHA probado: `3862bc9` (`fix: validate integrated Rust library flows`).
+- SHA probado: `57ff653` (`merge: unify current Rust Slint sprint branches`), que incorpora la base S01 actual y `3862bc9`.
 - Pasó `cargo test --offline --locked --manifest-path rust/Cargo.toml -p photo-culler-server -p photo-culler-cli -p photo-culler-core -p photo-culler-image-engine`: 142 tests, incluidos los smokes de lifecycle HTTP S01.
 - El recorrido detectó y corrigió el cursor sin filtro de decisión en CLI, límites de dimensiones del decoder, una expectativa de revisión CAS, y el smoke HTTP que no enviaba el bearer token emitido al iniciar el servidor propio.
 - `cargo test --locked --manifest-path rust/Cargo.toml --workspace` aún no completa en este host: `glib-sys` necesita `pkg-config` y bibliotecas GTK de desarrollo para Slint. No se instalaron dependencias del sistema.
-- No hay todavía run de CI del SHA candidato ni aceptación de UI de importación/biblioteca en desktop y navegador. La suite seleccionada no cubre `photo-culler-slint`.
+- El workflow de candidato añade `product-tests`: tests de todos los paquetes activos Rust/Slint en Linux, excluyendo los shells experimentales egui/Tauri. Su resultado remoto está pendiente. La suite local seleccionada no cubre `photo-culler-slint`.
+- Sigue pendiente la aceptación de UI de importación/biblioteca en desktop y navegador.
 
 ## Estado por capa
 
