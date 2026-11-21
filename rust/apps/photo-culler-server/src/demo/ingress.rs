@@ -76,10 +76,22 @@ async fn enforce(
     let host_refs = hosts.iter().map(String::as_str).collect::<Vec<_>>();
     let origin_refs = origins.iter().map(String::as_str).collect::<Vec<_>>();
     let fetch_refs = fetch_sites.iter().map(String::as_str).collect::<Vec<_>>();
-    match state
-        .0
-        .check(method, &host_refs, &origin_refs, &fetch_refs, false)
-    {
+    // Firefox currently serializes the page origin as `null` for its same-origin
+    // WASM pairing fetch. Keep this compatibility exception limited to the
+    // one-time public pairing route, an exact Host, and browser metadata that
+    // explicitly says same-origin. Other writes still require the exact Origin.
+    let firefox_pairing_origin = method == "POST"
+        && path == "/api/v1/session/pair"
+        && origin_refs.as_slice() == ["null"]
+        && fetch_refs.as_slice() == ["same-origin"];
+    let policy = if firefox_pairing_origin {
+        state.0.check(method, &host_refs, &[], &fetch_refs, true)
+    } else {
+        state
+            .0
+            .check(method, &host_refs, &origin_refs, &fetch_refs, false)
+    };
+    match policy {
         Ok(()) => {
             let mut response = next.run(request).await;
             // The local catalog and fixture API must never be cached by a
@@ -233,7 +245,7 @@ mod tests {
     use axum::{
         body::to_bytes,
         http::{Method, Request},
-        routing::get,
+        routing::{get, post},
     };
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tower::ServiceExt;
@@ -311,6 +323,48 @@ mod tests {
                 .headers()
                 .contains_key("access-control-allow-origin")
         );
+    }
+    #[tokio::test]
+    async fn opaque_origin_pairing_requires_same_origin_fetch_metadata_and_exact_host() {
+        let api = Router::new()
+            .route("/api/v1/session/pair", post(|| async { "paired" }))
+            .route("/api/v1/session/pairing-codes", post(|| async { "issued" }));
+        let request = |path: &str, host: &str, fetch_site: &str| {
+            Request::builder()
+                .method(Method::POST)
+                .uri(path)
+                .header("host", host)
+                .header("origin", "null")
+                .header("sec-fetch-site", fetch_site)
+                .body(Body::empty())
+                .unwrap()
+        };
+
+        let allowed = protect(api.clone(), policy())
+            .oneshot(request(
+                "/api/v1/session/pair",
+                "127.0.0.1:49152",
+                "same-origin",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(allowed.status(), StatusCode::OK);
+
+        for rejected_request in [
+            request("/api/v1/session/pair", "127.0.0.1:49152", "cross-site"),
+            request("/api/v1/session/pair", "evil.test:49152", "same-origin"),
+            request(
+                "/api/v1/session/pairing-codes",
+                "127.0.0.1:49152",
+                "same-origin",
+            ),
+        ] {
+            let rejected = protect(api.clone(), policy())
+                .oneshot(rejected_request)
+                .await
+                .unwrap();
+            assert_eq!(rejected.status(), StatusCode::FORBIDDEN);
+        }
     }
     fn policy() -> Arc<OriginPolicy> {
         Arc::new(OriginPolicy::new("http", "127.0.0.1", 49152).unwrap())

@@ -150,24 +150,23 @@ fn slint_binding_contract_keeps_loading_error_retry_and_gallery_in_one_shell() {
     assert!(SLINT_VIEW_SOURCE.contains("ViewState::Error { message } =>"));
     assert!(SLINT_VIEW_SOURCE.contains("window.set_error_message(message.into());"));
     assert!(SLINT_VIEW_SOURCE.contains("window.set_view_state(3);"));
-    assert!(SLINT_VIEW_SOURCE.contains("match decode_jpeg(&bytes, \"image/jpeg\")"));
-    assert!(SLINT_VIEW_SOURCE.contains("window.set_photo_thumbnail(image.clone());"));
-    assert!(SLINT_VIEW_SOURCE.contains("thumbnail: image,"));
+    assert!(SLINT_VIEW_SOURCE.contains("decode_jpeg(bytes, \"image/jpeg\").ok()"));
+    assert!(
+        SLINT_VIEW_SOURCE
+            .contains("window.set_photo_thumbnail(preview.clone().unwrap_or_default());")
+    );
     assert!(SLINT_VIEW_SOURCE.contains("window.set_view_state(1);"));
 
     assert!(DEMO_WINDOW_SOURCE.contains("export component DemoWindow inherits Window"));
-    assert!(DEMO_WINDOW_SOURCE.contains("title: \"Photo Culler\";"));
+    assert!(DEMO_WINDOW_SOURCE.contains("title: \"Photo Culler Pro\";"));
     assert!(DEMO_WINDOW_SOURCE.contains("in property <string> gallery-title:"));
     assert!(DEMO_WINDOW_SOURCE.contains("in property <string> service-status:"));
-    assert!(DEMO_WINDOW_SOURCE.contains("root.gallery-title"));
-    assert!(DEMO_WINDOW_SOURCE.contains("root.service-status"));
     assert!(DEMO_WINDOW_SOURCE.contains("callback select-photo(string);"));
-    assert!(DEMO_WINDOW_SOURCE.contains("if root.view-state == 0: StatusPanel"));
-    assert!(DEMO_WINDOW_SOURCE.contains("if root.view-state == 2: StatusPanel"));
-    assert!(DEMO_WINDOW_SOURCE.contains("if root.view-state == 3: StatusPanel"));
-    assert!(DEMO_WINDOW_SOURCE.contains("action-label: \"Reintentar\";"));
+    assert!(DEMO_WINDOW_SOURCE.contains("view-state: root.view-state;"));
+    assert!(DEMO_WINDOW_SOURCE.contains("photos: root.gallery-photos;"));
     assert!(DEMO_WINDOW_SOURCE.contains("retry => { root.retry(); }"));
-    assert!(DEMO_WINDOW_SOURCE.contains("if root.view-state == 1: LibraryGallery"));
     assert!(DEMO_WINDOW_SOURCE.contains("fallback-thumbnail: root.photo-thumbnail;"));
+    assert!(GALLERY_SOURCE.contains("if root.view-state == 3: StatusPanel"));
+    assert!(GALLERY_SOURCE.contains("action-label: \"Reintentar\";"));
     assert!(GALLERY_SOURCE.contains("source: root.photo.thumbnail;"));
 }
