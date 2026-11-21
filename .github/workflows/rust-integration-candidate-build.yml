@@ -1,10 +1,11 @@
-name: Rust Sprint 01 integration gates
+name: Rust integration and build gates
 
 on:
   push:
     branches:
       - feature/sprint-01-integration-candidate
       - feature/sprint-01-rust-foundation
+      - feature/sprint-02-linux-library
     paths:
       - 'rust/Cargo.toml'
       - 'rust/Cargo.lock'
@@ -17,6 +18,7 @@ on:
     branches:
       - feature/sprint-01-integration-candidate
       - feature/sprint-01-rust-foundation
+      - feature/sprint-02-linux-library
     paths:
       - 'rust/Cargo.toml'
       - 'rust/Cargo.lock'
@@ -35,15 +37,16 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     steps:
-      - name: Require the candidate or Sprint 01 branch
+      - name: Require a candidate or supported sprint branch
         env:
           SELECTED_BRANCH: ${{ github.ref_name }}
         run: |
           test "$SELECTED_BRANCH" = 'feature/sprint-01-integration-candidate' \
-            || test "$SELECTED_BRANCH" = 'feature/sprint-01-rust-foundation'
+            || test "$SELECTED_BRANCH" = 'feature/sprint-01-rust-foundation' \
+            || test "$SELECTED_BRANCH" = 'feature/sprint-02-linux-library'
 
   native-check:
-    if: github.ref_name == 'feature/sprint-01-integration-candidate' || github.base_ref == 'feature/sprint-01-integration-candidate' || github.ref_name == 'feature/sprint-01-rust-foundation' || github.base_ref == 'feature/sprint-01-rust-foundation'
+    if: github.ref_name == 'feature/sprint-01-integration-candidate' || github.base_ref == 'feature/sprint-01-integration-candidate' || github.ref_name == 'feature/sprint-01-rust-foundation' || github.base_ref == 'feature/sprint-01-rust-foundation' || github.ref_name == 'feature/sprint-02-linux-library' || github.base_ref == 'feature/sprint-02-linux-library'
     name: ${{ matrix.name }} Rust package check
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -119,7 +122,7 @@ jobs:
           if-no-files-found: warn
 
   wasm-check:
-    if: github.ref_name == 'feature/sprint-01-integration-candidate' || github.base_ref == 'feature/sprint-01-integration-candidate' || github.ref_name == 'feature/sprint-01-rust-foundation' || github.base_ref == 'feature/sprint-01-rust-foundation'
+    if: github.ref_name == 'feature/sprint-01-integration-candidate' || github.base_ref == 'feature/sprint-01-integration-candidate' || github.ref_name == 'feature/sprint-01-rust-foundation' || github.base_ref == 'feature/sprint-01-rust-foundation' || github.ref_name == 'feature/sprint-02-linux-library' || github.base_ref == 'feature/sprint-02-linux-library'
     name: Slint WASM package check
     runs-on: ubuntu-24.04
     steps:
@@ -173,7 +176,7 @@ jobs:
           if-no-files-found: warn
 
   product-tests:
-    if: github.ref_name == 'feature/sprint-01-integration-candidate' || github.base_ref == 'feature/sprint-01-integration-candidate' || github.ref_name == 'feature/sprint-01-rust-foundation' || github.base_ref == 'feature/sprint-01-rust-foundation'
+    if: github.ref_name == 'feature/sprint-01-integration-candidate' || github.base_ref == 'feature/sprint-01-integration-candidate' || github.ref_name == 'feature/sprint-01-rust-foundation' || github.base_ref == 'feature/sprint-01-rust-foundation' || github.ref_name == 'feature/sprint-02-linux-library' || github.base_ref == 'feature/sprint-02-linux-library'
     name: Rust and Slint product tests
     runs-on: ubuntu-24.04
     steps:
