@@ -1,183 +1,194 @@
-//! Integrated loopback router for the bundled, read-only gallery demo.
+//! Executable demo router assembled from the checked-in API and fixture contracts.
 
-use std::{collections::BTreeMap, io, net::SocketAddr, path::Path, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    net::SocketAddr,
+    path::Path,
+    sync::Arc,
+};
 
 use axum::Router;
-use tokio::io::AsyncReadExt;
+use serde::Deserialize;
 
 use crate::{
-    demo::{gallery, health, ingress, thumbnail, web_assets},
-    demo_args::DemoArgs,
-    http::runtime::lifecycle,
+    demo::{gallery, health, thumbnail, web_assets},
     origin::OriginPolicy,
 };
 
-const FIXTURE_THUMBNAIL: &[u8] =
+const GALLERY_MANIFEST: &str = include_str!("../../../../../migration/demo/fixture/manifest.json");
+const THUMBNAIL_BYTES: &[u8] =
     include_bytes!("../../../../../migration/demo/fixture/demo-001-thumbnail.jpg");
 
-struct Ready;
+#[derive(Deserialize)]
+struct FixtureManifest {
+    gallery_id: String,
+    items: Vec<gallery::DemoPhoto>,
+}
 
-impl health::ReadinessProbe for Ready {
-    fn ready(&self) -> bool {
-        true
+#[derive(Debug)]
+pub enum RouterError {
+    GalleryFixture(String),
+    InvalidThumbnail(&'static str),
+    InvalidOrigin,
+    WebBundle(web_assets::BundleError),
+}
+
+impl std::fmt::Display for RouterError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::GalleryFixture(error) => write!(formatter, "invalid gallery fixture: {error}"),
+            Self::InvalidThumbnail(error) => {
+                write!(formatter, "invalid bundled thumbnail: {error}")
+            }
+            Self::InvalidOrigin => formatter.write_str("unable to construct local origin policy"),
+            Self::WebBundle(error) => write!(formatter, "invalid web bundle: {error:?}"),
+        }
     }
 }
 
-pub fn build_router(address: SocketAddr, static_dir: Option<&Path>) -> Result<Router, String> {
-    if !address.ip().is_loopback() || address.port() == 0 {
-        return Err("the demo server requires an assigned loopback address".into());
-    }
-
-    let photo = gallery::DemoPhoto {
-        photo_id: "demo-001".into(),
-        filename: "demo-001.jpg".into(),
-        decision: "undecided".into(),
-        representation: "jpeg".into(),
-        thumbnail_url: "/api/v1/photos/demo-001/thumbnail/800".into(),
-    };
-    let fixture = Arc::new(gallery::FixtureMap(BTreeMap::from([(
-        "demo".into(),
-        vec![photo],
+/// Build all route modules using the actual ephemeral listener authority.
+/// Static files are loaded and validated before readiness is announced.
+pub fn build_router(
+    address: SocketAddr,
+    web_root: Option<&Path>,
+    auth: crate::http::session::runtime::SessionAuth,
+) -> Result<Router, RouterError> {
+    let manifest: FixtureManifest = serde_json::from_str(GALLERY_MANIFEST)
+        .map_err(|error| RouterError::GalleryFixture(error.to_string()))?;
+    let gallery = Arc::new(gallery::FixtureMap(BTreeMap::from([(
+        manifest.gallery_id,
+        manifest.items,
     )])));
     let thumbnail =
-        thumbnail::ThumbnailAsset::from_declared_bundle(Arc::<[u8]>::from(FIXTURE_THUMBNAIL))
-            .map_err(str::to_owned)?;
+        thumbnail::ThumbnailAsset::from_declared_bundle(Arc::<[u8]>::from(THUMBNAIL_BYTES))
+            .map_err(RouterError::InvalidThumbnail)?;
 
+    let mut router = health::router(Arc::new(Ready))
+        .merge(gallery::router(gallery))
+        .merge(thumbnail::router(thumbnail));
+    let mut public_assets = BTreeSet::new();
+    if let Some(root) = web_root {
+        let bundle =
+            web_assets::AssetBundle::load_web_root(root).map_err(RouterError::WebBundle)?;
+        public_assets = bundle.public_request_paths();
+        router = bundle.router(router);
+    }
+
+    apply_origin_policy(router, address, auth, public_assets)
+}
+
+/// Build the persistent catalogue routes. The caller opens and initializes the
+/// database before binding, so startup failures cannot be announced as ready.
+pub fn build_catalog_router<C, R>(
+    address: SocketAddr,
+    web_root: Option<&Path>,
+    catalog: C,
+    recipes: R,
+    analysis: Option<Router>,
+    previews: Option<Router>,
+    auth: crate::http::session::runtime::SessionAuth,
+) -> Result<Router, RouterError>
+where
+    C: crate::http::catalog_reads::Catalog
+        + crate::http::catalog_writes::decision::DecisionWriter
+        + Clone
+        + Send
+        + Sync
+        + 'static,
+    R: crate::http::recipes::RecipeApi + 'static,
+{
+    let reads = crate::http::catalog_reads::routes::router::<C>()
+        .with_state(Arc::new(crate::http::catalog_reads::Reads(catalog.clone())));
+    let writes = crate::http::catalog_writes::decision::router::<C>().with_state(Arc::new(catalog));
+    let recipes = crate::http::recipes::router::<R>().with_state(Arc::new(recipes));
+    let mut router = health::router(Arc::new(Ready))
+        .merge(reads)
+        .merge(writes)
+        .merge(recipes);
+    if let Some(analysis) = analysis {
+        router = router.merge(analysis);
+    }
+    if let Some(previews) = previews {
+        router = router.merge(previews);
+    }
+    let mut public_assets = BTreeSet::new();
+    if let Some(root) = web_root {
+        let bundle =
+            web_assets::AssetBundle::load_web_root(root).map_err(RouterError::WebBundle)?;
+        public_assets = bundle.public_request_paths();
+        router = bundle.router(router);
+    }
+    apply_origin_policy(router, address, auth, public_assets)
+}
+
+/// Build the persistent catalog router with server-local import endpoints.
+/// Import source roots are resolved by `I`; no path is accepted from HTTP.
+pub fn build_import_catalog_router<C, I, R>(
+    address: SocketAddr,
+    web_root: Option<&Path>,
+    catalog: C,
+    imports: I,
+    recipes: R,
+    analysis: Option<Router>,
+    previews: Option<Router>,
+    auth: crate::http::session::runtime::SessionAuth,
+) -> Result<Router, RouterError>
+where
+    C: crate::http::catalog_reads::Catalog
+        + crate::http::catalog_writes::decision::DecisionWriter
+        + Clone
+        + Send
+        + Sync
+        + 'static,
+    I: crate::http::imports::routes::ImportApi + 'static,
+    R: crate::http::recipes::RecipeApi + 'static,
+{
+    let reads = crate::http::catalog_reads::routes::router::<C>()
+        .with_state(Arc::new(crate::http::catalog_reads::Reads(catalog.clone())));
+    let writes = crate::http::catalog_writes::decision::router::<C>().with_state(Arc::new(catalog));
+    let imports = crate::http::imports::routes::router::<I>().with_state(Arc::new(imports));
+    let recipes = crate::http::recipes::router::<R>().with_state(Arc::new(recipes));
+    let mut router = health::router(Arc::new(Ready))
+        .merge(reads)
+        .merge(writes)
+        .merge(imports)
+        .merge(recipes);
+    if let Some(analysis) = analysis {
+        router = router.merge(analysis);
+    }
+    if let Some(previews) = previews {
+        router = router.merge(previews);
+    }
+    let mut public_assets = BTreeSet::new();
+    if let Some(root) = web_root {
+        let bundle =
+            web_assets::AssetBundle::load_web_root(root).map_err(RouterError::WebBundle)?;
+        public_assets = bundle.public_request_paths();
+        router = bundle.router(router);
+    }
+    apply_origin_policy(router, address, auth, public_assets)
+}
+
+fn apply_origin_policy(
+    router: Router,
+    address: SocketAddr,
+    auth: crate::http::session::runtime::SessionAuth,
+    public_assets: BTreeSet<String>,
+) -> Result<Router, RouterError> {
     let host = match address.ip() {
         std::net::IpAddr::V4(ip) => ip.to_string(),
         std::net::IpAddr::V6(ip) => format!("[{ip}]"),
     };
-    let origin = Arc::new(
-        OriginPolicy::new("http", &host, address.port())
-            .map_err(|_| "could not configure the loopback origin policy")?,
-    );
-    let api = Router::new()
-        .merge(health::router(Arc::new(Ready)))
-        .merge(gallery::router(fixture))
-        .merge(thumbnail::router(thumbnail));
-
-    let app = match static_dir {
-        Some(root) => {
-            let bundle = web_assets::AssetBundle::load(root, &web_assets::standard_declarations())
-                .map_err(|error| format!("could not load web bundle: {error:?}"))?;
-            bundle.router(api)
-        }
-        None => api,
-    };
-    Ok(ingress::protect(app, origin))
+    let policy =
+        OriginPolicy::new("http", &host, address.port()).map_err(|_| RouterError::InvalidOrigin)?;
+    let router = router.merge(crate::http::session::runtime::router(auth.clone()));
+    let router = crate::http::session::runtime::protect(router, auth, public_assets);
+    Ok(crate::demo::ingress::protect(router, Arc::new(policy)))
 }
 
-pub async fn run(args: DemoArgs) -> Result<(), String> {
-    if args.data_dir.is_some() {
-        return Err("--data-dir is not supported by the read-only fixture server".into());
-    }
-    let address = SocketAddr::new(args.bind, args.port);
-    let static_dir = args.static_dir;
-    let mut stdout = io::stdout().lock();
-    let server = lifecycle::start_and_announce_on(
-        address,
-        move |actual_address| build_router(actual_address, static_dir.as_deref()),
-        &mut stdout,
-    )
-    .await
-    .map_err(|error| error.to_string())?;
-    drop(stdout);
-
-    let stdin_eof = async {
-        let mut stdin = tokio::io::stdin();
-        let mut byte = [0_u8; 1];
-        loop {
-            match stdin.read(&mut byte).await {
-                Ok(0) | Err(_) => break,
-                Ok(_) => {}
-            }
-        }
-    };
-    let interrupt = async {
-        let _ = tokio::signal::ctrl_c().await;
-    };
-    server
-        .wait_for_shutdown(stdin_eof, interrupt)
-        .await
-        .map_err(|error| format!("server shutdown failed: {error}"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use axum::{body::Body, http::Request};
-    use std::{
-        fs,
-        path::PathBuf,
-        sync::atomic::{AtomicU64, Ordering},
-    };
-    use tower::ServiceExt;
-
-    static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
-
-    struct TempBundle(PathBuf);
-
-    impl TempBundle {
-        fn new() -> Self {
-            let path = std::env::temp_dir().join(format!(
-                "pc-demo-runtime-{}-{}",
-                std::process::id(),
-                NEXT_TEMP.fetch_add(1, Ordering::Relaxed)
-            ));
-            fs::create_dir_all(&path).unwrap();
-            for (name, bytes) in [
-                ("index.html", b"<html>demo</html>".as_slice()),
-                ("bootstrap.js", b"boot".as_slice()),
-                ("photo_culler_slint.js", b"js".as_slice()),
-                ("photo_culler_slint_bg.wasm", b"\0asm\x01\0\0\0".as_slice()),
-            ] {
-                fs::write(path.join(name), bytes).unwrap();
-            }
-            Self(path)
-        }
-    }
-
-    impl Drop for TempBundle {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.0);
-        }
-    }
-
-    #[tokio::test]
-    async fn integrated_router_serves_assets_and_api_with_security_and_no_store_headers() {
-        let bundle = TempBundle::new();
-        let address = SocketAddr::from(([127, 0, 0, 1], 49_152));
-        let app = build_router(address, Some(&bundle.0)).unwrap();
-
-        let page = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .uri("/")
-                    .header("host", "127.0.0.1:49152")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(page.status(), axum::http::StatusCode::OK);
-        assert_eq!(page.headers()["content-type"], "text/html; charset=utf-8");
-        assert_eq!(page.headers()["cache-control"], "no-store");
-        assert_eq!(page.headers()["x-content-type-options"], "nosniff");
-        assert!(page.headers().contains_key("content-security-policy"));
-        assert_eq!(page.headers()["referrer-policy"], "no-referrer");
-
-        let api = app
-            .oneshot(
-                Request::builder()
-                    .uri("/api/v1/galleries/demo/photos")
-                    .header("host", "127.0.0.1:49152")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(api.status(), axum::http::StatusCode::OK);
-        assert_eq!(api.headers()["cache-control"], "no-store");
+struct Ready;
+impl health::ReadinessProbe for Ready {
+    fn ready(&self) -> bool {
+        true
     }
 }

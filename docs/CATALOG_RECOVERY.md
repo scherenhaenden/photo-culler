@@ -37,7 +37,7 @@ API de SQLite y restaura en una ubicación distinta.
 
 ```bash
 WORK="$(mktemp -d)"
-python - "$WORK" <<PY
+python - "$WORK" <<'PY'
 from pathlib import Path
 import sqlite3, sys
 
@@ -52,11 +52,12 @@ with sqlite3.connect(source) as db:
     db.execute("PRAGMA journal_mode=WAL")
     db.execute("CREATE TABLE photos(photo_id TEXT PRIMARY KEY, decision TEXT NOT NULL)")
     db.execute("CREATE TABLE recipes(photo_id TEXT PRIMARY KEY, revision INTEGER NOT NULL, payload TEXT NOT NULL)")
-    db.execute("INSERT INTO photos VALUES (photo-synthetic-001, KEEP)")
-    db.execute("INSERT INTO recipes VALUES (photo-synthetic-001, 3, {"exposure":0.25})")
+    db.execute("INSERT INTO photos VALUES (?, ?)", ("photo-synthetic-001", "KEEP"))
+    db.execute("INSERT INTO recipes VALUES (?, ?, ?)", ("photo-synthetic-001", 3, '{"exposure":0.25}'))
     db.commit()
     check = db.execute("PRAGMA integrity_check").fetchone()[0]
     assert check == "ok", check
+    assert db.execute("PRAGMA foreign_key_check").fetchall() == []
 
 with sqlite3.connect(source) as src, sqlite3.connect(backup) as dst:
     src.backup(dst)
@@ -66,6 +67,7 @@ with sqlite3.connect(backup) as src, sqlite3.connect(restored) as dst:
 
 with sqlite3.connect(restored) as db:
     assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+    assert db.execute("PRAGMA foreign_key_check").fetchall() == []
     assert db.execute("SELECT photo_id, decision FROM photos").fetchall() == [
         ("photo-synthetic-001", "KEEP")
     ]
@@ -77,7 +79,10 @@ PY
 ```
 
 La tabla de muestra no reproduce el esquema completo de Photo Culler; valida el
-método SQLite y la lista mínima de datos que debe comprobarse. Para un ensayo de
+método SQLite y la lista mínima de datos que debe comprobarse. El módulo Rust
+rechaza snapshots cuyo `integrity_check` no devuelve `ok` o cuyo
+`foreign_key_check` devuelve filas; un catálogo legacy con referencias rotas
+falla de forma cerrada y el original no se modifica. Para un ensayo de
 versión real, inicialice un catálogo temporal con la versión objetivo, cree
 decisiones/perfiles/recetas mediante esa versión, cierre sus escritores, aplique el
 mismo método de backup y abra la copia restaurada con la misma versión. Compare

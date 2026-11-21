@@ -11,7 +11,7 @@ use axum::{
     routing::get,
 };
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Component, Path},
     sync::Arc,
@@ -30,15 +30,70 @@ pub struct AssetBundle {
 #[derive(Debug, PartialEq, Eq)]
 pub enum BundleError {
     InvalidRoot,
+    InvalidManifest,
+    UnsupportedManifestVersion,
     InvalidName,
     DuplicateName,
     UnsupportedType,
     MissingRequired(String),
     OutsideRoot,
+    SymlinkNotAllowed,
+    UndeclaredFile(String),
     ReadFailed,
 }
 
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BundleManifest {
+    schema_version: u32,
+    files: Vec<String>,
+}
+
 impl AssetBundle {
+    /// Read and validate the D23 `bundle.json` allowlist, then preload only its
+    /// declared regular files. The manifest itself is never served.
+    pub fn load_web_root(root: impl AsRef<Path>) -> Result<Self, BundleError> {
+        const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
+        let root = fs::canonicalize(root).map_err(|_| BundleError::InvalidRoot)?;
+        if !root.is_dir() {
+            return Err(BundleError::InvalidRoot);
+        }
+        let manifest_path = root.join("bundle.json");
+        let metadata =
+            fs::symlink_metadata(&manifest_path).map_err(|_| BundleError::InvalidManifest)?;
+        if metadata.file_type().is_symlink()
+            || !metadata.is_file()
+            || metadata.len() > MAX_MANIFEST_BYTES
+        {
+            return Err(BundleError::InvalidManifest);
+        }
+        let manifest_bytes = fs::read(&manifest_path).map_err(|_| BundleError::ReadFailed)?;
+        let manifest: BundleManifest =
+            serde_json::from_slice(&manifest_bytes).map_err(|_| BundleError::InvalidManifest)?;
+        if manifest.schema_version != 1 {
+            return Err(BundleError::UnsupportedManifestVersion);
+        }
+        if manifest.files.is_empty() || manifest.files.iter().any(|file| file == "bundle.json") {
+            return Err(BundleError::InvalidManifest);
+        }
+        let declarations = manifest
+            .files
+            .into_iter()
+            .map(|relative_name| WebAsset { relative_name })
+            .collect::<Vec<_>>();
+        let bundle = Self::load(&root, &declarations)?;
+
+        let mut actual = BTreeSet::new();
+        collect_regular_files(&root, &root, &mut actual)?;
+        actual.remove("bundle.json");
+        for file in actual {
+            if !bundle.files.contains_key(&file) {
+                return Err(BundleError::UndeclaredFile(file));
+            }
+        }
+        Ok(bundle)
+    }
+
     /// Validate and preload only names explicitly declared by the build manifest.
     pub fn load(root: impl AsRef<Path>, declarations: &[WebAsset]) -> Result<Self, BundleError> {
         let root = fs::canonicalize(root).map_err(|_| BundleError::InvalidRoot)?;
@@ -50,6 +105,13 @@ impl AssetBundle {
             let relative = Path::new(&declaration.relative_name);
             if relative.as_os_str().is_empty()
                 || relative.is_absolute()
+                || !declaration.relative_name.bytes().all(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.' | b'/')
+                })
+                || declaration
+                    .relative_name
+                    .split('/')
+                    .any(|segment| segment.is_empty() || segment == "." || segment == "..")
                 || relative
                     .components()
                     .any(|c| !matches!(c, Component::Normal(_)))
@@ -93,6 +155,15 @@ impl AssetBundle {
             .with_state(self);
         api.merge(assets)
     }
+
+    /// Exact request paths that may be served without an API session. The
+    /// authentication layer uses this manifest-derived allowlist instead of
+    /// inferring static content from URL extensions.
+    pub fn public_request_paths(&self) -> BTreeSet<String> {
+        let mut paths = BTreeSet::from(["/".to_owned()]);
+        paths.extend(self.files.keys().map(|relative| format!("/{relative}")));
+        paths
+    }
 }
 
 fn content_type(name: &str) -> Option<&'static str> {
@@ -105,8 +176,44 @@ fn content_type(name: &str) -> Option<&'static str> {
         "html" => Some("text/html; charset=utf-8"),
         "js" => Some("text/javascript; charset=utf-8"),
         "wasm" => Some("application/wasm"),
+        "css" => Some("text/css; charset=utf-8"),
+        "svg" => Some("image/svg+xml"),
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "webp" => Some("image/webp"),
+        "ico" => Some("image/x-icon"),
+        "json" => Some("application/json"),
         _ => None,
     }
+}
+
+fn collect_regular_files(
+    root: &Path,
+    directory: &Path,
+    output: &mut BTreeSet<String>,
+) -> Result<(), BundleError> {
+    for entry in fs::read_dir(directory).map_err(|_| BundleError::ReadFailed)? {
+        let entry = entry.map_err(|_| BundleError::ReadFailed)?;
+        let file_type = entry.file_type().map_err(|_| BundleError::ReadFailed)?;
+        if file_type.is_symlink() {
+            return Err(BundleError::SymlinkNotAllowed);
+        }
+        if file_type.is_dir() {
+            collect_regular_files(root, &entry.path(), output)?;
+        } else if file_type.is_file() {
+            let relative = entry
+                .path()
+                .strip_prefix(root)
+                .map_err(|_| BundleError::OutsideRoot)?
+                .to_str()
+                .ok_or(BundleError::InvalidName)?
+                .replace(std::path::MAIN_SEPARATOR, "/");
+            output.insert(relative);
+        } else {
+            return Err(BundleError::InvalidName);
+        }
+    }
+    Ok(())
 }
 
 async fn root_asset(State(bundle): State<AssetBundle>) -> Response<Body> {
@@ -227,6 +334,66 @@ mod tests {
             fs::write(temp.0.join(name), bytes).unwrap();
         }
         temp
+    }
+
+    fn web_fixture() -> Temp {
+        let temp = fixture();
+        fs::remove_file(temp.0.join("secret.txt")).unwrap();
+        fs::create_dir(temp.0.join("assets")).unwrap();
+        fs::write(temp.0.join("assets/icon.svg"), b"<svg/>").unwrap();
+        let manifest = serde_json::json!({
+            "schema_version": 1,
+            "files": [
+                "index.html", "bootstrap.js", "photo_culler_slint.js",
+                "photo_culler_slint_bg.wasm", "assets/icon.svg"
+            ]
+        });
+        fs::write(
+            temp.0.join("bundle.json"),
+            serde_json::to_vec(&manifest).unwrap(),
+        )
+        .unwrap();
+        temp
+    }
+
+    #[test]
+    fn manifest_loads_declared_nested_assets_and_mime_types() {
+        let temp = web_fixture();
+        let bundle = AssetBundle::load_web_root(&temp.0).unwrap();
+        let response = serve_name(bundle, "assets/icon.svg");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[CONTENT_TYPE], "image/svg+xml");
+    }
+
+    #[test]
+    fn manifest_rejects_version_path_symlink_and_undeclared_file() {
+        let temp = web_fixture();
+        fs::write(temp.0.join("extra.js"), b"not declared").unwrap();
+        assert_eq!(
+            AssetBundle::load_web_root(&temp.0).unwrap_err(),
+            BundleError::UndeclaredFile("extra.js".into())
+        );
+        fs::remove_file(temp.0.join("extra.js")).unwrap();
+        let bad = serde_json::json!({"schema_version": 2, "files": ["index.html"]});
+        fs::write(
+            temp.0.join("bundle.json"),
+            serde_json::to_vec(&bad).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            AssetBundle::load_web_root(&temp.0).unwrap_err(),
+            BundleError::UnsupportedManifestVersion
+        );
+        let bad = serde_json::json!({"schema_version": 1, "files": ["../outside.js"]});
+        fs::write(
+            temp.0.join("bundle.json"),
+            serde_json::to_vec(&bad).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            AssetBundle::load_web_root(&temp.0).unwrap_err(),
+            BundleError::InvalidName
+        );
     }
     #[tokio::test]
     async fn declared_html_js_and_wasm_have_expected_mimes() {

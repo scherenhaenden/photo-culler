@@ -1,5 +1,7 @@
 //! Transport-independent session gate. See README.md for integration requirements.
 
+pub mod runtime;
+
 /// Roles are deliberately explicit: ordinary editors cannot administer a NAS.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Role {

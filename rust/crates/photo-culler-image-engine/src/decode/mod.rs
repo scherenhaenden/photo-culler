@@ -1,7 +1,7 @@
 //! Bounded raster decoding and RAW preview selection.
 //!
 //! This module deliberately does not claim to demosaic proprietary RAW data.
-//! The current workspace enables JPEG, PNG, and TIFF raster codecs only. A
+//! The current workspace enables JPEG, PNG, TIFF, BMP, GIF, and WebP codecs. A
 //! RAW adapter should extract an embedded preview first and may then provide a
 //! paired raster representation as fallback. Camera-specific RAW decoding can
 //! be added behind `RawPreviewExtractor` after coverage and distribution are
@@ -54,18 +54,23 @@ pub struct DecodedImage {
 /// Decode a supported raster format, enforcing dimensions before allocation
 /// and applying the container's EXIF orientation to the returned pixels.
 pub fn decode_raster(bytes: &[u8], limits: DecodeLimits) -> Result<DecodedImage, DecodeError> {
-    let mut reader = ImageReader::new(Cursor::new(bytes))
+    let reader = ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
         .map_err(|error| DecodeError::InvalidData(error.to_string()))?;
     let mut decoder_limits = Limits::default();
+    decoder_limits.max_image_width = Some(limits.max_width);
+    decoder_limits.max_image_height = Some(limits.max_height);
     decoder_limits.max_alloc = Some(limits.max_alloc_bytes);
-    reader.limits(decoder_limits);
     let mut decoder = reader.into_decoder().map_err(map_error)?;
     let (width, height) = decoder.dimensions();
     if width > limits.max_width || height > limits.max_height {
         return Err(DecodeError::DimensionsExceeded { width, height });
     }
     let orientation = decoder.orientation().unwrap_or(Orientation::NoTransforms);
+    decoder_limits
+        .reserve(decoder.total_bytes())
+        .map_err(map_error)?;
+    decoder.set_limits(decoder_limits).map_err(map_error)?;
     let mut image = DynamicImage::from_decoder(decoder).map_err(map_error)?;
     image.apply_orientation(orientation);
     Ok(DecodedImage {

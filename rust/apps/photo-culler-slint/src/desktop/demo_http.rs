@@ -2,9 +2,9 @@
 //!
 //! The synchronous operation is intended to run on a worker thread; use
 //! [`get_async`] from an event-loop callback so a slow server cannot freeze UI.
-//! Integration: declare this module from the desktop crate's module tree when
-//! D33 registers the Slint package; that crate/module integration is absent at
-//! the sprint base, so this file is verified as a standalone Rust module.
+//! The owned desktop launcher uses this transport to check the local server's
+//! readiness. UI REST requests use the shared client with the desktop transport
+//! adapter in `demo::native_transport`.
 
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
@@ -13,11 +13,12 @@ use std::time::Duration;
 
 const MAX_HEADER_BYTES: usize = 16 * 1024;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct NativeHttpTransport {
     address: SocketAddr,
     timeout: Duration,
     max_response_bytes: usize,
+    authorization: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -46,6 +47,29 @@ impl NativeHttpTransport {
         timeout: Duration,
         max_response_bytes: usize,
     ) -> Result<Self, HttpError> {
+        Self::with_authorization(address, timeout, max_response_bytes, None)
+    }
+
+    /// Construct a transport for authenticated API calls. Tokens are validated
+    /// before interpolation into an HTTP header and are never included in errors.
+    pub fn new_authenticated(
+        address: SocketAddr,
+        timeout: Duration,
+        max_response_bytes: usize,
+        token: String,
+    ) -> Result<Self, HttpError> {
+        if !valid_session_token(&token) {
+            return Err(HttpError::InvalidEndpoint);
+        }
+        Self::with_authorization(address, timeout, max_response_bytes, Some(token))
+    }
+
+    fn with_authorization(
+        address: SocketAddr,
+        timeout: Duration,
+        max_response_bytes: usize,
+        authorization: Option<String>,
+    ) -> Result<Self, HttpError> {
         if !address.ip().is_loopback()
             || address.port() == 0
             || timeout.is_zero()
@@ -57,11 +81,29 @@ impl NativeHttpTransport {
             address,
             timeout,
             max_response_bytes,
+            authorization,
         })
     }
 
     pub fn get(&self, path: &str) -> Result<HttpResponse, HttpError> {
-        if !valid_api_path(path) {
+        self.request("GET", path, None)
+    }
+
+    pub fn put_json(&self, path: &str, body: &[u8]) -> Result<HttpResponse, HttpError> {
+        self.request("PUT", path, Some(body))
+    }
+
+    pub fn post_json(&self, path: &str, body: &[u8]) -> Result<HttpResponse, HttpError> {
+        self.request("POST", path, Some(body))
+    }
+
+    fn request(
+        &self,
+        method: &str,
+        path: &str,
+        body: Option<&[u8]>,
+    ) -> Result<HttpResponse, HttpError> {
+        if !valid_api_request(method, path) {
             return Err(HttpError::InvalidPath);
         }
         let mut stream = TcpStream::connect_timeout(&self.address, self.timeout).map_err(map_io)?;
@@ -71,8 +113,23 @@ impl NativeHttpTransport {
         stream
             .set_write_timeout(Some(self.timeout))
             .map_err(map_io)?;
-        write!(stream, "GET {path} HTTP/1.1\r\nHost: {}\r\nAccept: application/json, image/jpeg\r\nConnection: close\r\n\r\n", self.address)
+        write!(stream, "{method} {path} HTTP/1.1\r\nHost: {}\r\nOrigin: http://{}\r\nAccept: application/json, image/jpeg\r\nConnection: close\r\n", self.address, self.address)
             .map_err(map_io)?;
+        if let Some(token) = self.authorization.as_deref() {
+            write!(stream, "Authorization: Bearer {token}\r\n").map_err(map_io)?;
+        }
+        if let Some(body) = body {
+            write!(
+                stream,
+                "Content-Type: application/json\r\nContent-Length: {}\r\n",
+                body.len()
+            )
+            .map_err(map_io)?;
+        }
+        stream.write_all(b"\r\n").map_err(map_io)?;
+        if let Some(body) = body {
+            stream.write_all(body).map_err(map_io)?;
+        }
 
         // Bound the entire response, including headers, so a peer cannot make
         // the client allocate without limit before the body-size check.
@@ -136,11 +193,7 @@ impl NativeHttpTransport {
         if (300..400).contains(&status) {
             return Err(HttpError::RedirectRejected);
         }
-        if status != 200 {
-            return Err(HttpError::HttpStatus(status));
-        }
-        let content_type =
-            content_type.ok_or(HttpError::InvalidResponse("missing content type"))?;
+        let content_type = response_content_type(status, body.len(), content_type)?;
         Ok(HttpResponse {
             status,
             content_type,
@@ -156,10 +209,139 @@ impl NativeHttpTransport {
     }
 }
 
-fn valid_api_path(path: &str) -> bool {
-    path.starts_with("/api/v1/")
-        && !path.contains("..")
-        && !path.contains(['\\', '?', '#', '\r', '\n', ' '])
+fn valid_session_token(token: &str) -> bool {
+    token.len() == 64 && token.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn valid_api_request(method: &str, path: &str) -> bool {
+    let (route, query) = path.split_once('?').unwrap_or((path, ""));
+    let has_query = path.contains('?');
+    let catalog_page = route.starts_with("/api/v1/galleries/") && route.ends_with("/photos");
+    let preview_route = route.starts_with("/api/v1/photos/") && route.ends_with("/preview");
+    let v2_route = valid_v2_route(route);
+    let query_is_safe = !has_query
+        || (!query.is_empty()
+            && (catalog_page
+                || preview_route
+                || route == "/api/v2/import-jobs"
+                || route == "/api/v2/scan-revisions")
+            && {
+                let mut seen = std::collections::BTreeSet::new();
+                query.split('&').all(|parameter| {
+                    let Some((key, value)) = parameter.split_once('=') else {
+                        return false;
+                    };
+                    let allowed = if catalog_page {
+                        matches!(key, "limit" | "decision" | "cursor")
+                    } else if preview_route {
+                        key == "size"
+                    } else if route == "/api/v2/scan-revisions" {
+                        matches!(key, "limit" | "gallery_id")
+                    } else if route == "/api/v2/import-jobs" {
+                        matches!(key, "limit" | "active_only")
+                    } else {
+                        key == "limit"
+                    };
+                    allowed
+                        && seen.insert(key)
+                        && (key != "active_only" || value == "true")
+                        && (key != "size" || matches!(value, "small" | "medium" | "large" | "full"))
+                        && !value.is_empty()
+                        && value.bytes().all(|byte| {
+                            byte.is_ascii_alphanumeric()
+                                || matches!(byte, b'-' | b'_' | b'.' | b'~' | b'%')
+                        })
+                        && valid_percent_escapes(value)
+                })
+            });
+    let safe_syntax = !route.contains("..")
+        && !route.contains(['\\', '?', '#', '\r', '\n', ' '])
+        && !route.split('/').any(|segment| segment == ".")
+        && !query.contains(['\\', '#', '\r', '\n', ' '])
+        && query_is_safe;
+    let v1_route = route.starts_with("/api/v1/");
+    let method_allowed = match method {
+        "GET" => v1_route || is_v2_get_route(route),
+        "PUT" => v1_route && route.starts_with("/api/v1/photos/") && route.ends_with("/decision"),
+        "POST" => is_v2_post_route(route),
+        _ => false,
+    };
+    safe_syntax && method_allowed && (v1_route || v2_route)
+}
+
+fn valid_v2_route(route: &str) -> bool {
+    let Some(path) = route.strip_prefix('/') else {
+        return false;
+    };
+    let segments = path.split('/').collect::<Vec<_>>();
+    if segments.iter().any(|segment| segment.is_empty()) {
+        return false;
+    }
+    match segments.as_slice() {
+        ["api", "v2", "galleries", gallery_id, action]
+            if valid_import_id(gallery_id)
+                && matches!(*action, "sources" | "imports" | "rescan") =>
+        {
+            true
+        }
+        ["api", "v2", "import-estimates"]
+        | ["api", "v2", "import-jobs"]
+        | ["api", "v2", "scan-revisions"] => true,
+        ["api", "v2", "import-jobs", job_id] => valid_import_id(job_id),
+        ["api", "v2", "import-jobs", job_id, action]
+            if valid_import_id(job_id) && matches!(*action, "pause" | "resume" | "cancel") =>
+        {
+            true
+        }
+        _ => false,
+    }
+}
+
+fn is_v2_get_route(route: &str) -> bool {
+    matches!(route, "/api/v2/import-jobs" | "/api/v2/scan-revisions")
+        || route.ends_with("/sources") && route.starts_with("/api/v2/galleries/")
+        || route.starts_with("/api/v2/import-jobs/")
+            && !route.ends_with("/pause")
+            && !route.ends_with("/resume")
+            && !route.ends_with("/cancel")
+}
+
+fn is_v2_post_route(route: &str) -> bool {
+    route == "/api/v2/import-estimates"
+        || route.starts_with("/api/v2/galleries/")
+            && (route.ends_with("/imports") || route.ends_with("/rescan"))
+        || route.starts_with("/api/v2/import-jobs/")
+            && ["/pause", "/resume", "/cancel"]
+                .iter()
+                .any(|suffix| route.ends_with(suffix))
+}
+
+fn valid_import_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && !value.contains("..")
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+}
+
+fn valid_percent_escapes(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            if index + 2 >= bytes.len()
+                || !bytes[index + 1].is_ascii_hexdigit()
+                || !bytes[index + 2].is_ascii_hexdigit()
+            {
+                return false;
+            }
+            index += 3;
+        } else {
+            index += 1;
+        }
+    }
+    true
 }
 
 fn map_io(error: std::io::Error) -> HttpError {
@@ -173,10 +355,54 @@ fn map_io(error: std::io::Error) -> HttpError {
     }
 }
 
+fn response_content_type(
+    status: u16,
+    body_len: usize,
+    content_type: Option<String>,
+) -> Result<String, HttpError> {
+    match content_type {
+        Some(value) => Ok(value),
+        // Axum's unmounted-route 404 can be an empty response without a MIME
+        // header. Keep it distinguishable from a transport error so the
+        // fixture compatibility path can fall back to the legacy gallery.
+        None if status == 404 && body_len == 0 => Ok(String::new()),
+        None => Err(HttpError::InvalidResponse("missing content type")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn accepts_only_bounded_preview_size_queries() {
+        assert!(valid_api_request(
+            "GET",
+            "/api/v1/photos/demo-001/preview?size=medium"
+        ));
+        assert!(!valid_api_request(
+            "GET",
+            "/api/v1/photos/demo-001/preview?size=original"
+        ));
+        assert!(!valid_api_request(
+            "GET",
+            "/api/v1/photos/demo-001/preview?size=medium&token=secret"
+        ));
+    }
     use std::net::TcpListener;
+
+    #[test]
+    fn accepts_empty_not_found_without_content_type_but_requires_success_mime() {
+        assert_eq!(response_content_type(404, 0, None), Ok(String::new()));
+        assert_eq!(
+            response_content_type(200, 0, None),
+            Err(HttpError::InvalidResponse("missing content type"))
+        );
+        assert_eq!(
+            response_content_type(404, 1, None),
+            Err(HttpError::InvalidResponse("missing content type"))
+        );
+    }
 
     fn serve(responses: Vec<(String, String, Vec<u8>)>) -> (SocketAddr, JoinHandle<Vec<String>>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -287,7 +513,8 @@ mod tests {
     fn rejects_non_loopback_invalid_paths_and_oversized_responses() {
         assert_eq!(
             NativeHttpTransport::new("192.0.2.1:80".parse().unwrap(), Duration::from_secs(1), 10)
-                .unwrap_err(),
+                .err()
+                .expect("a non-loopback endpoint must be rejected"),
             HttpError::InvalidEndpoint
         );
         let (address, server) = serve(vec![(

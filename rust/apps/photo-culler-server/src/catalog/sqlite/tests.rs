@@ -35,6 +35,7 @@ fn photo() -> Photo {
         session_id: Some("session-1".into()),
         burst_id: Some("burst-1".into()),
         decision: Some("KEEP".into()),
+        decision_revision: 0,
         score: Some(0.875),
         quality_tier: Some("good".into()),
         analysis_summary_json: r#"{"profile_id":"profile-1"}"#.into(),
@@ -95,6 +96,7 @@ async fn upsert_updates_all_legacy_fields() {
     updated.session_id = None;
     updated.burst_id = Some("burst-2".into());
     updated.decision = Some("REJECT".into());
+    updated.decision_revision = 1;
     updated.score = Some(0.125);
     updated.quality_tier = Some("poor".into());
     updated.analysis_summary_json = r#"{"profile_id":"profile-2"}"#.into();
@@ -158,5 +160,42 @@ async fn reader_observes_committed_snapshot_while_write_is_open() {
         db.get("p1").await.unwrap().unwrap().decision.as_deref(),
         Some("REJECT")
     );
+    db.close().await;
+}
+
+#[tokio::test]
+async fn gallery_pages_are_ordered_filtered_and_keep_child_data() {
+    let (_dir, db) = setup().await;
+    for id in ["p3", "p1", "p2"] {
+        let mut record = photo();
+        record.photo_id = id.into();
+        db.save(&record).await.unwrap();
+    }
+    let mut other_gallery = photo();
+    other_gallery.photo_id = "p0".into();
+    other_gallery.gallery_id = Some("gallery-2".into());
+    db.save(&other_gallery).await.unwrap();
+
+    let first = db.list_gallery("gallery-1", None, 2).await.unwrap();
+    assert_eq!(
+        first
+            .iter()
+            .map(|item| item.photo_id.as_str())
+            .collect::<Vec<_>>(),
+        ["p1", "p2"]
+    );
+    assert_eq!(first[0].files, photo().files);
+    assert_eq!(first[0].metadata, photo().metadata);
+
+    let second = db.list_gallery("gallery-1", Some("p2"), 2).await.unwrap();
+    assert_eq!(
+        second
+            .iter()
+            .map(|item| item.photo_id.as_str())
+            .collect::<Vec<_>>(),
+        ["p3"]
+    );
+    assert!(db.list_gallery("gallery-1", None, 0).await.is_err());
+    assert!(db.list_gallery("gallery-1", None, 201).await.is_err());
     db.close().await;
 }

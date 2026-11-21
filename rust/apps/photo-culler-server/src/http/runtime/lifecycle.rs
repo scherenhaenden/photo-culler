@@ -6,17 +6,34 @@
 use std::{
     future::Future,
     io::{self, Write},
-    net::SocketAddr,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
 };
 
 use axum::Router;
 use tokio::{net::TcpListener, sync::oneshot, task::JoinHandle};
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ReadyMessage {
     pub event: &'static str,
     pub protocol: u8,
     pub origin: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_token: Option<String>,
+}
+
+impl std::fmt::Debug for ReadyMessage {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ReadyMessage")
+            .field("event", &self.event)
+            .field("protocol", &self.protocol)
+            .field("origin", &self.origin)
+            .field(
+                "session_token",
+                &self.session_token.as_ref().map(|_| "[REDACTED]"),
+            )
+            .finish()
+    }
 }
 
 #[derive(Debug)]
@@ -42,11 +59,12 @@ impl RunningServer {
     pub fn address(&self) -> SocketAddr {
         self.address
     }
-    pub fn ready_message(&self) -> ReadyMessage {
+    pub fn ready_message(&self, session_token: Option<String>) -> ReadyMessage {
         ReadyMessage {
             event: "ready",
             protocol: 1,
             origin: format!("http://{}", self.address),
+            session_token,
         }
     }
     pub async fn shutdown(mut self) -> io::Result<()> {
@@ -72,23 +90,26 @@ where
     F: FnOnce(SocketAddr) -> Result<Router, E>,
     E: std::fmt::Display,
 {
-    start_on(SocketAddr::from(([127, 0, 0, 1], port)), make_router).await
+    start_on(IpAddr::V4(Ipv4Addr::LOCALHOST), port, make_router).await
 }
 
+/// Start on the requested loopback address. Non-loopback binds are rejected
+/// here as well as by the demo CLI so future callers cannot expose this server.
 pub async fn start_on<F, E>(
-    address: SocketAddr,
+    bind_ip: IpAddr,
+    port: u16,
     make_router: F,
 ) -> Result<RunningServer, LifecycleError>
 where
     F: FnOnce(SocketAddr) -> Result<Router, E>,
     E: std::fmt::Display,
 {
-    if !address.ip().is_loopback() {
+    if !bind_ip.is_loopback() {
         return Err(LifecycleError(
-            "server must bind to a loopback address".into(),
+            "server bind address must be loopback".to_owned(),
         ));
     }
-    let listener = TcpListener::bind(address).await?;
+    let listener = TcpListener::bind(SocketAddr::new(bind_ip, port)).await?;
     let address = listener.local_addr()?;
     let app = make_router(address)
         .map_err(|e| LifecycleError(format!("router preparation failed: {e}")))?;
@@ -117,29 +138,11 @@ where
     E: std::fmt::Display,
     W: Write,
 {
-    start_and_announce_on(
-        SocketAddr::from(([127, 0, 0, 1], port)),
-        make_router,
-        output,
-    )
-    .await
-}
-
-pub async fn start_and_announce_on<F, E, W>(
-    address: SocketAddr,
-    make_router: F,
-    output: &mut W,
-) -> Result<RunningServer, LifecycleError>
-where
-    F: FnOnce(SocketAddr) -> Result<Router, E>,
-    E: std::fmt::Display,
-    W: Write,
-{
-    let server = start_on(address, make_router).await?;
-    let mut line =
-        serde_json::to_vec(&server.ready_message()).map_err(|e| LifecycleError(e.to_string()))?;
+    let server = start(port, make_router).await?;
+    let mut line = serde_json::to_vec(&server.ready_message(None))
+        .map_err(|e| LifecycleError(e.to_string()))?;
     line.push(b'\n');
-    if let Err(error) = output.write_all(&line).and_then(|()| output.flush()) {
+    if let Err(error) = output.write_all(&line) {
         let _ = server.shutdown().await;
         return Err(error.into());
     }

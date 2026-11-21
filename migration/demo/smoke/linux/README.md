@@ -14,8 +14,10 @@ prove the Slint window opened or rendered.
    output. It checks API readiness and the thumbnail content type only.
 4. Close normally. Record that the owned child exited and its port was
    released. Reopen, repeat the API checks, and capture another screenshot.
-5. Connect to a separate external service, close the app, then verify its PID
-   and health endpoint remain live. Stop it manually after verification.
+5. Start a separate external service and launch the app with
+   `PHOTO_CULLER_API_ORIGIN=http://127.0.0.1:<external-port>`. Close the app,
+   then verify the external service PID and health endpoint remain live. Stop
+   it manually after verification.
 
 Complete `evidence.txt`. If the real Slint package or external connection
 control is missing, mark the step blocked and name the integration dependency.

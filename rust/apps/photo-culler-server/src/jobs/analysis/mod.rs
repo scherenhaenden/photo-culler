@@ -4,21 +4,26 @@
 //! a durable repository, analyzer, and clock. Repository writes must replace a
 //! job atomically so a cursor and its completed photo result cannot diverge.
 
+mod sqlite;
+
+pub use sqlite::{ImageEngineAnalyzer, SqliteRepository, SystemClock, prepare_gallery_plan};
+
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Scope {
     Gallery { gallery_id: String },
     Session { session_id: String },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Photo {
     pub photo_id: String,
     pub source: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Plan {
     pub catalog_id: String,
     pub scope: Scope,
@@ -26,13 +31,13 @@ pub struct Plan {
     pub photos: Vec<Photo>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct JobKey {
     pub catalog_id: String,
     pub job_id: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum State {
     Queued,
     Running,
@@ -42,19 +47,19 @@ pub enum State {
     Cancelled,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Outcome {
     Analyzed { metrics: Vec<String> },
     Failed { message: String },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PhotoProgress {
     pub photo_id: String,
     pub outcome: Outcome,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Job {
     pub key: JobKey,
     pub plan: Plan,
@@ -137,11 +142,16 @@ impl<R: Repository, A: Analyzer, C: Clock> Coordinator<R, A, C> {
         }
         let mut jobs = BTreeMap::new();
         for mut job in repository.load_all().map_err(Error::Repository)? {
+            validate_job_snapshot(&job)?;
             if job.state == State::Running {
                 // A crash may have left analyzer output without a durable cursor commit.
                 job.partial = None;
                 job.state = State::Paused;
                 job.updated_at = clock.now();
+                repository.save(&job).map_err(Error::Repository)?;
+            } else if job.partial.take().is_some() {
+                // Partial output is never committed with the cursor, regardless
+                // of the persisted state. Do not expose it after recovery.
                 repository.save(&job).map_err(Error::Repository)?;
             }
             jobs.insert(job.key.clone(), job);
@@ -226,6 +236,39 @@ impl<R: Repository, A: Analyzer, C: Clock> Coordinator<R, A, C> {
         self.start(key)
     }
 
+    /// Replace a queued or recovered plan with its freshly authorized catalog
+    /// snapshot before starting analysis. The photo identity/order, scope and
+    /// profile must remain stable so persisted progress cannot shift to a
+    /// different set of photos.
+    pub fn refresh_plan(&mut self, key: &JobKey, plan: Plan) -> Result<(), Error> {
+        let job = self.jobs.get(key).ok_or(Error::JobNotFound)?;
+        if !matches!(job.state, State::Queued | State::Paused) {
+            return Err(Error::InvalidTransition);
+        }
+        let old_photo_ids = job
+            .plan
+            .photos
+            .iter()
+            .map(|photo| photo.photo_id.as_str())
+            .collect::<Vec<_>>();
+        let new_photo_ids = plan
+            .photos
+            .iter()
+            .map(|photo| photo.photo_id.as_str())
+            .collect::<Vec<_>>();
+        if plan.catalog_id != job.plan.catalog_id
+            || plan.scope != job.plan.scope
+            || plan.profile_id != job.plan.profile_id
+            || old_photo_ids != new_photo_ids
+        {
+            return Err(Error::InvalidPlan);
+        }
+        self.update(key, |job| {
+            job.plan = plan;
+            job.partial = None;
+        })
+    }
+
     pub fn cancel(&mut self, key: &JobKey) -> Result<(), Error> {
         let state = &self.jobs.get(key).ok_or(Error::JobNotFound)?.state;
         if !matches!(state, State::Queued | State::Running | State::Paused) {
@@ -296,6 +339,28 @@ impl<R: Repository, A: Analyzer, C: Clock> Coordinator<R, A, C> {
     pub fn get(&self, key: &JobKey) -> Option<&Job> {
         self.jobs.get(key)
     }
+
+    /// Return one recoverable job for a gallery, preferring the most recently
+    /// updated active job. Terminal jobs are not returned.
+    pub fn active_gallery_job(&self, gallery_id: &str) -> Option<&Job> {
+        self.jobs
+            .values()
+            .filter(|job| {
+                matches!(&job.state, State::Queued | State::Running | State::Paused)
+                    && matches!(
+                        &job.plan.scope,
+                        Scope::Gallery { gallery_id: stored } if stored == gallery_id
+                    )
+            })
+            .max_by(|left, right| {
+                (left.updated_at, left.created_at, left.key.job_id.as_str()).cmp(&(
+                    right.updated_at,
+                    right.created_at,
+                    right.key.job_id.as_str(),
+                ))
+            })
+    }
+
     pub fn repository(&self) -> &R {
         &self.repository
     }
@@ -320,6 +385,34 @@ impl<R: Repository, A: Analyzer, C: Clock> Coordinator<R, A, C> {
         self.jobs.insert(key.clone(), candidate);
         Ok(())
     }
+}
+
+fn validate_job_snapshot(job: &Job) -> Result<(), Error> {
+    if job.key.catalog_id.trim().is_empty()
+        || job.key.job_id.trim().is_empty()
+        || job.key.catalog_id != job.plan.catalog_id
+        || job.plan.profile_id.trim().is_empty()
+        || job.next_index > job.plan.photos.len()
+        || job.completed.len() != job.next_index
+        || (job.state == State::Queued && job.next_index != 0)
+        || (job.state == State::Succeeded && job.next_index != job.plan.photos.len())
+    {
+        return Err(Error::InvalidPlan);
+    }
+    let mut photo_ids = std::collections::BTreeSet::new();
+    for (index, photo) in job.plan.photos.iter().enumerate() {
+        if photo.photo_id.trim().is_empty() || !photo_ids.insert(photo.photo_id.as_str()) {
+            return Err(Error::DuplicatePhoto);
+        }
+        if job
+            .completed
+            .get(index)
+            .is_some_and(|result| result.photo_id != photo.photo_id)
+        {
+            return Err(Error::InvalidPlan);
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -4,6 +4,10 @@
 //! already-rendered bytes and a destination relative to an approved export
 //! root. The writer is required to create new files exclusively.
 
+mod fs_writer;
+
+pub use fs_writer::LocalDerivedWriter;
+
 use std::collections::BTreeSet;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -154,7 +158,8 @@ fn woa_review_reasons(context: Option<&WoAContext>) -> Vec<String> {
 }
 
 fn validate_root(root: &str) -> Result<(), ExportError> {
-    if root.trim().is_empty() || !root.starts_with('/') || root == "/" {
+    let path = std::path::Path::new(root);
+    if root.trim().is_empty() || !path.is_absolute() || path.file_name().is_none() {
         return Err(ExportError::InvalidDestinationRoot);
     }
     Ok(())

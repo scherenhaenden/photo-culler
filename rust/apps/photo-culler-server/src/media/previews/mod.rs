@@ -7,12 +7,12 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 
 pub const PREVIEW_RENDER_VERSION: &str = "preview-render-1";
 pub const JPEG_QUALITY: u8 = 85;
 pub const MAX_PREVIEW_DIMENSION: u32 = 3_200;
-pub const MAX_DECODED_PIXELS: u64 = 100_000_000;
+pub const MAX_DECODED_PIXELS: u64 = 16_000_000;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum PreviewPreset {

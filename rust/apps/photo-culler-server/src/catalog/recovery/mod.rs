@@ -1,45 +1,24 @@
 //! Catalog snapshots. The caller must suspend changes to sidecars until `create`
 //! returns; SQLite itself is copied through its online backup API (including WAL).
-//! Snapshots and restores require new, empty destination paths.
+//! Snapshots and restores require new, empty destination paths. Before a snapshot
+//! is accepted or restored, both SQLite's structural integrity and foreign-key
+//! consistency must pass; an inconsistent legacy catalog fails closed.
+use libsqlite3_sys::{
+    sqlite3, sqlite3_backup_finish, sqlite3_backup_init, sqlite3_backup_step, sqlite3_close,
+    sqlite3_exec, sqlite3_open_v2,
+};
 use std::{
-    ffi::{c_char, c_int, c_void, CStr, CString},
+    ffi::{CStr, CString, c_char, c_int, c_void},
     fs,
     io::{self, Read, Write},
     path::{Component, Path, PathBuf},
     ptr,
 };
 
-#[link(name = "sqlite3")]
-unsafe extern "C" {
-    fn sqlite3_open_v2(
-        name: *const c_char,
-        db: *mut *mut c_void,
-        flags: c_int,
-        vfs: *const c_char,
-    ) -> c_int;
-    fn sqlite3_close(db: *mut c_void) -> c_int;
-    fn sqlite3_backup_init(
-        dst: *mut c_void,
-        dn: *const c_char,
-        src: *mut c_void,
-        sn: *const c_char,
-    ) -> *mut c_void;
-    fn sqlite3_backup_step(backup: *mut c_void, pages: c_int) -> c_int;
-    fn sqlite3_backup_finish(backup: *mut c_void) -> c_int;
-    fn sqlite3_exec(
-        db: *mut c_void,
-        sql: *const c_char,
-        cb: Option<
-            unsafe extern "C" fn(*mut c_void, c_int, *mut *mut c_char, *mut *mut c_char) -> c_int,
-        >,
-        arg: *mut c_void,
-        err: *mut *mut c_char,
-    ) -> c_int;
-}
 fn fail(s: &str) -> io::Error {
     io::Error::other(s.to_owned())
 }
-struct Db(*mut c_void);
+struct Db(*mut sqlite3);
 impl Drop for Db {
     fn drop(&mut self) {
         unsafe {
@@ -48,9 +27,17 @@ impl Drop for Db {
     }
 }
 fn open(path: &Path, flags: c_int) -> io::Result<Db> {
-    use std::os::unix::ffi::OsStrExt;
-    let path =
-        CString::new(path.as_os_str().as_bytes()).map_err(|_| fail("invalid database path"))?;
+    #[cfg(unix)]
+    let path = {
+        use std::os::unix::ffi::OsStrExt;
+        CString::new(path.as_os_str().as_bytes()).map_err(|_| fail("invalid database path"))?
+    };
+    #[cfg(not(unix))]
+    let path = CString::new(
+        path.to_str()
+            .ok_or_else(|| fail("database path is not UTF-8"))?,
+    )
+    .map_err(|_| fail("invalid database path"))?;
     let mut db = ptr::null_mut();
     let rc = unsafe { sqlite3_open_v2(path.as_ptr(), &mut db, flags, ptr::null()) };
     let db = Db(db);
@@ -85,6 +72,30 @@ fn integrity(db: &Db) -> io::Result<()> {
     };
     if rc != 0 || !ok {
         return Err(fail("SQLite integrity check failed"));
+    }
+    unsafe extern "C" fn foreign_key_violation(
+        arg: *mut c_void,
+        _: c_int,
+        _: *mut *mut c_char,
+        _: *mut *mut c_char,
+    ) -> c_int {
+        unsafe {
+            *(arg as *mut bool) = true;
+        }
+        0
+    }
+    let mut has_foreign_key_violation = false;
+    let rc = unsafe {
+        sqlite3_exec(
+            db.0,
+            c"PRAGMA foreign_key_check".as_ptr(),
+            Some(foreign_key_violation),
+            &mut has_foreign_key_violation as *mut bool as *mut c_void,
+            ptr::null_mut(),
+        )
+    };
+    if rc != 0 || has_foreign_key_violation {
+        return Err(fail("SQLite foreign key check failed"));
     }
     Ok(())
 }
@@ -277,7 +288,10 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
         fs::create_dir(&root).unwrap();
         let db = open(&root.join("source.sqlite"), 2 | 4).unwrap();
-        sql(&db, "PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; CREATE TABLE selection(id TEXT, recipe TEXT); INSERT INTO selection VALUES('selected-1','recipe-1');");
+        sql(
+            &db,
+            "PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; CREATE TABLE selection(id TEXT, recipe TEXT); INSERT INTO selection VALUES('selected-1','recipe-1');",
+        );
         assert!(root.join("source.sqlite-wal").exists());
         fs::create_dir(root.join("profiles")).unwrap();
         fs::write(root.join("profiles/profile.json"), "profile-1").unwrap();

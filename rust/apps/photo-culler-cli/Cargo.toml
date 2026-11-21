@@ -7,4 +7,6 @@ license.workspace = true
 [dependencies]
 photo-culler-core.workspace = true
 photo-culler-image-engine = { path = "../../crates/photo-culler-image-engine" }
+libc = "0.2"
 serde_json.workspace = true
+ureq.workspace = true
