@@ -312,10 +312,16 @@ async function issuePairingCode(origin, sessionToken) {
 }
 
 async function waitForState(page, expected) {
-  await page.waitForFunction(
-    (state) => document.documentElement.dataset.photoCullerState === state,
+  const deadline = Date.now() + 45_000;
+  const html = page.locator("html");
+  while (Date.now() < deadline) {
+    if (await html.getAttribute("data-photo-culler-state") === expected) break;
+    await delay(100);
+  }
+  assert.equal(
+    await html.getAttribute("data-photo-culler-state"),
     expected,
-    { timeout: 45_000 },
+    `document did not reach ${expected} state within 45000 ms`,
   );
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const status = page.locator("#application-status");

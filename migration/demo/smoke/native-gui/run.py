@@ -67,22 +67,40 @@ def ready(process, status):
     raise TimeoutError("Slint did not report the visible demo gallery")
 
 
-def json_get(url):
-    with urllib.request.urlopen(url, timeout=3) as response:
+def json_get(url, bearer=None):
+    headers = {"Authorization": f"Bearer {bearer}"} if bearer else {}
+    request = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(request, timeout=3) as response:
         if response.status != 200:
             raise RuntimeError(f"GET {url} returned {response.status}")
         return json.loads(response.read())
 
 
-def probe(origin):
+def probe(origin, bearer=None):
     health = json_get(origin + "/api/v1/health")
-    gallery = json_get(origin + "/api/v1/galleries/demo/photos")
-    with urllib.request.urlopen(origin + "/api/v1/photos/demo-001/thumbnail/800", timeout=3) as response:
+    if health.get("status") != "ready":
+        raise RuntimeError("health response did not satisfy S01")
+    if not bearer:
+        try:
+            json_get(origin + "/api/v1/galleries/demo/photos")
+        except urllib.error.HTTPError as error:
+            if error.code != 401:
+                raise
+        else:
+            raise RuntimeError("protected gallery route accepted an unauthenticated probe")
+        return "health=ready; protected gallery rejects missing bearer with HTTP 401; UI loaded demo-001.jpg"
+
+    gallery = json_get(origin + "/api/v1/galleries/demo/photos", bearer)
+    request = urllib.request.Request(
+        origin + "/api/v1/photos/demo-001/thumbnail/800",
+        headers={"Authorization": f"Bearer {bearer}"},
+    )
+    with urllib.request.urlopen(request, timeout=3) as response:
         data = response.read()
         if response.status != 200 or not response.headers.get("Content-Type", "").lower().startswith("image/jpeg"):
             raise RuntimeError("demo thumbnail is not image/jpeg")
-    if health.get("status") != "ready" or not any(x.get("photo_id") == "demo-001" for x in gallery.get("items", [])):
-        raise RuntimeError("health/gallery response did not satisfy S01")
+    if not any(x.get("photo_id") == "demo-001" for x in gallery.get("items", [])):
+        raise RuntimeError("authenticated gallery response did not satisfy S01")
     if not data.startswith(b"\xff\xd8\xff"):
         raise RuntimeError("thumbnail is not a JPEG")
     return f"health=ready; gallery=demo-001.jpg; thumbnail=image/jpeg ({len(data)} bytes)"
@@ -450,7 +468,7 @@ end tell'''
               "-Mode", "Close", "-ProcessId", str(pid)], timeout=15)
 
 
-def launch(desktop, status, log, external=None, gallery_smoke=False):
+def launch(desktop, status, log, external=None, gallery_smoke=False, bearer=None):
     status.unlink(missing_ok=True)
     env = os.environ.copy()
     env["PHOTO_CULLER_SMOKE_STATUS_FILE"] = str(status)
@@ -462,8 +480,13 @@ def launch(desktop, status, log, external=None, gallery_smoke=False):
         env["PHOTO_CULLER_GALLERY_SMOKE"] = "1"
     if external:
         env["PHOTO_CULLER_API_ORIGIN"] = external
+        if bearer:
+            env["PHOTO_CULLER_BEARER"] = bearer
+        else:
+            env.pop("PHOTO_CULLER_BEARER", None)
     else:
         env.pop("PHOTO_CULLER_API_ORIGIN", None)
+        env.pop("PHOTO_CULLER_BEARER", None)
     stream = log.open("wb")
     p = subprocess.Popen([str(desktop)], cwd=desktop.parent, env=env, stdout=stream, stderr=subprocess.STDOUT)
     p._log = stream
@@ -590,14 +613,21 @@ def start_external(server, log):
         p.wait(timeout=5)
         stream.close()
         raise RuntimeError("external server exited before readiness")
-    origin = json.loads(line).get("origin")
+    ready = json.loads(line)
+    origin = ready.get("origin")
+    bearer = ready.get("session_token")
     if not isinstance(origin, str) or not origin.startswith("http://127.0.0.1:"):
         p.kill()
         p.wait(timeout=5)
         stream.close()
         raise RuntimeError(f"invalid server origin: {origin}")
+    if not isinstance(bearer, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", bearer):
+        p.kill()
+        p.wait(timeout=5)
+        stream.close()
+        raise RuntimeError("owned server did not provide a valid private session bearer")
     p._log = stream
-    return p, origin
+    return p, origin, bearer
 
 
 def stop_external(p):
@@ -655,11 +685,11 @@ def main():
         args.platform, client, out, "gallery-smoke", True, gallery_smoke=True
     )
 
-    external, origin = start_external(service, out / "external-server.log")
+    external, origin, bearer = start_external(service, out / "external-server.log")
     try:
-        external_probe = probe(origin)
+        external_probe = probe(origin, bearer)
         status, log = out / "external-status.tsv", out / "external-desktop.log"
-        p = launch(client, status, log, origin)
+        p = launch(client, status, log, origin, bearer=bearer)
         try:
             actual, child = ready(p, status)
             if actual != origin or child is not None:
