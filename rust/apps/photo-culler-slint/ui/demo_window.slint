@@ -32,6 +32,7 @@ export component DemoWindow inherits Window {
     in property <string> gallery-title: "Sesión de muestra";
     in property <string> service-status: "Esperando al servicio local…";
     in property <bool> web-layout: false;
+    in property <bool> folder-selection-available: false;
     in-out property <string> search-query: "";
     in property <int> kept-count: 0;
     in property <int> alternate-count: 0;
@@ -219,6 +220,7 @@ export component DemoWindow inherits Window {
                 horizontal-stretch: 1;
                 vertical-stretch: 1;
                 web-layout: root.web-layout;
+                folder-selection-available: root.folder-selection-available;
                 viewport-width: root.width / 1px;
                 search-query: root.search-query;
                 view-state: root.view-state;

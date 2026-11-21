@@ -305,6 +305,7 @@ component GalleryCard inherits Rectangle {
 
 export component LibraryGallery inherits Rectangle {
     in property <bool> web-layout: false;
+    in property <bool> folder-selection-available: false;
     in property <int> viewport-width: 0;
     in property <string> search-query: "";
     in property <int> view-state: 1; // 0 loading, 1 ready, 2 empty, 3 error
@@ -360,19 +361,21 @@ export component LibraryGallery inherits Rectangle {
     }
     if root.view-state == 2: StatusPanel {
         state: PanelState.empty;
-        show-folder-action: !root.web-layout;
-        title: root.web-layout ? "Your catalog will appear here" : "Your library starts with a folder";
-        detail: root.web-layout ? "Import a folder or open a photo archive to get started." : "Choose the folder that contains your photos. Photo Culler will keep your originals in place.";
+        show-folder-action: !root.web-layout && root.folder-selection-available;
+        title: root.web-layout ? "Your catalog will appear here" : "Tu biblioteca empieza con una carpeta";
+        detail: root.web-layout ? "Import a folder or open a photo archive to get started." : "Elige la carpeta que contiene tus fotos. Photo Culler mantendrá los originales en su sitio.";
         choose-folder => { root.choose-folder-requested(); }
         width: parent.width;
         height: parent.height;
     }
     if root.view-state == 3: StatusPanel {
         state: PanelState.error;
+        show-folder-action: !root.web-layout && root.folder-selection-available;
         title: "Galería no disponible";
         detail: root.error-message;
         action-label: "Reintentar";
         retry => { root.retry(); }
+        choose-folder => { root.choose-folder-requested(); }
         width: parent.width;
         height: parent.height;
     }
