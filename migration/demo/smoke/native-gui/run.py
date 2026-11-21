@@ -488,7 +488,13 @@ def launch(desktop, status, log, external=None, gallery_smoke=False, bearer=None
         env.pop("PHOTO_CULLER_API_ORIGIN", None)
         env.pop("PHOTO_CULLER_BEARER", None)
     stream = log.open("wb")
-    p = subprocess.Popen([str(desktop)], cwd=desktop.parent, env=env, stdout=stream, stderr=subprocess.STDOUT)
+    # Owned fixture runs are explicit so the normal desktop launch can open
+    # the user's persistent library and first-run folder picker. External
+    # server runs remain configured only through the API origin and bearer.
+    command = [str(desktop)]
+    if not external:
+        command.append("--demo")
+    p = subprocess.Popen(command, cwd=desktop.parent, env=env, stdout=stream, stderr=subprocess.STDOUT)
     p._log = stream
     return p
 
