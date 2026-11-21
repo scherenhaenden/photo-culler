@@ -48,5 +48,17 @@
 - Se eliminó `/private/tmp/photo-culler-s01-final-target` después de verificar
   los builds. Ocupaba 4,7 GB; el espacio libre de `/private/tmp` pasó de 55 GiB
   a 59 GiB.
+- Se verificó que `/private/tmp/photo-culler-pro-design-artifacts-final-align`
+  solo contenía dos capturas idénticas, por SHA-256, a las de
+  `/private/tmp/photo-culler-pro-design-artifacts-final`; se eliminó la copia
+  duplicada (aprox. 196 KiB).
 - No se borraron cachés globales, worktrees existentes ni archivos previos del
-  usuario.
+  usuario. Se conservaron los demás temporales que contienen artefactos de
+  aceptación, referencias visuales o ramas/cambios locales sin publicar.
+
+### Entrega publicada
+
+- `846fb58` — conecta el flujo sintético de servidor y Slint, corrige las
+  cabeceras/cache, los reintentos y el timeout de inicio; incluye el handoff.
+- `5b5449b` — publica el roadmap de paridad visual referenciado por el handoff.
+- Ambos commits están en `origin/feature/sprint-01-rust-foundation`.
