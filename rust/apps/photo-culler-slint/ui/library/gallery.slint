@@ -324,6 +324,7 @@ export component LibraryGallery inherits Rectangle {
     in-out property <int> grid-density: 1; // 0 small, 1 medium, 2 large
     in-out property <bool> sort-descending: true;
     callback retry();
+    callback choose-folder-requested();
     callback refresh-gallery();
     callback previous-photo();
     callback next-photo();
@@ -359,8 +360,10 @@ export component LibraryGallery inherits Rectangle {
     }
     if root.view-state == 2: StatusPanel {
         state: PanelState.empty;
-        title: "Tu catálogo aparecerá aquí";
-        detail: "Elige una galería del archivo o importa una carpeta para empezar.";
+        show-folder-action: !root.web-layout;
+        title: root.web-layout ? "Your catalog will appear here" : "Your library starts with a folder";
+        detail: root.web-layout ? "Import a folder or open a photo archive to get started." : "Choose the folder that contains your photos. Photo Culler will keep your originals in place.";
+        choose-folder => { root.choose-folder-requested(); }
         width: parent.width;
         height: parent.height;
     }
