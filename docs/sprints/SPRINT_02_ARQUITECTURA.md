@@ -1,6 +1,6 @@
 # Sprint 02 · Diseño de implementación del cliente de escritorio
 
-**Estado: diseño para implementar.** Base revisada: `382d30c`. Leer primero el [recorrido del fotógrafo](SPRINT_02.md). Esta guía concreta las tres ramas de ese plan. El escenario de referencia empieza con un perfil de usuario vacío, una carpeta con 13 JPEG distintos y el paquete nativo con los dos ejecutables contiguos.
+**Estado: diseño aplicado; aceptación de paquetes pendiente.** La implementación está integrada en `feature/sprint-02-linux-library` mediante los PR #162–#166. Leer el [recorrido y estado actual del sprint](SPRINT_02.md). El escenario de aceptación sigue empezando con un perfil vacío, una carpeta con 13 JPEG distintos y el paquete nativo con los dos ejecutables contiguos.
 
 ## Mapa de responsabilidades
 
@@ -30,13 +30,15 @@
 | Ver progreso o reabrir | Consultar `import_job(job_id)` mediante el sondeo de `import_flow`. Al reabrir, recuperar el trabajo conocido del servidor. Usar los contadores que devuelve el DTO. | Distinguir pausado, completado, cancelado y fallido. Un error temporal de transporte conserva el ID. Un trabajo pausado se reanuda mediante su acción existente. |
 | Ver las fotos | Al completarse el trabajo, refrescar una vez por galería/trabajo mediante el controlador existente. Obtener la página siguiente con el cursor devuelto por el servidor. | Un fallo de miniatura afecta a esa tarjeta. Un fallo de página conserva la página visible para reintentar. Reabrir recupera el catálogo y sus IDs. |
 
-## Fichas para ejecutar en orden
+## Implementación integrada y cierre pendiente
 
-Partir de `feature/sprint-02-linux-library` actualizada en cada ficha. Abrir un PR hacia esa rama y empezar la ficha siguiente al integrarse la anterior. Cada PR describe el comportamiento visible, archivos tocados, prueba acotada y resultado observado.
+Las fichas de implementación se trabajaron en paralelo desde el SHA de diseño y se integraron en el sprint mediante PR revisados #162–#166. No se crean nuevas fichas de producto antes de cerrar la aceptación.
 
-1. **`feature/s02-abrir-catalogo` — abrir y reabrir.** Trabajar en launcher, perfil de escritorio y pantalla inicial. Separar primera apertura, reapertura, demo y origen externo. Entregar ventana vacía con acción visible más reapertura de un perfil ya preparado. Probar perfil ausente, existente, corrupto y cierre del hijo. Mantener la demo en sus smokes con la opción explícita.
-2. **`feature/s02-elegir-carpeta` — del selector al ID.** Implementar el adaptador nativo, enlazar la acción y conectar el hijo antes de pedir fuentes. Probar cancelar, carpeta con espacios, carpeta inaccesible y guardado/reapertura de la fuente. Entregar una captura por SO del mismo diálogo Slint después de elegir la carpeta. La ruta absoluta queda en el host y en la configuración de arranque local; las llamadas REST posteriores usan IDs.
-3. **`feature/s02-importar-biblioteca` — del ID a las fotos.** Conectar estimación, confirmación, sondeo, actualización y navegación mediante los módulos indicados arriba. Probar doble clic, error recuperable, reimportación y paso a segunda página. Entregar el recorrido desde el paquete Linux y la misma secuencia en macOS.
+1. **Primera apertura y perfil** (`#163`, `#164`, integrado por `#166`): estado vacío accesible, perfil versionado y recuperación de archivo inválido. Falta demostrar abrir/cerrar/reabrir con los paquetes nativos.
+2. **Elegir carpeta** (`#162`, integrado por `#166`): portal XDG en Linux, diálogo nativo en macOS, cancelación, ruta sin pérdida y asociación con la galería vigente. Falta probar carpeta real con espacios y volumen no disponible en ambos sistemas.
+3. **Importar y revisar fotos** (`#166` conecta el diálogo existente): reutiliza descubrimiento de fuentes, estimación, confirmación, sondeo, refresco y cursores del import flow. Falta correr el caso de 13 JPEG, segunda página, reimportación sin duplicados y reapertura; registrar hashes y capturas comparables.
+
+Los PR de función tuvieron sus checks acotados. Los gates completos se habilitan para la rama Sprint 02 en el workflow actualizado del PR de CI/status; revisar resultados Linux, macOS y regresión WASM antes de declarar cerrado el sprint.
 
 **Comandos de referencia.** En una rama de función, seleccionar el módulo modificado; por ejemplo, una vez registrado el selector, `cargo test --locked --manifest-path rust/Cargo.toml -p photo-culler-slint --lib file_selection`. Comprobar que ejecutó casos. Para comportamientos nativos, adjuntar además el resultado de la interacción en la ventana real. En la rama de integración ejecutar `cargo test --locked --manifest-path rust/Cargo.toml --workspace` y la matriz de paquetes. Antes de la aceptación, adaptar los filtros de rama y condiciones internas de [integración](../../.github/workflows/rust-integration-candidate-build.yml) y [artefactos](../../.github/workflows/rust-slint-demo.yml) para que los trabajos completos corran sobre el sprint.
 
