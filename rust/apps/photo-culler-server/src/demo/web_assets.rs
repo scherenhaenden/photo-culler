@@ -238,6 +238,28 @@ fn serve_name(bundle: AssetBundle, name: &str) -> Response<Body> {
     response
         .headers_mut()
         .insert("cache-control", HeaderValue::from_static("no-store"));
+    let security_headers = match *mime {
+        "text/html; charset=utf-8" => Some(crate::origin::frontend_headers(false)),
+        "application/wasm" => Some(crate::origin::frontend_headers(true)),
+        _ => None,
+    };
+    if let Some(headers) = security_headers {
+        for (name, value) in headers {
+            // `Content-Type` was already set from the validated declaration.
+            // Apply the origin policy's matching frontend headers here.
+            if *name != "content-type" {
+                response
+                    .headers_mut()
+                    .insert(*name, HeaderValue::from_static(value));
+            }
+        }
+    }
+    if *mime == "text/javascript; charset=utf-8" {
+        response.headers_mut().insert(
+            "x-content-type-options",
+            HeaderValue::from_static("nosniff"),
+        );
+    }
     response
 }
 fn not_found() -> Response<Body> {
@@ -248,6 +270,9 @@ fn not_found() -> Response<Body> {
     response
         .headers_mut()
         .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+    response
+        .headers_mut()
+        .insert("cache-control", HeaderValue::from_static("no-store"));
     response
 }
 
@@ -399,6 +424,12 @@ mod tests {
                 .unwrap();
             assert_eq!(response.status(), StatusCode::OK);
             assert_eq!(response.headers()[CONTENT_TYPE], mime);
+            assert_eq!(response.headers()["cache-control"], "no-store");
+            assert_eq!(response.headers()["x-content-type-options"], "nosniff");
+            if uri == "/" || uri.ends_with(".wasm") {
+                assert_eq!(response.headers()["referrer-policy"], "no-referrer");
+                assert!(response.headers().contains_key("content-security-policy"));
+            }
             assert_eq!(
                 to_bytes(response.into_body(), 1024).await.unwrap().as_ref(),
                 bytes
@@ -418,6 +449,7 @@ mod tests {
                 .await
                 .unwrap();
             assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            assert_eq!(response.headers()["cache-control"], "no-store");
         }
     }
     #[test]

@@ -80,7 +80,16 @@ async fn enforce(
         .0
         .check(method, &host_refs, &origin_refs, &fetch_refs, false)
     {
-        Ok(()) => next.run(request).await,
+        Ok(()) => {
+            let mut response = next.run(request).await;
+            // The local catalog and fixture API must never be cached by a
+            // browser or intermediary. This also covers API error responses.
+            response.headers_mut().insert(
+                "cache-control",
+                axum::http::HeaderValue::from_static("no-store"),
+            );
+            response
+        }
         Err(Rejection::InvalidMethod) => rejection(
             StatusCode::METHOD_NOT_ALLOWED,
             "method_not_allowed",
