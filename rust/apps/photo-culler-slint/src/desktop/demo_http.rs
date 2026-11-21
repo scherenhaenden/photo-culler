@@ -218,10 +218,12 @@ fn valid_api_request(method: &str, path: &str) -> bool {
     let (route, query) = path.split_once('?').unwrap_or((path, ""));
     let has_query = path.contains('?');
     let catalog_page = route.starts_with("/api/v1/galleries/") && route.ends_with("/photos");
+    let preview_route = route.starts_with("/api/v1/photos/") && route.ends_with("/preview");
     let v2_route = valid_v2_route(route);
     let query_is_safe = !has_query
         || (!query.is_empty()
             && (catalog_page
+                || preview_route
                 || route == "/api/v2/import-jobs"
                 || route == "/api/v2/scan-revisions")
             && {
@@ -232,6 +234,8 @@ fn valid_api_request(method: &str, path: &str) -> bool {
                     };
                     let allowed = if catalog_page {
                         matches!(key, "limit" | "decision" | "cursor")
+                    } else if preview_route {
+                        key == "size"
                     } else if route == "/api/v2/scan-revisions" {
                         matches!(key, "limit" | "gallery_id")
                     } else if route == "/api/v2/import-jobs" {
@@ -242,6 +246,7 @@ fn valid_api_request(method: &str, path: &str) -> bool {
                     allowed
                         && seen.insert(key)
                         && (key != "active_only" || value == "true")
+                        && (key != "size" || matches!(value, "small" | "medium" | "large" | "full"))
                         && !value.is_empty()
                         && value.bytes().all(|byte| {
                             byte.is_ascii_alphanumeric()
@@ -354,6 +359,22 @@ fn map_io(error: std::io::Error) -> HttpError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn accepts_only_bounded_preview_size_queries() {
+        assert!(valid_api_request(
+            "GET",
+            "/api/v1/photos/demo-001/preview?size=medium"
+        ));
+        assert!(!valid_api_request(
+            "GET",
+            "/api/v1/photos/demo-001/preview?size=original"
+        ));
+        assert!(!valid_api_request(
+            "GET",
+            "/api/v1/photos/demo-001/preview?size=medium&token=secret"
+        ));
+    }
     use std::net::TcpListener;
 
     fn serve(responses: Vec<(String, String, Vec<u8>)>) -> (SocketAddr, JoinHandle<Vec<String>>) {

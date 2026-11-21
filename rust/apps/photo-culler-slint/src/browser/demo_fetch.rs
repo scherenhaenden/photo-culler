@@ -10,6 +10,7 @@ use std::fmt;
 pub const MAX_JSON_BYTES: usize = 64 * 1024;
 const MAX_IMPORT_JSON_BYTES: usize = 1_048_576;
 pub const MAX_THUMBNAIL_BYTES: usize = 2 * 1024 * 1024;
+pub const MAX_PREVIEW_BYTES: usize = 16 * 1024 * 1024;
 const API_PREFIX: &str = "/api/v1";
 pub const HEALTH_PATH: &str = "/api/v1/health";
 pub const GALLERY_PATH: &str = "/api/v1/galleries/demo/photos";
@@ -63,6 +64,7 @@ pub fn validate_api_path(path: &str) -> Result<(), TransportError> {
     let (route, query) = path.split_once('?').unwrap_or((path, ""));
     let has_query = path.contains('?');
     let gallery_page = route.starts_with("/api/v1/galleries/") && route.ends_with("/photos");
+    let preview_route = route.starts_with("/api/v1/photos/") && route.ends_with("/preview");
     let v2_route = valid_v2_route(route);
     #[cfg(target_arch = "wasm32")]
     let same_origin_path = {
@@ -74,6 +76,7 @@ pub fn validate_api_path(path: &str) -> Result<(), TransportError> {
     let safe_query = !has_query
         || (!query.is_empty()
             && (gallery_page
+                || preview_route
                 || route == "/api/v2/import-jobs"
                 || route == "/api/v2/scan-revisions")
             && {
@@ -84,6 +87,8 @@ pub fn validate_api_path(path: &str) -> Result<(), TransportError> {
                     };
                     let allowed_key = if gallery_page {
                         matches!(key, "limit" | "decision" | "cursor")
+                    } else if preview_route {
+                        key == "size"
                     } else if route == "/api/v2/scan-revisions" {
                         matches!(key, "limit" | "gallery_id")
                     } else if route == "/api/v2/import-jobs" {
@@ -94,6 +99,7 @@ pub fn validate_api_path(path: &str) -> Result<(), TransportError> {
                     allowed_key
                         && seen.insert(key)
                         && (key != "active_only" || value == "true")
+                        && (key != "size" || matches!(value, "small" | "medium" | "large" | "full"))
                         && !value.is_empty()
                         && value.bytes().all(|byte| {
                             byte.is_ascii_alphanumeric()
@@ -129,6 +135,14 @@ pub fn request_limit(path: &str) -> Result<usize, TransportError> {
         || (route.starts_with("/api/v1/galleries/") && route.ends_with("/photos"))
     {
         return Ok(MAX_JSON_BYTES);
+    }
+    if route.starts_with("/api/v1/photos/")
+        && route.ends_with("/preview")
+        && path
+            .split_once('?')
+            .is_some_and(|(_, query)| query.starts_with("size=") && !query.contains('&'))
+    {
+        return Ok(MAX_PREVIEW_BYTES);
     }
     if route.starts_with("/api/v1/photos/")
         && let Some((_, size)) = route.rsplit_once("/thumbnail/")
@@ -430,6 +444,18 @@ mod tests {
         assert_eq!(request_limit(HEALTH_PATH), Ok(MAX_JSON_BYTES));
         assert_eq!(request_limit(GALLERY_PATH), Ok(MAX_JSON_BYTES));
         assert_eq!(request_limit(THUMBNAIL_PATH), Ok(MAX_THUMBNAIL_BYTES));
+        assert_eq!(
+            request_limit("/api/v1/photos/demo-001/preview?size=medium"),
+            Ok(MAX_PREVIEW_BYTES)
+        );
+        assert_eq!(
+            validate_api_path("/api/v1/photos/demo-001/preview?size=medium"),
+            Ok(())
+        );
+        assert_eq!(
+            validate_api_path("/api/v1/photos/demo-001/preview?size=raw"),
+            Err(TransportError::InvalidPath)
+        );
         assert_eq!(
             request_limit("https://evil.invalid/api/v1/health"),
             Err(TransportError::InvalidPath)

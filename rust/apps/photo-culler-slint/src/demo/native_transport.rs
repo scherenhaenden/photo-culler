@@ -161,7 +161,10 @@ impl NativeDemoTransport {
                     Some(body) => transport.put_json(&path, &body),
                     None => transport.get(&path),
                 };
-                response.map_err(|error| TransportError(format!("native HTTP request: {error:?}")))
+                response.map_err(|error| {
+                    let route = path.split('?').next().unwrap_or(&path);
+                    TransportError(format!("native HTTP request to {route}: {error:?}"))
+                })
             })
             .map(|response| Response {
                 status: response.status,
