@@ -31,6 +31,37 @@ class GalleryParityTests(unittest.TestCase):
             with self.subTest(contract=contract):
                 self.assertIn(contract, GALLERY)
 
+    def test_selection_toolbar_actions_are_keyboard_accessible(self):
+        actions_start = GALLERY.index("component DecisionAction")
+        actions_end = GALLERY.index("component GalleryCard", actions_start)
+        actions = GALLERY[actions_start:actions_end]
+
+        for contract in (
+            "component DecisionAction inherits FocusScope",
+            "component SelectAllAction inherits FocusScope",
+            "focus-on-tab-navigation: true;",
+            "accessible-role: button;",
+            "accessible-label:",
+            "event.text == Key.Return || event.text == \" \"",
+            "root.focus(); root.activated(root.decision);",
+            "root.focus(); root.activated();",
+            "border-width: root.has-focus ? 2px : 0px;",
+            "border-color: root.has-focus ? DesignTokens.focus : #ffffff19;",
+        ):
+            with self.subTest(contract=contract):
+                self.assertIn(contract, actions)
+
+        for contract in (
+            'accessible-name: "Keep selected photos";',
+            'accessible-name: "Mark selected photos as alternate";',
+            'accessible-name: "Reject selected photos";',
+            'accessible-name: "Clear decisions for selected photos";',
+            'accessible-label: root.all-selected ? "Deselect all visible photos" : "Select all visible photos";',
+            "activated => { root.select-all-requested(); }",
+        ):
+            with self.subTest(contract=contract):
+                self.assertIn(contract, GALLERY)
+
     def test_reference_shell_gallery_geometry_and_density_breakpoints(self):
         for contract in (
             "height: 46px;",

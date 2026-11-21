@@ -82,30 +82,87 @@ component PhotoNavigationButton inherits FocusScope {
     }
 }
 
-component DecisionAction inherits Rectangle {
+component DecisionAction inherits FocusScope {
     in property <string> label;
     in property <string> decision;
+    in property <string> accessible-name;
     in property <color> fill-color: #ffffff19;
     in property <color> text-color: #ffffff;
     callback activated(decision: string);
 
     height: 18px;
     min-width: 34px;
-    background: root.fill-color;
-    border-radius: 999px;
-    opacity: 0.92;
-    Text {
-        text: root.label;
-        color: root.text-color;
-        font-family: DesignTokens.body-font;
-        font-size: 8px;
-        font-weight: 900;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+    focus-on-tab-navigation: true;
+    accessible-role: button;
+    accessible-label: root.accessible-name;
+    key-pressed(event) => {
+        if (event.text == Key.Return || event.text == " ") {
+            root.activated(root.decision);
+            accept
+        } else { reject }
     }
-    TouchArea {
-        mouse-cursor: pointer;
-        clicked => { root.activated(root.decision); }
+
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: root.fill-color;
+        border-radius: 999px;
+        border-width: root.has-focus ? 2px : 0px;
+        border-color: DesignTokens.focus;
+        opacity: 0.92;
+        Text {
+            text: root.label;
+            color: root.text-color;
+            font-family: DesignTokens.body-font;
+            font-size: 8px;
+            font-weight: 900;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.focus(); root.activated(root.decision); }
+        }
+    }
+}
+
+component SelectAllAction inherits FocusScope {
+    in property <bool> all-selected: false;
+    callback activated();
+
+    height: 24px;
+    min-width: 92px;
+    focus-on-tab-navigation: true;
+    accessible-role: button;
+    accessible-label: root.all-selected ? "Deselect all visible photos" : "Select all visible photos";
+    key-pressed(event) => {
+        if (event.text == Key.Return || event.text == " ") {
+            root.activated();
+            accept
+        } else { reject }
+    }
+
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: #050505;
+        border-radius: 999px;
+        border-width: root.has-focus ? 2px : 1px;
+        border-color: root.has-focus ? DesignTokens.focus : #ffffff19;
+        opacity: 1;
+        Text {
+            text: root.all-selected ? "DESELECT ALL" : "SELECT ALL";
+            color: #ffffffb3;
+            font-family: DesignTokens.body-font;
+            font-size: 8px;
+            font-weight: 900;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.focus(); root.activated(); }
+        }
     }
 }
 
@@ -457,43 +514,29 @@ export component LibraryGallery inherits Rectangle {
                         }
                         DecisionAction {
                             label: "KEEP"; decision: "keep"; fill-color: #25a18e;
+                            accessible-name: "Keep selected photos";
                             activated(decision) => { root.decision-requested(decision); }
                         }
                         DecisionAction {
                             label: "ALT"; decision: "alt"; fill-color: #f7c59f; text-color: #111111;
+                            accessible-name: "Mark selected photos as alternate";
                             activated(decision) => { root.decision-requested(decision); }
                         }
                         DecisionAction {
                             label: "REJECT"; decision: "reject"; fill-color: #ff6b35;
+                            accessible-name: "Reject selected photos";
                             activated(decision) => { root.decision-requested(decision); }
                         }
                         DecisionAction {
                             label: "CLEAR"; decision: "undecided";
+                            accessible-name: "Clear decisions for selected photos";
                             activated(decision) => { root.decision-requested(decision); }
                         }
                     }
                 }
-                Rectangle {
-                    height: 24px;
-                    min-width: 92px;
-                    background: #050505;
-                    border-radius: 999px;
-                    border-width: 1px;
-                    border-color: #ffffff19;
-                    opacity: 1;
-                    Text {
-                        text: root.all-selected ? "DESELECT ALL" : "SELECT ALL";
-                        color: #ffffffb3;
-                        font-family: DesignTokens.body-font;
-                        font-size: 8px;
-                        font-weight: 900;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                    }
-                    TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => { root.select-all-requested(); }
-                    }
+                SelectAllAction {
+                    all-selected: root.all-selected;
+                    activated => { root.select-all-requested(); }
                 }
                 Rectangle {
                     width: 112px;
