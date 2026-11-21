@@ -93,6 +93,9 @@ fn resolve_launch_config(command: DesktopCommand) -> Result<LaunchConfig, String
     let explicit =
         demo || data_dir.is_some() || !authorized_roots.is_empty() || gallery_id.is_some();
     if explicit {
+        if std::env::var_os("PHOTO_CULLER_API_ORIGIN").is_some() {
+            return Err("persistent catalog and demo options cannot be combined with PHOTO_CULLER_API_ORIGIN".into());
+        }
         let folder_selection_available = !demo && data_dir.is_some();
         return Ok(LaunchConfig {
             data_dir,
@@ -628,9 +631,7 @@ fn start_load(
         if load_result.is_ok()
             && let Some(gallery_id) = resolved_gallery.clone()
         {
-            if let Ok(mut config) = launch_config_after_load.try_borrow_mut() {
-                config.gallery_id = Some(gallery_id.clone());
-            }
+            launch_config_after_load.borrow_mut().gallery_id = Some(gallery_id.clone());
             if let (Some(path), Some(root)) = (profile_file_after_load, profile_root_after_load) {
                 if let Ok(profile) = DesktopProfile::for_selection(&root, Some(&gallery_id)) {
                     if let Err(error) = profile::save(&path, &profile) {
