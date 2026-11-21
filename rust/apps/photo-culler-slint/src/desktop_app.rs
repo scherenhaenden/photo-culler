@@ -77,6 +77,7 @@ struct LaunchConfig {
     profile_file: Option<PathBuf>,
     choose_folder_first: bool,
     startup_error: Option<String>,
+    folder_selection_available: bool,
 }
 
 fn resolve_launch_config(command: DesktopCommand) -> Result<LaunchConfig, String> {
@@ -92,6 +93,7 @@ fn resolve_launch_config(command: DesktopCommand) -> Result<LaunchConfig, String
     let explicit =
         demo || data_dir.is_some() || !authorized_roots.is_empty() || gallery_id.is_some();
     if explicit {
+        let folder_selection_available = !demo && data_dir.is_some();
         return Ok(LaunchConfig {
             data_dir,
             authorized_roots,
@@ -99,6 +101,21 @@ fn resolve_launch_config(command: DesktopCommand) -> Result<LaunchConfig, String
             profile_file: None,
             choose_folder_first: false,
             startup_error: None,
+            folder_selection_available,
+        });
+    }
+
+    // An explicit external API origin must not be paired with local profile
+    // arguments; DemoServer rejects that ambiguous combination.
+    if std::env::var_os("PHOTO_CULLER_API_ORIGIN").is_some() {
+        return Ok(LaunchConfig {
+            data_dir: None,
+            authorized_roots: Vec::new(),
+            gallery_id: None,
+            profile_file: None,
+            choose_folder_first: false,
+            startup_error: None,
+            folder_selection_available: false,
         });
     }
 
@@ -116,6 +133,7 @@ fn resolve_launch_config(command: DesktopCommand) -> Result<LaunchConfig, String
         profile_file: Some(profile_file),
         choose_folder_first: root.is_none() || startup_error.is_some(),
         startup_error,
+        folder_selection_available: true,
     })
 }
 
@@ -237,17 +255,23 @@ fn run_application(initial_config: LaunchConfig) -> Result<(), String> {
     let controller = Arc::new(DemoController::new(view.clone(), Arc::new(SlintDispatcher)));
     let server = Rc::new(RefCell::new(None));
     let launch_config = Rc::new(RefCell::new(initial_config.clone()));
+    window.set_folder_selection_available(initial_config.folder_selection_available);
 
     let analysis_gallery_changed = analysis_flow::bind(&window, controller.clone(), client.clone());
     import_flow::bind(&window, controller.clone(), client.clone());
 
     if initial_config.choose_folder_first {
-        window.set_view_state(2);
         let status = initial_config.startup_error.as_deref().map_or_else(
             || "Elige una carpeta para crear tu catálogo local.".to_owned(),
             |error| format!("No se pudo leer la configuración guardada ({error}). El archivo se conservará como copia antes de continuar."),
         );
-        window.set_service_status(status.into());
+        if initial_config.startup_error.is_some() {
+            window.set_error_message(status.into());
+            window.set_view_state(3);
+        } else {
+            window.set_view_state(2);
+            window.set_service_status(status.into());
+        }
     } else {
         start_load(
             &window,
@@ -261,6 +285,7 @@ fn run_application(initial_config: LaunchConfig) -> Result<(), String> {
             initial_config.gallery_id.clone(),
             initial_config.profile_file.clone(),
             initial_config.authorized_roots.first().cloned(),
+            launch_config.clone(),
             false,
             false,
         );
@@ -294,6 +319,7 @@ fn run_application(initial_config: LaunchConfig) -> Result<(), String> {
                 config.gallery_id,
                 config.profile_file,
                 config.authorized_roots.first().cloned(),
+                retry_config.clone(),
                 false,
                 true,
             );
@@ -314,7 +340,7 @@ fn run_application(initial_config: LaunchConfig) -> Result<(), String> {
                 if let Some(window) = choose_window.upgrade() {
                     window.set_service_status(error.to_string().into());
                     window.set_error_message(error.to_string().into());
-                    window.set_view_state(2);
+                    window.set_view_state(3);
                 }
                 return;
             }
@@ -324,7 +350,7 @@ fn run_application(initial_config: LaunchConfig) -> Result<(), String> {
             if let Some(window) = choose_window.upgrade() {
                 window.set_service_status("La carpeta seleccionada ya no está disponible.".into());
                 window.set_error_message("La carpeta seleccionada ya no está disponible.".into());
-                window.set_view_state(2);
+                window.set_view_state(3);
             }
             return;
         }
@@ -332,7 +358,7 @@ fn run_application(initial_config: LaunchConfig) -> Result<(), String> {
             if let Some(window) = choose_window.upgrade() {
                 window.set_service_status("No se pudo acceder a la carpeta seleccionada.".into());
                 window.set_error_message("No se pudo acceder a la carpeta seleccionada.".into());
-                window.set_view_state(2);
+                window.set_view_state(3);
             }
             return;
         };
@@ -343,22 +369,10 @@ fn run_application(initial_config: LaunchConfig) -> Result<(), String> {
             {
                 if let Some(window) = choose_window.upgrade() {
                     window.set_service_status(error.into());
-                    window.set_view_state(2);
+                    window.set_error_message(error.clone().into());
+                    window.set_view_state(3);
                 }
                 return;
-            }
-            match DesktopProfile::for_selection(&root, None)
-                .and_then(|profile| profile::save(path, &profile))
-            {
-                Ok(()) => {}
-                Err(error) => {
-                    if let Some(window) = choose_window.upgrade() {
-                        window.set_service_status(error.to_string().into());
-                        window.set_error_message(error.to_string().into());
-                        window.set_view_state(2);
-                    }
-                    return;
-                }
             }
         }
         let fallback_data_dir = choose_config.borrow().data_dir.clone();
@@ -372,7 +386,6 @@ fn run_application(initial_config: LaunchConfig) -> Result<(), String> {
                 .unwrap_or_else(|| PathBuf::from(".")),
         );
         config.authorized_roots = vec![root.clone()];
-        config.gallery_id = None;
         config.choose_folder_first = false;
         config.startup_error = None;
         drop(config);
@@ -399,6 +412,7 @@ fn run_application(initial_config: LaunchConfig) -> Result<(), String> {
                 config.gallery_id,
                 config.profile_file,
                 Some(root),
+                choose_config.clone(),
                 true,
                 false,
             );
@@ -551,6 +565,7 @@ fn start_load(
     gallery_id: Option<String>,
     profile_file: Option<PathBuf>,
     profile_root: Option<PathBuf>,
+    launch_config: Rc<RefCell<LaunchConfig>>,
     open_import_after_load: bool,
     retry: bool,
 ) {
@@ -595,6 +610,7 @@ fn start_load(
     let profile_controller = task_controller.clone();
     let profile_file_after_load = profile_file.clone();
     let profile_root_after_load = profile_root.clone();
+    let launch_config_after_load = launch_config.clone();
     let open_import_window = window.as_weak();
     let smoke_context = server.borrow().as_ref().map(|connection| {
         (
@@ -605,19 +621,29 @@ fn start_load(
         )
     });
     if let Err(error) = slint::spawn_local(async move {
-        let _ = task_controller.execute(client.as_ref(), ticket).await;
-        if let (Some(path), Some(root), Some(gallery_id)) = (
-            profile_file_after_load,
-            profile_root_after_load,
-            profile_controller.active_gallery_id(),
-        ) {
-            if let Ok(profile) = DesktopProfile::for_selection(&root, Some(&gallery_id)) {
-                if let Err(error) = profile::save(&path, &profile) {
-                    eprintln!("could not persist desktop profile: {error}");
+        let load_result = task_controller
+            .execute(client.as_ref(), ticket.clone())
+            .await;
+        let resolved_gallery = profile_controller.active_gallery_id_for(&ticket);
+        if load_result.is_ok()
+            && let Some(gallery_id) = resolved_gallery.clone()
+        {
+            if let Ok(mut config) = launch_config_after_load.try_borrow_mut() {
+                config.gallery_id = Some(gallery_id.clone());
+            }
+            if let (Some(path), Some(root)) = (profile_file_after_load, profile_root_after_load) {
+                if let Ok(profile) = DesktopProfile::for_selection(&root, Some(&gallery_id)) {
+                    if let Err(error) = profile::save(&path, &profile) {
+                        eprintln!("could not persist desktop profile: {error}");
+                    }
                 }
             }
         }
-        if open_import_after_load && let Some(window) = open_import_window.upgrade() {
+        if open_import_after_load
+            && load_result.is_ok()
+            && resolved_gallery.is_some()
+            && let Some(window) = open_import_window.upgrade()
+        {
             window.invoke_import_open_requested();
         }
         if let (Some(status_file), Some((origin, server_pid))) =

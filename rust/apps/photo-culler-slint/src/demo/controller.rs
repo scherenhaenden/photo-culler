@@ -170,6 +170,16 @@ impl<V: DemoView, D: UiDispatcher> DemoController<V, D> {
             .clone()
     }
 
+    /// Returns the resolved gallery only if this load ticket is still current.
+    /// Callers that persist ticket-specific settings must not pair a stale
+    /// request's inputs with a newer request's active gallery.
+    pub fn active_gallery_id_for(&self, ticket: &LoadTicket) -> Option<String> {
+        let state = self.state.lock().ok()?;
+        (state.generation == ticket.generation)
+            .then(|| state.active_gallery_id.clone())
+            .flatten()
+    }
+
     /// Fetch one bounded catalog page and its thumbnails off the event loop.
     /// Stale completions are discarded before they reach the view.
     pub async fn execute<C: DemoClient>(
@@ -667,6 +677,21 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn ticket_specific_gallery_lookup_ignores_superseded_loads() {
+        let c = DemoController::new(Arc::new(FakeView::default()), Arc::new(Queue::default()));
+        let stale = c.begin_load("old-root");
+        let current = c.begin_load("new-root");
+        c.state.lock().unwrap().active_gallery_id = Some("new-gallery".into());
+
+        assert_eq!(c.active_gallery_id_for(&stale), None);
+        assert_eq!(
+            c.active_gallery_id_for(&current).as_deref(),
+            Some("new-gallery")
+        );
+    }
+
     struct FakeClient {
         photos: Vec<DemoPhoto>,
         image: Result<Vec<u8>, DemoError>,
