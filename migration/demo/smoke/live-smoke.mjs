@@ -21,8 +21,8 @@ export async function runLiveSmoke(browserName) {
 
   const processState = spawn(
     serverExecutable,
-    ["--port", "0", "--web-root", webRoot],
-    { stdio: ["ignore", "pipe", "pipe"] },
+    ["--owned", "--port", "0", "--web-root", webRoot],
+    { stdio: ["pipe", "pipe", "pipe"] },
   );
   let serverStderr = "";
   processState.stderr.setEncoding("utf8");
@@ -31,7 +31,9 @@ export async function runLiveSmoke(browserName) {
   let origin;
   let browser;
   try {
-    origin = await waitForOrigin(processState);
+    const ready = await waitForReady(processState);
+    origin = ready.origin;
+    const pairingCode = await issuePairingCode(origin, ready.session_token);
     const browserType = browserName === "chromium" ? chromium : firefox;
     const launchOptions = { headless: browserName === "chromium" };
     if (browserName === "chromium") {
@@ -63,24 +65,35 @@ export async function runLiveSmoke(browserName) {
       if (message.type() === "error") consoleErrors.push(message.text());
     });
 
+    const wasmLoaded = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === "/photo_culler_slint_bg.wasm" && response.status() === 200;
+    });
     await page.goto(origin, { waitUntil: "domcontentloaded" });
+    await wasmLoaded;
+    await page.waitForTimeout(250);
+    await page.mouse.click(720, 450);
+    await page.keyboard.type(pairingCode);
+    const paired = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === "/api/v1/session/pair" && response.request().method() === "POST";
+    });
+    await page.keyboard.press("Enter");
+    assert.equal(
+      (await paired).status(),
+      200,
+      "the browser must pair through the real session route",
+    );
     try {
-      await page.waitForFunction(
-        () => document.documentElement.dataset.photoCullerState === "ready",
-        undefined,
-        { timeout: 45_000 },
-      );
+      await waitForHtmlState(page, "ready", 45_000);
     } catch (error) {
-      const pageState = await page.evaluate(() => ({
-        state: document.documentElement.dataset.photoCullerState ?? null,
-        status: document.querySelector("#application-status")?.textContent ?? null,
-        diagnosticVisible: Boolean(document.querySelector("#diagnostic")?.getClientRects().length),
-        diagnosticTitle: document.querySelector("#diagnostic-title")?.textContent ?? null,
-        diagnosticMessage: document.querySelector("#diagnostic-message")?.textContent ?? null,
-      }));
-      if (process.env.PHOTO_CULLER_SCREENSHOT) {
-        await page.screenshot({ path: process.env.PHOTO_CULLER_SCREENSHOT, fullPage: true }).catch(() => {});
-      }
+      const pageState = {
+        state: await page.locator("html").getAttribute("data-photo-culler-state"),
+        status: await page.locator("#application-status").textContent().catch(() => null),
+        diagnosticVisible: await page.locator("#diagnostic").isVisible().catch(() => false),
+        diagnosticTitle: await page.locator("#diagnostic-title").textContent().catch(() => null),
+        diagnosticMessage: await page.locator("#diagnostic-message").textContent().catch(() => null),
+      };
       throw new Error(
         `${error.message}; page-state=${JSON.stringify(pageState)}; ` +
           `console=${JSON.stringify(consoleErrors)}; page-errors=${JSON.stringify(pageErrors)}; ` +
@@ -134,7 +147,8 @@ export async function runLiveSmoke(browserName) {
       gallery: await status.textContent(),
       responses,
       screenshot_bytes: screenshot.length,
-      result: "real Rust server and Slint WASM displayed the JPEG; bootstrap diagnostic is accessible",
+      authenticated: true,
+      result: "paired browser, Rust server, and Slint WASM displayed the JPEG; bootstrap diagnostic is accessible",
     }));
   } catch (error) {
     const detail = serverStderr.trim();
@@ -146,10 +160,35 @@ export async function runLiveSmoke(browserName) {
   }
 }
 
-function waitForOrigin(child) {
+async function issuePairingCode(origin, sessionToken) {
+  assert.match(sessionToken, /^[0-9a-f]{64}$/i, "owned server must return its private session token");
+  const response = await fetch(`${origin}/api/v1/session/pairing-codes`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${sessionToken}`,
+      origin,
+    },
+  });
+  assert.equal(response.status, 200, "the owned editor session must issue a pairing code");
+  const payload = await response.json();
+  assert.match(payload.code, /^[0-9a-f]{64}$/i, "server must issue a one-time pairing code");
+  return payload.code;
+}
+
+async function waitForHtmlState(page, expectedState, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  const html = page.locator("html");
+  while (Date.now() < deadline) {
+    if (await html.getAttribute("data-photo-culler-state") === expectedState) return;
+    await delay(100);
+  }
+  throw new Error(`document did not reach ${expectedState} state within ${timeoutMs} ms`);
+}
+
+function waitForReady(child) {
   return new Promise((resolve, reject) => {
     let stdout = "";
-    const timeout = setTimeout(() => reject(new Error("Rust server did not announce its origin")), 10_000);
+    const timeout = setTimeout(() => reject(new Error("Rust server did not announce owned readiness")), 10_000);
     const finish = (error, value) => {
       clearTimeout(timeout);
       if (error) reject(error);
@@ -162,8 +201,21 @@ function waitForOrigin(child) {
       stdout = lines.pop() ?? "";
       for (const line of lines) {
         if (!line) continue;
-        if (/^http:\/\/127\.0\.0\.1:\d+$/.test(line)) finish(null, line);
-        else finish(new Error(`unexpected Rust server stdout: ${line}`));
+        try {
+          const ready = JSON.parse(line);
+          if (
+            ready.event === "ready" &&
+            typeof ready.origin === "string" &&
+            /^http:\/\/127\.0\.0\.1:\d+$/.test(ready.origin) &&
+            typeof ready.session_token === "string"
+          ) {
+            finish(null, ready);
+          } else {
+            finish(new Error("Rust server returned an invalid owned-ready message"));
+          }
+        } catch {
+          finish(new Error("Rust server stdout was not a valid owned-ready message"));
+        }
       }
       if (stdout.length > 4096) finish(new Error("Rust server stdout line exceeded the protocol limit"));
     });

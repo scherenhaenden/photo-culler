@@ -465,7 +465,8 @@ mod tests {
     fn rejects_non_loopback_invalid_paths_and_oversized_responses() {
         assert_eq!(
             NativeHttpTransport::new("192.0.2.1:80".parse().unwrap(), Duration::from_secs(1), 10)
-                .unwrap_err(),
+                .err()
+                .expect("a non-loopback endpoint must be rejected"),
             HttpError::InvalidEndpoint
         );
         let (address, server) = serve(vec![(

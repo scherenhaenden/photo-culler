@@ -157,7 +157,8 @@ fn valid_host(host: &str) -> bool {
 }
 
 /// Apply to successful frontend assets, replacing any conflicting header values.
-/// CSP permits same-origin WASM compilation without enabling arbitrary script eval.
+/// CSP permits Slint's inline layout styles and blob-backed textures while
+/// keeping scripts same-origin and allowing WASM compilation without arbitrary eval.
 pub fn frontend_headers(is_wasm: bool) -> &'static [(&'static str, &'static str)] {
     if is_wasm { WASM_HEADERS } else { HTML_HEADERS }
 }
@@ -166,7 +167,7 @@ const HTML_HEADERS: &[(&str, &str)] = &[
     ("x-content-type-options", "nosniff"),
     (
         "content-security-policy",
-        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
     ),
     ("referrer-policy", "no-referrer"),
 ];
@@ -175,7 +176,7 @@ const WASM_HEADERS: &[(&str, &str)] = &[
     ("x-content-type-options", "nosniff"),
     (
         "content-security-policy",
-        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
     ),
     ("referrer-policy", "no-referrer"),
 ];
@@ -183,6 +184,23 @@ const WASM_HEADERS: &[(&str, &str)] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn frontend_csp_allows_slint_runtime_resources_without_script_eval() {
+        for is_wasm in [false, true] {
+            let policy = frontend_headers(is_wasm)
+                .iter()
+                .find(|(name, _)| *name == "content-security-policy")
+                .map(|(_, value)| *value)
+                .expect("frontend assets must have a content security policy");
+            assert!(policy.contains("style-src 'self' 'unsafe-inline'"));
+            assert!(policy.contains("img-src 'self' data: blob:"));
+            assert!(policy.contains("connect-src 'self'"));
+            assert!(policy.contains("script-src 'self' 'wasm-unsafe-eval'"));
+            assert!(!policy.contains("'unsafe-eval'"));
+        }
+    }
+
     struct FakeRouter {
         policy: OriginPolicy,
     }

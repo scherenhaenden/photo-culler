@@ -511,8 +511,9 @@ mod tests {
         }
     }
 
+    #[derive(Clone)]
     struct FakeTransport {
-        responses: Mutex<VecDeque<Result<Response, TransportError>>>,
+        responses: Arc<Mutex<VecDeque<Result<Response, TransportError>>>>,
     }
 
     impl RestTransport for FakeTransport {
@@ -555,7 +556,7 @@ mod tests {
     #[test]
     fn maps_typed_rest_dtos_and_enforces_the_canonical_gallery_contract() {
         let transport = FakeTransport {
-            responses: Mutex::new(VecDeque::from([
+            responses: Arc::new(Mutex::new(VecDeque::from([
                 Ok(response(
                     "application/json",
                     br#"{"status":"ready","resources":null,"request_id":"req-demo"}"#,
@@ -565,7 +566,7 @@ mod tests {
                     br#"{"contract_version":1,"items":[{"id":"demo-001","name":"demo-001.jpg","decision":"undecided","decision_revision":0,"score":null,"quality_tier":null,"thumbnail_url":"/api/v1/photos/demo-001/thumbnail/800"}],"next_cursor":null}"#,
                 )),
                 Ok(response("image/jpeg", &[0xff, 0xd8, 0xff, 0xd9])),
-            ])),
+            ]))),
         };
         let client = DemoRestClient::new(transport);
         poll_ready(async {
@@ -582,7 +583,7 @@ mod tests {
     #[test]
     fn rejects_a_gallery_thumbnail_that_changes_the_route() {
         let transport = FakeTransport {
-            responses: Mutex::new(VecDeque::from([
+            responses: Arc::new(Mutex::new(VecDeque::from([
                 Ok(response(
                     "application/json",
                     br#"{"status":"ready","resources":null,"request_id":"req-demo"}"#,
@@ -591,7 +592,7 @@ mod tests {
                     "application/json",
                     br#"{"contract_version":1,"items":[{"id":"demo-001","name":"demo-001.jpg","decision":"undecided","decision_revision":0,"score":null,"quality_tier":null,"thumbnail_url":"https://example.invalid/image.jpg"}],"next_cursor":null}"#,
                 )),
-            ])),
+            ]))),
         };
         let client = DemoRestClient::new(transport);
         let result = poll_ready(client.gallery("demo", None));
