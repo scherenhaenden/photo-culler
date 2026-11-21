@@ -139,7 +139,7 @@ async function captureLoading(browser, origin, viewport, outputDir, sessionToken
     });
     releaseRequest.resolve();
     await waitForState(page, "ready");
-    await assertReadyTransport(page, origin);
+    await assertReadyTransport(page, origin, sessionToken);
     return capture;
   } finally {
     releaseRequest.resolve();
@@ -240,7 +240,7 @@ async function captureErrorAndRetry(browser, origin, viewport, outputDir, sessio
     });
     const history = await stateHistory(page);
     assertSubsequence(history, ["loading", "error", "loading", "ready"], "retry state transition");
-    await assertReadyTransport(page, origin);
+    await assertReadyTransport(page, origin, sessionToken);
     return {
       captures: [errorCapture, retryLoadingCapture, readyCapture],
       result: {
@@ -403,14 +403,17 @@ async function assertAppTransport(page, origin) {
   return entries;
 }
 
-async function assertReadyTransport(page, origin) {
+async function assertReadyTransport(page, origin, sessionToken) {
   const entries = await assertAppTransport(page, origin);
   const state = await page.locator("#application-status").getAttribute("data-state");
   assert.equal(state, "ready", "the app must reach ready after the retry/real response");
   const hasThumbnail = entries.some((entry) => entry.path === "/api/v1/photos/demo-001/thumbnail/800" && entry.origin === origin);
   assert.equal(hasThumbnail, true, "ready state must display the JPEG returned by the real Rust origin");
-  const thumbnail = await page.evaluate(async (path) => {
-    const response = await fetch(path, { cache: "no-store" });
+  const thumbnail = await page.evaluate(async ({ path, bearer }) => {
+    const response = await fetch(path, {
+      cache: "no-store",
+      headers: { Authorization: `Bearer ${bearer}` },
+    });
     const bytes = new Uint8Array(await response.arrayBuffer());
     const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
     return {
@@ -420,7 +423,7 @@ async function assertReadyTransport(page, origin) {
       prefix: [...bytes.slice(0, 2)],
       sha256: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join(""),
     };
-  }, "/api/v1/photos/demo-001/thumbnail/800");
+  }, { path: "/api/v1/photos/demo-001/thumbnail/800", bearer: sessionToken });
   assert.equal(thumbnail.status, 200, "the Rust thumbnail route must return HTTP 200");
   assert.match(thumbnail.content_type ?? "", /^image\/jpeg(?:\s*;|$)/i, "the Rust thumbnail must use image/jpeg");
   assert.ok(thumbnail.byte_length > 4, "the Rust thumbnail response must contain JPEG bytes");

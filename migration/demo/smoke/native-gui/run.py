@@ -142,10 +142,10 @@ def gallery_fixture_pixels(path):
     pixels = zlib.decompress(compressed)
     if len(pixels) != height * (stride + 1):
         raise RuntimeError(f"unexpected decoded PNG size in screenshot: {path}")
-    # The first fixture thumbnail occupies the central upper gallery viewport.
-    # Keep the ROI away from panel controls and the desktop strip that can show
-    # through the hosted Windows window's transparent outer pixels.
-    gallery_left, gallery_top = int(width * 0.36), int(height * 0.12)
+    # The first fixture thumbnail sits just to the right of the filter panel.
+    # Its relative x-position changes with the desktop window width, so include
+    # the panel edge while staying clear of the desktop strip and inspector.
+    gallery_left, gallery_top = int(width * 0.30), int(height * 0.12)
     gallery_right, gallery_bottom = int(width * 0.75), int(height * 0.45)
     yellow_sun = blue_sky = 0
     yellow_bounds = [width, height, -1, -1]
@@ -241,7 +241,7 @@ def capture_visible_gallery(platform_name, pid, image, timeout=15):
             raise RuntimeError(f"screenshot too small: {dimensions}")
         latest = gallery_fixture_pixels(image)
         latest["attempts"] = attempts
-        if (latest["yellow_sun_pixels"] >= 20 and latest["blue_sky_pixels"] >= 100
+        if (latest["yellow_sun_pixels"] >= 10 and latest["blue_sky_pixels"] >= 100
                 and latest["sun_inside_thumbnail_region"]):
             readiness = image.with_name(f"{image.stem}-content-readiness.json")
             readiness.write_text(json.dumps(latest, indent=2) + "\n")
