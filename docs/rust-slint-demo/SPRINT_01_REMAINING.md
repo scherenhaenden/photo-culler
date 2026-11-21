@@ -1,6 +1,6 @@
 # Sprint 01 completion table
 
-**Status as of 21 November 2026.** The remote `feature/sprint-01-rust-foundation` branch was at [`153d049`](https://github.com/scherenhaenden/photo-culler/commit/153d04920220fb0c396dca571620c0921052ab1b) before the current uncommitted integration. D01–D33 are integrated. D34 now has a local synthetic vertical slice in progress; this document separates code and compile evidence from platform acceptance. The issue count tracks the work queue. The checks below track whether the product works.
+**Status as of 21 November 2026.** The published `feature/sprint-01-rust-foundation` branch includes [`8519682`](https://github.com/scherenhaenden/photo-culler/commit/8519682), which records the connected synthetic vertical slice and handoff. D01–D33 are integrated. D34 code is committed; platform and visual acceptance remain open. This document separates code and compile evidence from acceptance. The issue count tracks the work queue. The checks below track whether the product works.
 
 **Sprint outcome.** Open the same included JPEG gallery through the real Rust server on macOS arm64, Linux x86-64, Windows x86-64, Chromium and Firefox. The initial Photo Culler shell and gallery should match their existing native and web references. The [demo architecture](ARCHITECTURE.md) defines the local, read-only data contract. The [design roadmap](DESIGN_PARITY_ROADMAP.md) defines the scope of visual acceptance.
 
