@@ -76,6 +76,22 @@ class Sprint02RunnerTests(unittest.TestCase):
         source = Path("/workspace/photo-culler/artifacts/s02-selection-fixture/Fotos de selección")
 
         self.assertEqual(runner.source_folder_navigation_segments(source), ("artifacts", "s02-selection-fixture"))
+
+    def test_intermediate_folder_row_is_double_clicked_to_enter(self):
+        with (
+            patch.object(runner.subprocess, "run") as run,
+            patch.object(runner.time, "sleep"),
+        ):
+            runner.click_folder_list_row(
+                [{"text": "artifacts", "x": 10, "y": 140, "width": 50, "height": 10}],
+                "artifacts",
+                enter=True,
+            )
+
+        run.assert_called_once_with(
+            ["xdotool", "mousemove", "35", "145", "click", "--repeat", "2", "--delay", "150", "1"],
+            check=True,
+        )
         self.assertTrue(
             runner.folder_list_row_visible(
                 [{"text": "Fotos de selección", "y": 142}], "Fotos de selección"
