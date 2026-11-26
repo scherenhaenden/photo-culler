@@ -203,6 +203,14 @@ impl Inspector {
         }
     }
 
+    /// Reset focus adjustments while retaining the selected photo and decision.
+    pub fn reset_focus(&mut self) {
+        self.zoom = 1.0;
+        self.pan_x = 0.0;
+        self.pan_y = 0.0;
+        self.crop = Crop::default();
+    }
+
     /// Pan is normalized around the image center and bounded to the visible area.
     pub fn pan_to(&mut self, x: f32, y: f32) {
         if self.zoom > 1.0 && x.is_finite() && y.is_finite() {
@@ -387,6 +395,30 @@ mod tests {
         assert_eq!(view.index, 1);
         assert_eq!(view.strip, ["p1", "p2"]);
         assert_eq!(view.zoom, 2.0);
+    }
+
+    #[test]
+    fn reset_focus_restores_full_frame_without_changing_selection_or_decision() {
+        let mut inspector = Inspector::new(gallery()).unwrap();
+        inspector.select(1);
+        inspector.zoom_by(2.0);
+        inspector.pan_to(0.1, -0.1);
+        inspector
+            .set_crop(Crop {
+                x: 0.1,
+                y: 0.1,
+                width: 0.8,
+                height: 0.8,
+            })
+            .unwrap();
+
+        inspector.reset_focus();
+        let view = inspector.view();
+        assert_eq!(view.photo_id, "p2");
+        assert_eq!(view.decision, "REJECT");
+        assert_eq!(view.zoom, 1.0);
+        assert_eq!((view.pan_x, view.pan_y), (0.0, 0.0));
+        assert_eq!(view.crop, Crop::default());
     }
 
     #[test]

@@ -34,6 +34,11 @@ export component DemoWindow inherits Window {
     in property <string> inspector-photo-name: "";
     in property <string> inspector-decision: "UNRATED";
     in property <image> inspector-thumbnail;
+    in-out property <string> inspector-photo-id: "";
+    in-out property <float> inspector-zoom: 1;
+    in-out property <float> inspector-crop-inset: 0;
+    in property <string> inspector-preview-status: "";
+    in property <bool> inspector-preview-busy: false;
     in property <string> gallery-title: "Sesión de muestra";
     in property <string> service-status: "Esperando al servicio local…";
     in property <bool> web-layout: false;
@@ -78,6 +83,7 @@ export component DemoWindow inherits Window {
     callback density-changed(density: int);
     callback decision-requested(decision: string);
     callback inspect-requested(photo-id: string);
+    callback inspector-preview-requested(photo-id: string);
 
     // Recipe state is hosted by the application controller and persists only
     // parameters. The source preview remains read-only.
@@ -260,7 +266,11 @@ export component DemoWindow inherits Window {
                 decision-requested(decision) => { root.decision-requested(decision); }
                 inspect-requested(id) => {
                     root.inspector-open = true;
+                    root.inspector-photo-id = id;
+                    root.inspector-zoom = 1;
+                    root.inspector-crop-inset = 0;
                     root.inspect-requested(id);
+                    root.inspector-preview-requested(id);
                 }
             }
 
@@ -301,6 +311,11 @@ export component DemoWindow inherits Window {
         preview-image: root.inspector-thumbnail;
         photo-label: root.inspector-photo-name;
         decision-label: root.inspector-decision;
+        zoom <=> root.inspector-zoom;
+        crop-inset <=> root.inspector-crop-inset;
+        preview-status: root.inspector-preview-status;
+        preview-busy: root.inspector-preview-busy;
+        retry-preview-requested => { root.inspector-preview-requested(root.inspector-photo-id); }
         close-requested => { root.inspector-open = false; }
     }
 

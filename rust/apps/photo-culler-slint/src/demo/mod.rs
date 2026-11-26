@@ -3,6 +3,7 @@
 pub mod analysis_flow;
 pub mod controller;
 pub mod import_flow;
+pub mod inspector_flow;
 pub mod rest;
 pub mod slint_view;
 pub mod thumbnail_image;

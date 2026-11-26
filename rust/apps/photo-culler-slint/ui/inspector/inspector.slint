@@ -6,9 +6,12 @@ export component PhotoInspector inherits Rectangle {
     in property <image> preview-image;
     in property <string> photo-label: "";
     in property <string> decision-label: "UNRATED";
+    in property <string> preview-status: "";
+    in property <bool> preview-busy: false;
     in-out property <float> zoom: 1;
     in-out property <float> crop-inset: 0;
     callback close-requested();
+    callback retry-preview-requested();
 
     background: #08090bf2;
     VerticalBox {
@@ -34,6 +37,8 @@ export component PhotoInspector inherits Rectangle {
         }
         HorizontalBox {
             spacing: 8px;
+            Text { text: root.preview-status; color: #d5d9df; }
+            Button { text: "Reintentar preview"; enabled: !root.preview-busy; clicked => { root.retry-preview-requested(); } }
             Text { text: "Zoom  " + round(root.zoom * 100) + "%"; color: #d5d9df; }
             Button { text: "−"; enabled: root.zoom > 1; clicked => { root.zoom = max(1, root.zoom - 0.25); } }
             Button { text: "+"; enabled: root.zoom < 4; clicked => { root.zoom = min(4, root.zoom + 0.25); } }

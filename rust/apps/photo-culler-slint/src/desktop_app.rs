@@ -8,6 +8,7 @@ use photo_culler_slint::{
         analysis_flow,
         controller::DemoController,
         import_flow,
+        inspector_flow,
         native_transport::NativeDemoTransport,
         rest::DemoRestClient,
         slint_view::{SlintDemoView, SlintDispatcher},
@@ -254,6 +255,7 @@ fn run_application(initial_config: LaunchConfig) -> Result<(), String> {
         endpoint.clone(),
         session_token.clone(),
     )));
+    inspector_flow::bind(&window, client.clone());
     let view = Arc::new(SlintDemoView::new(window.as_weak(), false));
     let controller = Arc::new(DemoController::new(view.clone(), Arc::new(SlintDispatcher)));
     let filter_controller = controller.clone();
