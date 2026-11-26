@@ -393,6 +393,48 @@ def normalized_photo_id_ocr(text: str) -> str:
     return re.sub(r"[^0-9a-f]", "", normalized)
 
 
+def _bounded_edit_distance(left: str, right: str, limit: int) -> int:
+    """Return Levenshtein distance, stopping once it exceeds a small limit."""
+    if abs(len(left) - len(right)) > limit:
+        return limit + 1
+    previous = list(range(len(right) + 1))
+    for left_index, left_char in enumerate(left, start=1):
+        current = [left_index]
+        row_minimum = left_index
+        for right_index, right_char in enumerate(right, start=1):
+            value = min(
+                current[right_index - 1] + 1,
+                previous[right_index] + 1,
+                previous[right_index - 1] + (left_char != right_char),
+            )
+            current.append(value)
+            row_minimum = min(row_minimum, value)
+        if row_minimum > limit:
+            return limit + 1
+        previous = current
+    return previous[-1]
+
+
+def photo_id_prefix_matches_ocr(expected_photo_id: str, text: str,
+                                prefix_length: int = 24, max_edits: int = 2) -> bool:
+    """Match an inspector ID prefix despite a few localized OCR glyph errors."""
+    expected_prefix = expected_photo_id[:prefix_length].lower()
+    observed = normalized_photo_id_ocr(text)
+    if not expected_prefix or not observed:
+        return False
+    # OCR can omit or invent a glyph. Compare short windows at the start of the
+    # inspector row so errors elsewhere in the screenshot cannot create a hit.
+    # Keep at least all but one expected glyph in the compared prefix. Allowing
+    # a two-character-short candidate can make a different ID match by simply
+    # discarding the distinguishing end of the prefix.
+    minimum = max(1, len(expected_prefix) - 1)
+    maximum = min(len(observed), len(expected_prefix) + 1)
+    return any(
+        _bounded_edit_distance(expected_prefix, observed[:length], max_edits) <= max_edits
+        for length in range(minimum, maximum + 1)
+    )
+
+
 def assert_keep_filter(screenshot: Path, rows: list[dict], expected_photo_id: str) -> dict[str, object]:
     # Filenames are not rendered on these compact thumbnail cards. Confirm the
     # single filtered page count and match the inspector's visible ID prefix to
@@ -406,7 +448,7 @@ def assert_keep_filter(screenshot: Path, rows: list[dict], expected_photo_id: st
         normalized_photo_id_ocr(row["text"])
         for row in rows
         if row["x"] >= 1000 and row["y"] < 150
-        and expected_prefix in normalized_photo_id_ocr(row["text"])
+        and photo_id_prefix_matches_ocr(expected_photo_id, row["text"])
     ]
     if not matching_ids:
         raise RuntimeError(
@@ -434,7 +476,7 @@ def assert_last_photo_visible(screenshot: Path, rows: list[dict],
         normalized_photo_id_ocr(row["text"])
         for row in rows
         if row["x"] >= 1000 and row["y"] < 150
-        and expected_prefix in normalized_photo_id_ocr(row["text"])
+        and photo_id_prefix_matches_ocr(expected_photo_id, row["text"])
     ]
     if not matching_ids:
         raise RuntimeError(
