@@ -146,6 +146,10 @@ class SelectionRunnerTests(unittest.TestCase):
             self.assertNotIn("photo-01.jpg", display_names)
             self.assertEqual(targets, {"keep": "photo-13.jpg", "reject": "photo-12.jpg"})
             self.assertEqual(
+                runner.photo_id_for_stem(database, "generated-id", "photo-13"),
+                "id-01",
+            )
+            self.assertEqual(
                 runner.expected_decisions(targets),
                 {"photo-13": "KEEP", "photo-12": "REJECT_TECHNICAL"},
             )
@@ -170,6 +174,29 @@ class SelectionRunnerTests(unittest.TestCase):
         self.assertEqual(runner.summary_count_from_ocr("KEEP 1", "KEPT"), 1)
         with self.assertRaisesRegex(RuntimeError, "could not read KEPT label"):
             runner.summary_count_from_ocr("1", "KEPT")
+
+    def test_keep_filter_uses_single_page_count_and_expected_inspector_photo_id(self):
+        photo_id = "fd8cd4a81faff7ef163e68206163706f"
+        rows = [{"text": photo_id[:30], "x": 1076, "y": 66}]
+        with mock.patch.object(runner, "enlarged_crop_ocr", return_value="1 ON THIS PAGE :"):
+            evidence = runner.assert_keep_filter(Path("keep-filter.png"), rows, photo_id)
+        self.assertEqual(
+            evidence,
+            {
+                "visible_photo_count": 1,
+                "photo_id_prefix": photo_id[:24],
+                "matching_inspector_id_rows": 1,
+            },
+        )
+
+        with mock.patch.object(runner, "enlarged_crop_ocr", return_value="2 ON THIS PAGE"):
+            with self.assertRaisesRegex(RuntimeError, "expected exactly one"):
+                runner.assert_keep_filter(Path("keep-filter.png"), rows, photo_id)
+        with mock.patch.object(runner, "enlarged_crop_ocr", return_value="1 ON THIS PAGE"):
+            with self.assertRaisesRegex(RuntimeError, "expected photo ID prefix"):
+                runner.assert_keep_filter(
+                    Path("keep-filter.png"), [{"text": "not-the-photo", "x": 1076, "y": 66}], photo_id
+                )
 
 
 if __name__ == "__main__":
