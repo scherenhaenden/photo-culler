@@ -39,6 +39,18 @@ class Sprint02RunnerTests(unittest.TestCase):
     def test_folder_dialog_select_fallback_targets_the_lower_right_button(self):
         self.assertEqual(runner.folder_dialog_select_point(1097, 844), (1047, 818))
 
+    def test_picker_search_results_do_not_count_as_location_entry(self):
+        self.assertFalse(
+            runner.location_entry_visible(
+                [{"text": "Recent /home/runner/work/fixture No Results Found"}]
+            )
+        )
+        self.assertTrue(
+            runner.location_entry_visible(
+                [{"text": "Recent Home /home/runner/work/fixture Other Locations"}]
+            )
+        )
+
     def test_picker_folder_name_matches_ocr_without_diacritics(self):
         self.assertTrue(runner.text_matches("Fotos de seleccién/", "Fotos de selección"))
 
