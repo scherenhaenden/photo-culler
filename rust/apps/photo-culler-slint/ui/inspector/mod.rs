@@ -367,6 +367,29 @@ mod tests {
     }
 
     #[test]
+    fn focus_adjustments_preserve_photo_decision_and_gallery_order() {
+        let mut inspector = Inspector::new(gallery()).unwrap();
+        inspector.select(1);
+        inspector.zoom_by(2.0);
+        inspector.pan_to(0.1, -0.1);
+        inspector
+            .set_crop(Crop {
+                x: 0.1,
+                y: 0.1,
+                width: 0.8,
+                height: 0.8,
+            })
+            .unwrap();
+
+        let view = inspector.view();
+        assert_eq!(view.photo_id, "p2");
+        assert_eq!(view.decision, "REJECT");
+        assert_eq!(view.index, 1);
+        assert_eq!(view.strip, ["p1", "p2"]);
+        assert_eq!(view.zoom, 2.0);
+    }
+
+    #[test]
     fn empty_gallery_is_rejected() {
         assert_eq!(
             Inspector::new(vec![]).unwrap_err(),

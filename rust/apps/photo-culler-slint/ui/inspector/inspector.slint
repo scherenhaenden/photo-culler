@@ -1,0 +1,45 @@
+import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
+
+/// Focus inspection surface for the currently selected library photo.
+/// The image is the catalog preview already fetched through the preview API.
+export component PhotoInspector inherits Rectangle {
+    in property <image> preview-image;
+    in property <string> photo-label: "";
+    in property <string> decision-label: "UNRATED";
+    in-out property <float> zoom: 1;
+    in-out property <float> crop-inset: 0;
+    callback close-requested();
+
+    background: #08090bf2;
+    VerticalBox {
+        padding: 20px;
+        spacing: 12px;
+        HorizontalBox {
+            Text { text: "INSPECCIÓN DE FOCO · " + root.photo-label; color: #f4f4f5; font-size: 18px; }
+            Text { text: root.decision-label; color: #f7c59f; }
+            Button { text: "Volver a galería"; clicked => { root.close-requested(); } }
+        }
+        Rectangle {
+            vertical-stretch: 1;
+            background: #000000;
+            clip: true;
+            Image {
+                x: parent.width * root.crop-inset;
+                y: parent.height * root.crop-inset;
+                width: parent.width * (1 - 2 * root.crop-inset) * root.zoom;
+                height: parent.height * (1 - 2 * root.crop-inset) * root.zoom;
+                source: root.preview-image;
+                image-fit: contain;
+            }
+        }
+        HorizontalBox {
+            spacing: 8px;
+            Text { text: "Zoom  " + round(root.zoom * 100) + "%"; color: #d5d9df; }
+            Button { text: "−"; enabled: root.zoom > 1; clicked => { root.zoom = max(1, root.zoom - 0.25); } }
+            Button { text: "+"; enabled: root.zoom < 4; clicked => { root.zoom = min(4, root.zoom + 0.25); } }
+            Button { text: "Recorte −"; enabled: root.crop-inset < 0.3; clicked => { root.crop-inset = min(0.3, root.crop-inset + 0.05); } }
+            Button { text: "Recorte +"; enabled: root.crop-inset > 0; clicked => { root.crop-inset = max(0, root.crop-inset - 0.05); } }
+            Button { text: "Restablecer"; clicked => { root.zoom = 1; root.crop-inset = 0; } }
+        }
+    }
+}
