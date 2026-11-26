@@ -170,6 +170,18 @@ def click_estimate_button() -> None:
     time.sleep(0.5)
 
 
+def reimport_estimate_button_point(width: int, height: int) -> tuple[int, int]:
+    # The reopened import modal is shorter because it retains the prior job summary.
+    return (round(width * 0.359), round(height * 0.698))
+
+
+def click_reimport_estimate_button() -> None:
+    width, height = map(int, subprocess.check_output(["xdotool", "getdisplaygeometry"], text=True).split())
+    x, y = reimport_estimate_button_point(width, height)
+    subprocess.run(["xdotool", "mousemove", str(x), str(y), "click", "1"], check=True)
+    time.sleep(0.5)
+
+
 def start_import_button_point(width: int, height: int) -> tuple[int, int]:
     return (round(width * 0.357), round(height * 0.88))
 
@@ -651,7 +663,7 @@ def main() -> None:
         rows = screenshot(output / "reopened-import.png")
         click_import_button(rows)
         rows = wait_text("Available", output / "reimport-dialog.png")
-        click_estimate_button()
+        click_reimport_estimate_button()
         wait_for_estimate_result(output / "reimport-estimated.png", expected_files=13)
         rows = screenshot(output / "reimport-start-ready.png")
         previous_job_ids = {job[0] for job in import_job_snapshot(database)}
