@@ -116,6 +116,17 @@ class Sprint02RunnerTests(unittest.TestCase):
         ):
             self.assertTrue(runner.wait_for_import_completion_dismissal(Path("capture.png")))
 
+    def test_gallery_next_page_fallback_targets_pager_control(self):
+        self.assertEqual(runner.next_page_button_point(1440, 900), (960, 123))
+        with (
+            patch.object(runner.subprocess, "check_output", return_value="1440 900"),
+            patch.object(runner.subprocess, "run") as run,
+            patch.object(runner.time, "sleep"),
+        ):
+            runner.click_next_page([])
+
+        run.assert_called_once_with(["xdotool", "mousemove", "960", "123", "click", "1"], check=True)
+
     def test_folder_dialog_select_fallback_targets_the_lower_right_button(self):
         self.assertEqual(runner.folder_dialog_select_point(1097, 844), (1047, 818))
 
