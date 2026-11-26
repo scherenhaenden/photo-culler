@@ -83,7 +83,7 @@ jobs:
       - if: runner.os == 'Linux'
         name: Install Slint native build dependencies
         run: |
-          packages=(build-essential pkg-config libfontconfig1-dev libx11-dev libx11-xcb-dev libxcb1-dev libxcursor-dev libxkbcommon-dev libxkbcommon-x11-dev libinput-dev libgbm-dev libwayland-dev xvfb openbox xdotool x11-utils imagemagick)
+          packages=(build-essential pkg-config libfontconfig1-dev libx11-dev libx11-xcb-dev libxcb1-dev libxcursor-dev libxkbcommon-dev libxkbcommon-x11-dev libinput-dev libgbm-dev libwayland-dev xvfb openbox xdotool x11-utils imagemagick tesseract-ocr)
           for attempt in 1 2 3; do
             if sudo apt-get -o Acquire::Retries=3 update && sudo apt-get -o Acquire::Retries=3 install -y "${packages[@]}"; then
               exit 0
@@ -135,6 +135,22 @@ jobs:
               --server "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-server" \
               --output "$GITHUB_WORKSPACE/artifacts/native-gui/${{ matrix.key }}"
           '
+      - name: Run persistent library decision selection acceptance
+        if: runner.os == 'Linux'
+        run: |
+          python3 -m pip install --disable-pip-version-check Pillow==12.1.0
+          python migration/demo/smoke/selection/fixture.py "$RUNNER_TEMP/photo-culler-selection-fixture"
+          xvfb-run --auto-servernum --server-args="-screen 0 1440x900x24" bash -c '
+            openbox --sm-disable >/tmp/photo-culler-selection-openbox.log 2>&1 &
+            window_manager_pid=$!
+            trap "kill $window_manager_pid 2>/dev/null || true" EXIT
+            sleep 1
+            python3 migration/demo/smoke/selection/run_linux.py \
+              --desktop "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-desktop" \
+              --server "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-server" \
+              --fixture "$RUNNER_TEMP/photo-culler-selection-fixture" \
+              --output "$GITHUB_WORKSPACE/artifacts/selection/${{ matrix.key }}"
+          '
       - name: Run packaged macOS Slint desktop smoke
         if: runner.os == 'macOS'
         run: >-
@@ -165,7 +181,9 @@ jobs:
         if: always()
         with:
           name: rust-slint-demo-native-gui-${{ matrix.key }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: artifacts/native-gui/${{ matrix.key }}/
+          path: |
+            artifacts/native-gui/${{ matrix.key }}/
+            artifacts/selection/${{ matrix.key }}/
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
