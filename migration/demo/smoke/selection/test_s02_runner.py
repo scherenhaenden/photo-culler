@@ -40,6 +40,27 @@ class Sprint02RunnerTests(unittest.TestCase):
     def test_import_toolbar_fallback_targets_top_right_button(self):
         self.assertEqual(runner.import_button_point(1440, 900), (1152, 36))
 
+    def test_import_source_card_click_targets_source_label(self):
+        with (
+            patch.object(runner.subprocess, "run") as run,
+            patch.object(runner.time, "sleep"),
+        ):
+            runner.click_import_source(
+                [{
+                    "text": "Fotos de selección", "x": 474, "y": 673,
+                    "width": 123, "height": 10, "confidence": 70,
+                }],
+                "Fotos de selección",
+            )
+
+        run.assert_called_once_with(
+            ["xdotool", "mousemove", "535", "678", "click", "1"], check=True
+        )
+
+    def test_estimate_requires_legible_enabled_button_text(self):
+        self.assertFalse(runner.estimate_button_enabled([{"text": "sotinnen", "confidence": 43}]))
+        self.assertTrue(runner.estimate_button_enabled([{"text": "Estimate", "confidence": 85}]))
+
     def test_folder_dialog_select_fallback_targets_the_lower_right_button(self):
         self.assertEqual(runner.folder_dialog_select_point(1097, 844), (1047, 818))
 
