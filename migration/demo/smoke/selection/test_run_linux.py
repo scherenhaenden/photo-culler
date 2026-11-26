@@ -202,6 +202,44 @@ class SelectionRunnerTests(unittest.TestCase):
                     Path("keep-filter.png"), [{"text": "not-the-photo", "x": 1076, "y": 66}], photo_id
                 )
 
+    def test_inspector_photo_id_ocr_tolerates_two_errors_but_rejects_other_ids(self):
+        photo_id = "8c2999e5a9393c9850cbeee4f435bec9"
+        # Captured from the S05 Linux artifact: OCR split the ID across rows and
+        # introduced a substitution/deletion, while the screenshot shows this ID.
+        self.assertTrue(
+            runner.photo_id_prefix_matches_ocr(
+                photo_id, "8c2999e5a9393c9850cbeeedf435!"
+            )
+        )
+        self.assertTrue(
+            runner.photo_id_prefix_matches_ocr(
+                photo_id, "82999e5a9303c9850cbeee4f435bec9"
+            )
+        )
+        self.assertTrue(
+            runner.photo_id_prefix_matches_ocr(
+                "e392b2358eb6768e77239a41742a7b35",
+                "€392b2358eb6768e77239a41742¢",
+            )
+        )
+        self.assertTrue(
+            runner.photo_id_prefix_matches_ocr(
+                "f98f20a1ef6514bae5d523dfc97a103a",
+                "£98f20alef6514bae5d523dfc97al(",
+            )
+        )
+        self.assertTrue(runner.photo_id_prefix_matches_ocr(photo_id, photo_id))
+        self.assertFalse(
+            runner.photo_id_prefix_matches_ocr(
+                photo_id, "ffffffffffffffffffffffffffffffff"
+            )
+        )
+        self.assertFalse(
+            runner.photo_id_prefix_matches_ocr(
+                photo_id, "8c2999e5a9393c9850aaaa000000000"
+            )
+        )
+
     def test_page_two_assertion_uses_catalog_photo_id_and_visible_counter(self):
         photo_id = "ef96369c76b70738e1c78d02b833f8bb"
         self.assertEqual(runner.photo_counter_from_ocr("« | Foto13de13 | > |"), (13, 13))
