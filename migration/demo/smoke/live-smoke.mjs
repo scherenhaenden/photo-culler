@@ -1,19 +1,15 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { access } from "node:fs/promises";
+import { access, copyFile, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium, firefox } from "playwright";
+import { buildServerArguments } from "./smoke-config.mjs";
 
 const MIME_BY_PATH = new Map([
   ["/api/v1/health", "application/json"],
-  ["/api/v1/galleries/demo/photos", "application/json"],
-  ["/api/v1/photos/demo-001/preview", "image/jpeg"],
-  ["/api/v1/photos/demo-001/thumbnail/800", "image/jpeg"],
+  ["/api/v1/galleries/active", "application/json"],
   ["/photo_culler_slint_bg.wasm", "application/wasm"],
-]);
-const IMAGE_ROUTES = new Set([
-  "/api/v1/photos/demo-001/preview",
-  "/api/v1/photos/demo-001/thumbnail/800",
 ]);
 
 export async function runLiveSmoke(browserName) {
@@ -24,9 +20,14 @@ export async function runLiveSmoke(browserName) {
   await access(serverExecutable);
   await access(`${webRoot}/bundle.json`);
 
+  const fixtureRoot = await mkdtemp(join(tmpdir(), `photo-culler-${browserName}-`));
+  const sourceRoot = join(fixtureRoot, "source");
+  const dataRoot = join(fixtureRoot, "data");
+  await mkdir(sourceRoot, { recursive: true });
+  await copyFile(new URL("../fixture/demo-001.jpg", import.meta.url), join(sourceRoot, "demo-001.jpg"));
   const processState = spawn(
     serverExecutable,
-    ["--owned", "--port", "0", "--web-root", webRoot],
+    buildServerArguments(webRoot, dataRoot, sourceRoot),
     { stdio: ["pipe", "pipe", "pipe"] },
   );
   let serverStderr = "";
@@ -38,6 +39,7 @@ export async function runLiveSmoke(browserName) {
   try {
     const ready = await waitForReady(processState);
     origin = ready.origin;
+    await importBrowserFixture(origin, ready.session_token);
     const pairingCode = await issuePairingCode(origin, ready.session_token);
     const browserType = browserName === "chromium" ? chromium : firefox;
     const launchOptions = { headless: browserName === "chromium" };
@@ -133,7 +135,6 @@ export async function runLiveSmoke(browserName) {
     assert.deepEqual(pageErrors, [], "the actual Slint WASM application must not raise page errors");
 
     for (const [path, expectedMime] of MIME_BY_PATH) {
-      if (IMAGE_ROUTES.has(path)) continue;
       const response = responses.find((entry) => entry.path === path && entry.status === 200);
       assert.ok(
         response,
@@ -142,8 +143,18 @@ export async function runLiveSmoke(browserName) {
       assert.equal(response.mime, expectedMime, `${path} must have MIME ${expectedMime}`);
       assert.equal(response.origin, origin, `${path} must use the Rust server's same origin`);
     }
+    const galleryPage = responses.find(
+      (entry) => /^\/api\/v1\/galleries\/[^/]+\/photos$/.test(entry.path) && entry.status === 200,
+    );
+    assert.ok(galleryPage, `the persistent gallery page must load: ${JSON.stringify(responses)}`);
+    assert.equal(galleryPage.origin, origin, "the gallery page must use the Rust server's same origin");
+    const gallerySummary = responses.find(
+      (entry) => /^\/api\/v1\/galleries\/[^/]+\/summary$/.test(entry.path) && entry.status === 200,
+    );
+    assert.ok(gallerySummary, `the global gallery summary must load: ${JSON.stringify(responses)}`);
     const displayedImage = responses.find(
-      (entry) => IMAGE_ROUTES.has(entry.path) && entry.status === 200 && entry.mime === "image/jpeg",
+      (entry) => /^\/api\/v1\/photos\/[^/]+\/(?:preview|thumbnail\/800)$/.test(entry.path)
+        && entry.status === 200 && entry.mime === "image/jpeg",
     );
     assert.ok(
       displayedImage,
@@ -187,7 +198,57 @@ export async function runLiveSmoke(browserName) {
   } finally {
     await browser?.close();
     await stopServer(processState);
+    await rm(fixtureRoot, { recursive: true, force: true });
   }
+}
+
+async function importBrowserFixture(origin, sessionToken) {
+  const headers = {
+    authorization: `Bearer ${sessionToken}`,
+    origin,
+    "content-type": "application/json",
+  };
+  const activeResponse = await fetch(`${origin}/api/v1/galleries/active`, { headers });
+  assert.equal(activeResponse.status, 200, "the persistent browser fixture must select its seeded gallery");
+  const active = await activeResponse.json();
+  assert.equal(typeof active.gallery_id, "string");
+  const galleryId = encodeURIComponent(active.gallery_id);
+  const sourcesResponse = await fetch(`${origin}/api/v2/galleries/${galleryId}/sources`, { headers });
+  assert.equal(sourcesResponse.status, 200, "the live browser fixture must register its import source");
+  const sources = await sourcesResponse.json();
+  assert.equal(sources.items.length, 1, "the live browser fixture must have one configured source");
+  const sourceId = sources.items[0].id;
+  const payload = JSON.stringify({ source_id: sourceId, recursive: true, exclude_patterns: [] });
+  const startResponse = await fetch(`${origin}/api/v2/galleries/${galleryId}/imports`, {
+    method: "POST", headers, body: payload,
+  });
+  const startBody = await startResponse.text();
+  assert.equal(startResponse.status, 202, `the live browser fixture must import through the persistent catalog: ${startBody}`);
+  const job = JSON.parse(startBody);
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const jobResponse = await fetch(`${origin}/api/v2/import-jobs/${encodeURIComponent(job.job_id)}`, { headers });
+    assert.equal(jobResponse.status, 200, "the live browser fixture must expose import progress");
+    const progress = await jobResponse.json();
+    if (progress.state === "completed") {
+      assert.equal(progress.imported, 1, "the persistent browser fixture must contain one imported JPEG");
+      const pageResponse = await fetch(`${origin}/api/v1/galleries/${galleryId}/photos?limit=12`, { headers });
+      const pageBody = await pageResponse.text();
+      assert.equal(pageResponse.status, 200, `the persistent gallery page route must accept its bounded page query: ${pageBody}`);
+      const page = JSON.parse(pageBody);
+      assert.equal(page.items.length, 1);
+      assert.equal(page.items[0].filename, "demo-001.jpg");
+      const summaryResponse = await fetch(`${origin}/api/v1/galleries/${galleryId}/summary`, { headers });
+      const summaryBody = await summaryResponse.text();
+      assert.equal(summaryResponse.status, 200, `the persistent gallery summary route must be available: ${summaryBody}`);
+      const summary = JSON.parse(summaryBody);
+      assert.equal(summary.total_photos, 1);
+      return;
+    }
+    assert.ok(!["failed", "cancelled"].includes(progress.state), `fixture import failed: ${JSON.stringify(progress)}`);
+    await delay(100);
+  }
+  throw new Error("live browser fixture import did not finish within 30 seconds");
 }
 
 export async function issuePairingCode(origin, sessionToken) {

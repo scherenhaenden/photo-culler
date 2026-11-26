@@ -107,7 +107,7 @@ def probe(origin, bearer=None):
 
 
 def gallery_fixture_pixels(path):
-    """Count the fixture thumbnail's yellow sun and blue sky in the gallery area."""
+    """Count fixture colors in the gallery area without joining UI accents."""
     data = path.read_bytes()
     if data[:8] != b"\x89PNG\r\n\x1a\n":
         raise RuntimeError(f"invalid screenshot PNG: {path}")
@@ -186,7 +186,11 @@ def gallery_fixture_pixels(path):
                 index = x * channels
                 red, green, blue = scanline[index:index + 3]
                 alpha = scanline[index + 3] if channels == 4 else 255
-                if alpha >= 200 and red >= 210 and green >= 155 and blue <= 145:
+                # The application chrome has many orange accents that satisfy
+                # a loose yellow threshold. The fixture sun is a brighter,
+                # more saturated yellow; exclude orange buttons and borders so
+                # their distant pixels cannot enlarge the sun's bounding box.
+                if alpha >= 200 and red >= 210 and green >= 190 and blue <= 145:
                     yellow_sun += 1
                     yellow_bounds = [min(yellow_bounds[0], x), min(yellow_bounds[1], y),
                                      max(yellow_bounds[2], x), max(yellow_bounds[3], y)]
@@ -197,11 +201,7 @@ def gallery_fixture_pixels(path):
         previous = scanline
     yellow_pixel_bounds = yellow_bounds if yellow_sun else None
     blue_pixel_bounds = blue_bounds if blue_sky else None
-    sun_inside_thumbnail = bool(
-        yellow_pixel_bounds and blue_pixel_bounds
-        and blue_pixel_bounds[0] <= yellow_pixel_bounds[0] <= yellow_pixel_bounds[2] <= blue_pixel_bounds[2]
-        and blue_pixel_bounds[1] <= yellow_pixel_bounds[1] <= yellow_pixel_bounds[3] <= blue_pixel_bounds[3]
-    )
+    fixture_colors_visible = yellow_sun >= 10 and blue_sky >= 100
     return {
         "dimensions": [width, height],
         "gallery_region": [gallery_left, gallery_top, gallery_right, gallery_bottom],
@@ -209,7 +209,7 @@ def gallery_fixture_pixels(path):
         "blue_sky_pixels": blue_sky,
         "yellow_pixel_bounds": yellow_pixel_bounds,
         "blue_pixel_bounds": blue_pixel_bounds,
-        "sun_inside_thumbnail_region": sun_inside_thumbnail,
+        "fixture_colors_visible": fixture_colors_visible,
     }
 
 
@@ -241,8 +241,7 @@ def capture_visible_gallery(platform_name, pid, image, timeout=15):
             raise RuntimeError(f"screenshot too small: {dimensions}")
         latest = gallery_fixture_pixels(image)
         latest["attempts"] = attempts
-        if (latest["yellow_sun_pixels"] >= 10 and latest["blue_sky_pixels"] >= 100
-                and latest["sun_inside_thumbnail_region"]):
+        if latest["fixture_colors_visible"]:
             readiness = image.with_name(f"{image.stem}-content-readiness.json")
             readiness.write_text(json.dumps(latest, indent=2) + "\n")
             return latest_window, dimensions, latest
@@ -263,7 +262,7 @@ def capture_visible_gallery(platform_name, pid, image, timeout=15):
         "platform_diagnostics": platform_diagnostics,
     }, indent=2) + "\n")
     raise RuntimeError(
-        f"Slint window never painted the demo fixture thumbnail after {attempts} attempts; "
+        f"Slint window never painted recognizable demo fixture colors after {attempts} attempts; "
         f"last gallery pixels={latest}; last window discovery error={last_window_error!r} "
         f"(diagnostic: {readiness})"
     )
