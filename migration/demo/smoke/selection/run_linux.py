@@ -39,7 +39,7 @@ def request(origin: str, token: str, path: str, body: dict | None = None) -> dic
 def start_server(server: Path, data_dir: Path, source: Path) -> tuple[subprocess.Popen, str, str]:
     process = subprocess.Popen(
         [str(server), "--owned", "--port", "0", "--data-dir", str(data_dir),
-         "--authorized-root", str(source), "--gallery-id", "s03-selection-fixture"],
+         "--authorized-root", str(source)],
         cwd=server.parent,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -55,17 +55,26 @@ def start_server(server: Path, data_dir: Path, source: Path) -> tuple[subprocess
     return process, ready["origin"], ready["session_token"]
 
 
-def import_fixture(server: Path, data_dir: Path, source: Path) -> None:
+def active_gallery_id(response: dict) -> str:
+    """Validate and return the server-selected gallery from its read contract."""
+    gallery_id = response.get("gallery_id")
+    if response.get("contract_version") != 1 or not isinstance(gallery_id, str) or not gallery_id:
+        raise RuntimeError(f"fixture server did not report one active gallery: {response}")
+    return gallery_id
+
+
+def import_fixture(server: Path, data_dir: Path, source: Path) -> str:
     process, origin, token = start_server(server, data_dir, source)
     try:
-        sources = request(origin, token, "/api/v2/galleries/s03-selection-fixture/sources")
+        gallery_id = active_gallery_id(request(origin, token, "/api/v1/galleries/active"))
+        sources = request(origin, token, f"/api/v2/galleries/{gallery_id}/sources")
         if len(sources["items"]) != 1:
             raise RuntimeError(f"fixture server returned unexpected sources: {sources}")
         source_id = sources["items"][0]["id"]
         request(origin, token, "/api/v2/import-estimates", {
             "source_id": source_id, "recursive": True, "exclude_patterns": []
         })
-        receipt = request(origin, token, "/api/v2/galleries/s03-selection-fixture/imports", {
+        receipt = request(origin, token, f"/api/v2/galleries/{gallery_id}/imports", {
             "source_id": source_id, "recursive": True, "exclude_patterns": []
         })
         deadline = time.monotonic() + 60
@@ -74,7 +83,7 @@ def import_fixture(server: Path, data_dir: Path, source: Path) -> None:
             if job["state"] == "completed":
                 if job["imported"] != 13:
                     raise RuntimeError(f"expected 13 imported photos, received {job}")
-                return
+                return gallery_id
             if job["state"] in {"failed", "cancelled"}:
                 raise RuntimeError(f"fixture import failed: {job}")
             time.sleep(0.2)
@@ -87,19 +96,19 @@ def import_fixture(server: Path, data_dir: Path, source: Path) -> None:
             raise RuntimeError(f"fixture server exited with {code}")
 
 
-def page_ids(database: Path) -> list[str]:
+def page_ids(database: Path, gallery_id: str) -> list[str]:
     with sqlite3.connect(database) as connection:
         return [row[0] for row in connection.execute(
             "SELECT photo_id FROM photos WHERE gallery_id = ? ORDER BY photo_id",
-            ("s03-selection-fixture",),
+            (gallery_id,),
         )]
 
 
-def second_page_last_name(database: Path) -> str:
+def second_page_last_name(database: Path, gallery_id: str) -> str:
     with sqlite3.connect(database) as connection:
         row = connection.execute(
             "SELECT stem_name FROM photos WHERE gallery_id = ? ORDER BY photo_id ASC LIMIT 1 OFFSET 12",
-            ("s03-selection-fixture",),
+            (gallery_id,),
         ).fetchone()
     if not row:
         raise RuntimeError("fixture catalog has no second page")
@@ -179,18 +188,19 @@ def click_photo_at(point: tuple[int, int]) -> None:
     time.sleep(.4)
 
 
-def check_catalog(database: Path, expected: dict[str, str]) -> None:
+def check_catalog(database: Path, gallery_id: str, expected: dict[str, str]) -> None:
     with sqlite3.connect(database) as connection:
         actual = dict(connection.execute(
             "SELECT stem_name, decision FROM photos WHERE gallery_id = ?",
-            ("s03-selection-fixture",),
+            (gallery_id,),
         ))
     for name, decision in expected.items():
         if actual.get(name) != decision:
             raise RuntimeError(f"decision for {name} is {actual.get(name)!r}, expected {decision!r}")
 
 
-def check_counts(database: Path, keep: int, reject: int, unrated: int, total: int) -> None:
+def check_counts(database: Path, gallery_id: str, keep: int, reject: int,
+                 unrated: int, total: int) -> None:
     with sqlite3.connect(database) as connection:
         actual = connection.execute(
             "SELECT "
@@ -199,7 +209,7 @@ def check_counts(database: Path, keep: int, reject: int, unrated: int, total: in
             "SUM(CASE WHEN decision IS NULL OR UPPER(decision) NOT IN "
             "('KEEP','BEST','PROTECTED_BY_COVERAGE','ALT','ALTERNATE','REJECT','REJECT_TECHNICAL','REJECT_REDUNDANT') THEN 1 ELSE 0 END), "
             "COUNT(*) FROM photos WHERE gallery_id = ?",
-            ("s03-selection-fixture",),
+            (gallery_id,),
         ).fetchone()
     expected = (keep, reject, unrated, total)
     if actual != expected:
@@ -252,9 +262,9 @@ def main() -> None:
     shutil.copytree(source, data_dir / "source")
     source_copy = data_dir / "source"
 
-    import_fixture(server, data_dir, source_copy)
+    gallery_id = import_fixture(server, data_dir, source_copy)
     database = data_dir / "catalog.sqlite3"
-    ids = page_ids(database)
+    ids = page_ids(database, gallery_id)
     if len(ids) != 13:
         raise RuntimeError(f"catalog contains {len(ids)} photos, expected 13")
     fixture_hashes = verify_fixture_hashes(manifest, source_copy)
@@ -268,12 +278,12 @@ def main() -> None:
     stream = log.open("wb")
     process = subprocess.Popen(
         [str(desktop), "--data-dir", str(data_dir), "--authorized-root", str(source_copy),
-         "--gallery-id", "s03-selection-fixture"],
+         "--gallery-id", gallery_id],
         cwd=desktop.parent, env=env, stdout=stream, stderr=subprocess.STDOUT,
     )
     process._smoke_log = stream
     evidence = {"source_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
-                "photo_ids": ids, "screenshots": []}
+                "gallery_id": gallery_id, "photo_ids": ids, "screenshots": []}
     try:
         wait_gallery_ready(process, status)
         window = native.wait_for_linux_window(process.pid, output)
@@ -294,15 +304,15 @@ def main() -> None:
         rows = screenshot_and_ocr(wid, output / "selected-first.png")
         click_text(rows, "KEEP", width, height, below=0.55, left=False,
                    origin_x=origin_x, origin_y=origin_y)
-        check_catalog(database, {"photo-01": "KEEP"})
+        check_catalog(database, gallery_id, {"photo-01": "KEEP"})
 
         rows = screenshot_and_ocr(wid, output / "kept-first.png")
         click_photo_at(visible_cards["photo-02.jpg"])
         rows = screenshot_and_ocr(wid, output / "selected-second.png")
         click_text(rows, "REJECT", width, height, below=0.55, left=False,
                    origin_x=origin_x, origin_y=origin_y)
-        check_catalog(database, {"photo-01": "KEEP", "photo-02": "REJECT"})
-        check_counts(database, keep=1, reject=1, unrated=11, total=13)
+        check_catalog(database, gallery_id, {"photo-01": "KEEP", "photo-02": "REJECT"})
+        check_counts(database, gallery_id, keep=1, reject=1, unrated=11, total=13)
 
         rows = screenshot_and_ocr(wid, output / "reject-first.png")
         assert_visible_summary(rows, kept=1, rejected=1, unrated=11)
@@ -316,7 +326,7 @@ def main() -> None:
             raise RuntimeError("KEEP filter omitted the confirmed photo-01 decision")
         if "photo-02.jpg" in [row["text"] for row in rows]:
             raise RuntimeError("KEEP filter retained the confirmed REJECT photo")
-        check_catalog(database, {"photo-01": "KEEP", "photo-02": "REJECT"})
+        check_catalog(database, gallery_id, {"photo-01": "KEEP", "photo-02": "REJECT"})
         evidence["keep_filter"] = "only the KEEP photo is shown"
 
         rows = screenshot_and_ocr(wid, output / "keep-filter-before-next.png")
@@ -326,7 +336,7 @@ def main() -> None:
             click_next_photo(wid, origin_x, origin_y, width, height)
         rows = screenshot_and_ocr(wid, output / "page-two.png")
         evidence["screenshots"].append(str(output / "page-two.png"))
-        expected_last = second_page_last_name(database)
+        expected_last = second_page_last_name(database, gallery_id)
         if expected_last not in [row["text"] for row in rows]:
             raise RuntimeError(f"last fixture photo did not appear after 12 Next Photo actions: {expected_last}")
         evidence["pagination"] = f"reached second-page item {expected_last} after 12 Next Photo actions"
@@ -338,7 +348,8 @@ def main() -> None:
             process._smoke_log.close()
 
         reopened_status, reopened_log = output / "reopened-status.tsv", output / "reopened.log"
-        process = launch_desktop(desktop, data_dir, source_copy, reopened_status, reopened_log)
+        process = launch_desktop(desktop, data_dir, source_copy, reopened_status, reopened_log,
+                                 gallery_id)
         wait_gallery_ready(process, reopened_status)
         reopened_window = native.wait_for_linux_window(process.pid, output)
         reopened_rows = screenshot_and_ocr(reopened_window["window_id"], output / "reopened.png")
@@ -350,10 +361,10 @@ def main() -> None:
         reopened_rows = screenshot_and_ocr(reopened_window["window_id"], output / "reopened-keep-filter.png")
         if "photo-01.jpg" not in [row["text"] for row in reopened_rows]:
             raise RuntimeError("KEEP decision was not visible after reopening and applying KEEP filter")
-        check_catalog(database, {"photo-01": "KEEP"})
-        if page_ids(database) != ids:
+        check_catalog(database, gallery_id, {"photo-01": "KEEP"})
+        if page_ids(database, gallery_id) != ids:
             raise RuntimeError("photo IDs changed after closing and reopening the library")
-        check_counts(database, keep=1, reject=1, unrated=11, total=13)
+        check_counts(database, gallery_id, keep=1, reject=1, unrated=11, total=13)
         if verify_fixture_hashes(manifest, source_copy) != fixture_hashes:
             raise RuntimeError("fixture JPEG hashes changed during the UI acceptance run")
         snapshot_catalog(database, output / "catalog-after-reopen.sqlite3")
@@ -390,7 +401,7 @@ def wait_gallery_ready(process: subprocess.Popen, status: Path) -> None:
 
 
 def launch_desktop(desktop: Path, data_dir: Path, source: Path, status: Path,
-                   log: Path) -> subprocess.Popen:
+                   log: Path, gallery_id: str) -> subprocess.Popen:
     status.unlink(missing_ok=True)
     env = os.environ.copy()
     env["PHOTO_CULLER_SMOKE_STATUS_FILE"] = str(status)
@@ -398,7 +409,7 @@ def launch_desktop(desktop: Path, data_dir: Path, source: Path, status: Path,
     stream = log.open("wb")
     process = subprocess.Popen(
         [str(desktop), "--data-dir", str(data_dir), "--authorized-root", str(source),
-         "--gallery-id", "s03-selection-fixture"],
+         "--gallery-id", gallery_id],
         cwd=desktop.parent, env=env, stdout=stream, stderr=subprocess.STDOUT,
     )
     process._smoke_log = stream
