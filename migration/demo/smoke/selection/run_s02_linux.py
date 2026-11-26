@@ -182,6 +182,13 @@ def location_entry_visible(rows: list[dict]) -> bool:
     return "home" in visible_text and "other locations" in visible_text and "no results found" not in visible_text
 
 
+def folder_list_row_visible(rows: list[dict], folder_name: str) -> bool:
+    # Autocomplete suggestions sit above the file list (around y=115) and can
+    # look like a selectable directory even though the chooser is still in its
+    # location entry. Only accept a matching row below the list header.
+    return any(row["y"] >= 130 and text_matches(row["text"], folder_name) for row in rows)
+
+
 def open_picker_location_entry(output: Path) -> None:
     latest_rows: list[dict] = []
     for attempt in range(3):
@@ -204,13 +211,24 @@ def open_source_picker(source: Path, output: Path) -> None:
     open_picker_location_entry(output)
     # Navigate to the parent so GTK can select the source directory as a row;
     # typing the source itself only navigates into it and leaves Select disabled.
+    subprocess.run(["xdotool", "key", "ctrl+a"], check=True)
     subprocess.run(["xdotool", "type", "--clearmodifiers", str(source.parent)], check=True)
-    subprocess.run(["xdotool", "key", "Return"], check=True)
-    time.sleep(2.0)
-    rows = screenshot(output.with_name("folder-picker-parent.png"))
-    click_text(rows, source.name)
+    rows = []
+    for attempt in range(3):
+        subprocess.run(["xdotool", "key", "Return"], check=True)
+        time.sleep(1.0)
+        rows = screenshot(output.with_name(f"folder-picker-parent-{attempt + 1}.png"))
+        if folder_list_row_visible(rows, source.name):
+            break
+    else:
+        raise RuntimeError(
+            f"GTK folder chooser did not open the source parent; expected row {source.name!r}, last OCR={rows}"
+        )
+    click_text([row for row in rows if row["y"] >= 130], source.name)
     time.sleep(1.0)
-    screenshot(output.with_name("folder-picker-selected.png"))
+    selected_rows = screenshot(output.with_name("folder-picker-selected.png"))
+    if not folder_list_row_visible(selected_rows, source.name):
+        raise RuntimeError(f"GTK did not select source folder row {source.name!r}; last OCR={selected_rows}")
     select_current_folder(output)
     time.sleep(2.0)
 
