@@ -169,6 +169,22 @@ def click_estimate_button() -> None:
     time.sleep(0.5)
 
 
+def estimate_result_visible(rows: list[dict], expected_files: int) -> bool:
+    expected = f"Estimate: {expected_files} files"
+    return any(row["confidence"] >= 35 and expected in row["text"] for row in rows)
+
+
+def wait_for_estimate_result(output: Path, expected_files: int, timeout: float = 12) -> list[dict]:
+    deadline = time.monotonic() + timeout
+    latest_rows: list[dict] = []
+    while time.monotonic() < deadline:
+        latest_rows = screenshot(output)
+        if estimate_result_visible(latest_rows, expected_files):
+            return latest_rows
+        time.sleep(0.25)
+    raise TimeoutError(f"estimate did not report {expected_files} files; last OCR={latest_rows}")
+
+
 def folder_dialog_select_point(width: int, height: int) -> tuple[int, int]:
     return (max(1, width - 50), max(1, height - 26))
 
@@ -412,9 +428,7 @@ def main() -> None:
         click_import_source(rows, source.name)
         screenshot(output / "import-estimate-ready.png")
         click_estimate_button()
-        rows = wait_text("logical photos", output / "estimated.png")
-        if not any("13 logical photos" in row["text"] for row in rows):
-            raise RuntimeError(f"expected 13 logical photos: {rows}")
+        wait_for_estimate_result(output / "estimated.png", expected_files=13)
         click_text(rows, "Start import")
         wait_text("13 imported", output / "import-progress.png", timeout=90)
         rows = screenshot(output / "import-complete.png")
