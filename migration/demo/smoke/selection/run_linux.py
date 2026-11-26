@@ -8,6 +8,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -294,17 +295,58 @@ def check_counts(database: Path, gallery_id: str, keep: int, reject: int,
         raise RuntimeError(f"catalog counts were {actual}, expected {expected}")
 
 
-def assert_visible_summary(rows: list[dict], *, kept: int, rejected: int, unrated: int) -> None:
-    for label, expected in (("KEPT", kept), ("REJECTED", rejected), ("UNRATED", unrated)):
-        labels = [row for row in rows if row["text"].upper() == label and row["confidence"] >= 20]
-        if len(labels) != 1:
-            raise RuntimeError(f"could not uniquely read {label} in the visible selection summary: {labels}")
-        label_row = labels[0]
-        counts = [row for row in rows if row["text"] == str(expected)
-                  and row["x"] >= label_row["x"] + label_row["width"]
-                  and abs(row["y"] - label_row["y"]) <= 14 and row["confidence"] >= 20]
-        if not counts:
-            raise RuntimeError(f"visible {label} summary did not show count {expected}: {rows}")
+SUMMARY_ROW_CROPS = {
+    "KEPT": (8, 396),
+    "ALT": (8, 431),
+    "REJECTED": (8, 466),
+    "UNRATED": (8, 501),
+}
+SUMMARY_LABEL_ALIASES = {
+    "KEPT": {"KEPT", "KEEP"},
+    "ALT": {"ALT"},
+    "REJECTED": {"REJECTED", "REJECT"},
+    "UNRATED": {"UNRATED"},
+}
+
+
+def summary_count_from_ocr(text: str, label: str) -> int:
+    """Read one category count from enlarged row OCR, correcting 1l/O confusions."""
+    tokens = [token.upper() for token in re.findall(r"[A-Za-z0-9]+", text)]
+    aliases = SUMMARY_LABEL_ALIASES[label]
+    label_index = next((index for index, token in enumerate(tokens) if token in aliases), None)
+    if label_index is None:
+        raise RuntimeError(f"could not read {label} label from enlarged summary row: {text!r}")
+    for token in tokens[label_index + 1:]:
+        digits = token.translate(str.maketrans({"I": "1", "L": "1", "O": "0"}))
+        if digits.isdigit():
+            return int(digits)
+    raise RuntimeError(f"could not read {label} count from enlarged summary row: {text!r}")
+
+
+def assert_visible_summary(screenshot: Path, *, kept: int, rejected: int,
+                           unrated: int, alt: int = 0) -> dict[str, int]:
+    from PIL import Image
+
+    expected = {"KEPT": kept, "ALT": alt, "REJECTED": rejected, "UNRATED": unrated}
+    observed = {}
+    with Image.open(screenshot) as image:
+        for label, count in expected.items():
+            x, y = SUMMARY_ROW_CROPS[label]
+            row = image.crop((x, y, x + 204, y + 30))
+            row = row.resize((row.width * 5, row.height * 5), Image.Resampling.LANCZOS)
+            with tempfile.NamedTemporaryFile(suffix=".png") as enlarged:
+                row.save(enlarged.name)
+                result = subprocess.run(
+                    ["tesseract", enlarged.name, "stdout", "--psm", "7"],
+                    check=True, capture_output=True, text=True,
+                )
+            actual = summary_count_from_ocr(result.stdout, label)
+            if actual != count:
+                raise RuntimeError(
+                    f"visible {label} summary showed {actual}, expected {count}: {result.stdout!r}"
+                )
+            observed[label.lower()] = actual
+    return observed
 
 
 def verify_fixture_hashes(manifest: dict, source: Path) -> dict[str, str]:
@@ -392,9 +434,11 @@ def main() -> None:
         check_catalog(database, gallery_id, expected_catalog)
         check_counts(database, gallery_id, keep=1, reject=1, unrated=11, total=13)
 
-        rows = screenshot_and_ocr(wid, output / "reject-first.png")
-        assert_visible_summary(rows, kept=1, rejected=1, unrated=11)
-        evidence["visible_summary"] = {"kept": 1, "rejected": 1, "unrated": 11}
+        reject_first = output / "reject-first.png"
+        rows = screenshot_and_ocr(wid, reject_first)
+        evidence["visible_summary"] = assert_visible_summary(
+            reject_first, kept=1, rejected=1, unrated=11, alt=0
+        )
         evidence["screenshots"].append(str(output / "reject-first.png"))
         click_at(decision_filter_center(window["geometry"], "KEEP"))
         rows = screenshot_and_ocr(wid, output / "keep-filter.png")
@@ -429,8 +473,11 @@ def main() -> None:
                                  gallery_id)
         wait_gallery_ready(process, reopened_status)
         reopened_window = native.wait_for_linux_window(process.pid, output)
-        reopened_rows = screenshot_and_ocr(reopened_window["window_id"], output / "reopened.png")
-        assert_visible_summary(reopened_rows, kept=1, rejected=1, unrated=11)
+        reopened_screenshot = output / "reopened.png"
+        reopened_rows = screenshot_and_ocr(reopened_window["window_id"], reopened_screenshot)
+        evidence["visible_summary_after_reopen"] = assert_visible_summary(
+            reopened_screenshot, kept=1, rejected=1, unrated=11, alt=0
+        )
         reopened_geometry = reopened_window["geometry"]
         click_at(decision_filter_center(reopened_geometry, "KEEP"))
         reopened_rows = screenshot_and_ocr(reopened_window["window_id"], output / "reopened-keep-filter.png")

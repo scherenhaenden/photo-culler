@@ -162,6 +162,15 @@ class SelectionRunnerTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "at least two unique photos"):
                 runner.decision_targets(["only-photo.jpg"])
 
+    def test_enlarged_summary_ocr_accepts_visible_aliases_and_digit_confusions(self):
+        self.assertEqual(runner.summary_count_from_ocr("Yo KEPT 1", "KEPT"), 1)
+        self.assertEqual(runner.summary_count_from_ocr("ALT (PICK) 0", "ALT"), 0)
+        self.assertEqual(runner.summary_count_from_ocr("REJECTED 1", "REJECTED"), 1)
+        self.assertEqual(runner.summary_count_from_ocr("UNRATED 1l", "UNRATED"), 11)
+        self.assertEqual(runner.summary_count_from_ocr("KEEP 1", "KEPT"), 1)
+        with self.assertRaisesRegex(RuntimeError, "could not read KEPT label"):
+            runner.summary_count_from_ocr("1", "KEPT")
+
 
 if __name__ == "__main__":
     unittest.main()
