@@ -90,6 +90,14 @@ class SelectionRunnerTests(unittest.TestCase):
                 (521, 364),
             )
             self.assertEqual(runner.next_photo_button_center(geometry), (959, 123))
+            self.assertEqual(runner.decision_button_center(geometry, "KEEP"), (931, 77))
+            self.assertEqual(runner.decision_button_center(geometry, "REJECT"), (1005, 77))
+            self.assertEqual(runner.decision_filter_center(geometry, "KEEP"), (403, 154))
+            self.assertEqual(runner.decision_filter_center(geometry, "ALL"), (292, 154))
+            with self.assertRaisesRegex(ValueError, "unknown decision toolbar action"):
+                runner.decision_button_center(geometry, "MAYBE")
+            with self.assertRaisesRegex(ValueError, "unknown decision filter"):
+                runner.decision_filter_center(geometry, "MAYBE")
             runner.check_catalog(database, "generated-id", {"photo-01": "UNPROCESSED"})
             runner.check_counts(
                 database, "generated-id", keep=0, reject=0, unrated=13, total=13
