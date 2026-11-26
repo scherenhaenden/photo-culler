@@ -60,6 +60,17 @@ class Sprint02RunnerTests(unittest.TestCase):
     def test_estimate_fallback_targets_enabled_button_in_modal(self):
         self.assertEqual(runner.estimate_button_point(1440, 900), (517, 744))
 
+    def test_reimport_estimate_fallback_targets_compact_reopened_modal(self):
+        self.assertEqual(runner.reimport_estimate_button_point(1440, 900), (517, 628))
+        with (
+            patch.object(runner.subprocess, "check_output", return_value="1440 900"),
+            patch.object(runner.subprocess, "run") as run,
+            patch.object(runner.time, "sleep"),
+        ):
+            runner.click_reimport_estimate_button()
+
+        run.assert_called_once_with(["xdotool", "mousemove", "517", "628", "click", "1"], check=True)
+
     def test_estimate_result_uses_legible_file_count_line(self):
         self.assertTrue(
             runner.estimate_result_visible(
