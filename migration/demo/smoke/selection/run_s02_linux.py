@@ -130,11 +130,52 @@ def select_current_folder(rows: list[dict]) -> None:
     time.sleep(0.5)
 
 
+def wait_for_folder_picker(timeout: float = 15) -> str:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        result = subprocess.run(
+            ["xdotool", "search", "--onlyvisible", "--name", "Choose photo folder"],
+            capture_output=True,
+            text=True,
+        )
+        window_ids = result.stdout.split()
+        if result.returncode == 0 and window_ids:
+            window_id = window_ids[-1]
+            subprocess.run(["xdotool", "windowactivate", "--sync", window_id], check=True)
+            subprocess.run(["xdotool", "windowfocus", "--sync", window_id], check=True)
+            # The portal window appears before its location/search widgets are
+            # ready to receive shortcuts on hosted Xvfb.
+            time.sleep(1.5)
+            return window_id
+        time.sleep(0.25)
+    raise TimeoutError("GTK folder picker did not become visible")
+
+
+def location_entry_visible(rows: list[dict]) -> bool:
+    visible_text = normalize_text(" ".join(row["text"] for row in rows))
+    return "home" in visible_text and "other locations" in visible_text and "no results found" not in visible_text
+
+
+def open_picker_location_entry(output: Path) -> None:
+    latest_rows: list[dict] = []
+    for attempt in range(3):
+        subprocess.run(["xdotool", "key", "ctrl+l"], check=True)
+        time.sleep(0.25)
+        latest_rows = screenshot(output.with_name(f"folder-picker-location-entry-{attempt + 1}.png"))
+        if location_entry_visible(latest_rows):
+            return
+        # A late portal can initially treat the shortcut as search input.
+        # Close that state and explicitly retry after the window has focus.
+        subprocess.run(["xdotool", "key", "Escape"], check=True)
+        time.sleep(0.25)
+    raise RuntimeError(f"GTK location entry did not open; last OCR={latest_rows}")
+
+
 def open_source_picker(source: Path, output: Path) -> None:
     rows = screenshot(output)
     click_choose_folder(rows)
-    time.sleep(1.0)
-    subprocess.run(["xdotool", "key", "ctrl+l"], check=True)
+    wait_for_folder_picker()
+    open_picker_location_entry(output)
     # Navigate to the parent so GTK can select the source directory as a row;
     # typing the source itself only navigates into it and leaves Select disabled.
     subprocess.run(["xdotool", "type", "--clearmodifiers", str(source.parent)], check=True)
