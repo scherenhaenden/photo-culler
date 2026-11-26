@@ -155,6 +155,17 @@ def first_page_display_names(database: Path, gallery_id: str, limit: int = 12) -
     return [f"{stem_name}.jpg" for _photo_id, stem_name in page]
 
 
+def photo_id_for_stem(database: Path, gallery_id: str, stem_name: str) -> str:
+    with sqlite3.connect(database) as connection:
+        rows = connection.execute(
+            "SELECT photo_id FROM photos WHERE gallery_id = ? AND stem_name = ?",
+            (gallery_id, stem_name),
+        ).fetchall()
+    if len(rows) != 1:
+        raise RuntimeError(f"catalog did not uniquely resolve photo {stem_name!r}: {rows}")
+    return rows[0][0]
+
+
 def decision_targets(display_names: list[str]) -> dict[str, str]:
     """Choose two distinct cards guaranteed to be present on the first page."""
     if len(display_names) < 2 or len(set(display_names)) != len(display_names):
@@ -309,6 +320,24 @@ SUMMARY_LABEL_ALIASES = {
 }
 
 
+def enlarged_crop_ocr(screenshot: Path, box: tuple[int, int, int, int], scale: int = 5) -> str:
+    from PIL import Image
+
+    with Image.open(screenshot) as image:
+        x, y, width, height = box
+        crop = image.crop((x, y, x + width, y + height))
+        enlarged = crop.resize(
+            (crop.width * scale, crop.height * scale), Image.Resampling.LANCZOS
+        )
+        with tempfile.NamedTemporaryFile(suffix=".png") as temporary:
+            enlarged.save(temporary.name)
+            result = subprocess.run(
+                ["tesseract", temporary.name, "stdout", "--psm", "7"],
+                check=True, capture_output=True, text=True,
+            )
+    return result.stdout
+
+
 def summary_count_from_ocr(text: str, label: str) -> int:
     """Read one category count from enlarged row OCR, correcting 1l/O confusions."""
     tokens = [token.upper() for token in re.findall(r"[A-Za-z0-9]+", text)]
@@ -325,28 +354,57 @@ def summary_count_from_ocr(text: str, label: str) -> int:
 
 def assert_visible_summary(screenshot: Path, *, kept: int, rejected: int,
                            unrated: int, alt: int = 0) -> dict[str, int]:
-    from PIL import Image
-
     expected = {"KEPT": kept, "ALT": alt, "REJECTED": rejected, "UNRATED": unrated}
     observed = {}
-    with Image.open(screenshot) as image:
-        for label, count in expected.items():
-            x, y = SUMMARY_ROW_CROPS[label]
-            row = image.crop((x, y, x + 204, y + 30))
-            row = row.resize((row.width * 5, row.height * 5), Image.Resampling.LANCZOS)
-            with tempfile.NamedTemporaryFile(suffix=".png") as enlarged:
-                row.save(enlarged.name)
-                result = subprocess.run(
-                    ["tesseract", enlarged.name, "stdout", "--psm", "7"],
-                    check=True, capture_output=True, text=True,
-                )
-            actual = summary_count_from_ocr(result.stdout, label)
-            if actual != count:
-                raise RuntimeError(
-                    f"visible {label} summary showed {actual}, expected {count}: {result.stdout!r}"
-                )
-            observed[label.lower()] = actual
+    for label, count in expected.items():
+        x, y = SUMMARY_ROW_CROPS[label]
+        text = enlarged_crop_ocr(screenshot, (x, y, 204, 30))
+        actual = summary_count_from_ocr(text, label)
+        if actual != count:
+            raise RuntimeError(
+                f"visible {label} summary showed {actual}, expected {count}: {text!r}"
+            )
+        observed[label.lower()] = actual
     return observed
+
+
+def visible_page_count_from_ocr(text: str) -> int:
+    match = re.search(r"\b([0-9]+)\s+ON\s+THIS\s+PAGE\b", text, re.IGNORECASE)
+    if not match:
+        raise RuntimeError(f"could not read visible page count from enlarged OCR: {text!r}")
+    return int(match.group(1))
+
+
+def normalized_photo_id_ocr(text: str) -> str:
+    normalized = text.lower().replace("o", "0").replace("i", "1").replace("l", "1")
+    return re.sub(r"[^0-9a-f]", "", normalized)
+
+
+def assert_keep_filter(screenshot: Path, rows: list[dict], expected_photo_id: str) -> dict[str, object]:
+    # Filenames are not rendered on these compact thumbnail cards. Confirm the
+    # single filtered page count and match the inspector's visible ID prefix to
+    # the database identity selected for KEEP.
+    page_text = enlarged_crop_ocr(screenshot, (450, 58, 145, 24))
+    visible_count = visible_page_count_from_ocr(page_text)
+    if visible_count != 1:
+        raise RuntimeError(f"KEEP filter showed {visible_count} cards, expected exactly one")
+    expected_prefix = expected_photo_id[:24].lower()
+    matching_ids = [
+        normalized_photo_id_ocr(row["text"])
+        for row in rows
+        if row["x"] >= 1000 and row["y"] < 150
+        and expected_prefix in normalized_photo_id_ocr(row["text"])
+    ]
+    if not matching_ids:
+        raise RuntimeError(
+            f"KEEP filter inspector did not show the expected photo ID prefix "
+            f"{expected_prefix}: {rows}"
+        )
+    return {
+        "visible_photo_count": visible_count,
+        "photo_id_prefix": expected_prefix,
+        "matching_inspector_id_rows": len(matching_ids),
+    }
 
 
 def verify_fixture_hashes(manifest: dict, source: Path) -> dict[str, str]:
@@ -417,8 +475,11 @@ def main() -> None:
         visible_names = first_page_display_names(database, gallery_id)
         targets = decision_targets(visible_names)
         expected_catalog = expected_decisions(targets)
+        keep_photo_id = photo_id_for_stem(database, gallery_id, Path(targets["keep"]).stem)
+        reject_photo_id = photo_id_for_stem(database, gallery_id, Path(targets["reject"]).stem)
         evidence["first_page_display_order"] = visible_names
         evidence["decision_targets"] = targets
+        evidence["decision_target_ids"] = {"keep": keep_photo_id, "reject": reject_photo_id}
 
         click_at(grid_cell_center(window["geometry"], visible_names.index(targets["keep"])))
         selected_first = output / "selected-first.png"
@@ -441,15 +502,12 @@ def main() -> None:
         )
         evidence["screenshots"].append(str(output / "reject-first.png"))
         click_at(decision_filter_center(window["geometry"], "KEEP"))
-        rows = screenshot_and_ocr(wid, output / "keep-filter.png")
-        evidence["screenshots"].append(str(output / "keep-filter.png"))
-        visible_after_filter = [row["text"] for row in rows]
-        if targets["keep"] not in visible_after_filter:
-            raise RuntimeError(f"KEEP filter omitted the confirmed photo {targets['keep']}")
-        if targets["reject"] in visible_after_filter:
-            raise RuntimeError(f"KEEP filter retained the confirmed REJECT photo {targets['reject']}")
+        keep_filter = output / "keep-filter.png"
+        rows = screenshot_and_ocr(wid, keep_filter)
+        evidence["screenshots"].append(str(keep_filter))
+        evidence["keep_filter"] = assert_keep_filter(keep_filter, rows, keep_photo_id)
         check_catalog(database, gallery_id, expected_catalog)
-        evidence["keep_filter"] = "only the KEEP photo is shown"
+        check_counts(database, gallery_id, keep=1, reject=1, unrated=11, total=13)
 
         rows = screenshot_and_ocr(wid, output / "keep-filter-before-next.png")
         click_at(decision_filter_center(window["geometry"], "ALL"))
@@ -480,11 +538,11 @@ def main() -> None:
         )
         reopened_geometry = reopened_window["geometry"]
         click_at(decision_filter_center(reopened_geometry, "KEEP"))
-        reopened_rows = screenshot_and_ocr(reopened_window["window_id"], output / "reopened-keep-filter.png")
-        if targets["keep"] not in [row["text"] for row in reopened_rows]:
-            raise RuntimeError(
-                f"KEEP decision for {targets['keep']} was not visible after reopening"
-            )
+        reopened_filter = output / "reopened-keep-filter.png"
+        reopened_rows = screenshot_and_ocr(reopened_window["window_id"], reopened_filter)
+        evidence["keep_filter_after_reopen"] = assert_keep_filter(
+            reopened_filter, reopened_rows, keep_photo_id
+        )
         check_catalog(database, gallery_id, expected_catalog)
         if page_ids(database, gallery_id) != ids:
             raise RuntimeError("photo IDs changed after closing and reopening the library")
