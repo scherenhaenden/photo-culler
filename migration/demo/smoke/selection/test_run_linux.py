@@ -90,18 +90,67 @@ class SelectionRunnerTests(unittest.TestCase):
                 (521, 364),
             )
             self.assertEqual(runner.next_photo_button_center(geometry), (959, 123))
-            self.assertEqual(runner.decision_button_center(geometry, "KEEP"), (931, 77))
-            self.assertEqual(runner.decision_button_center(geometry, "REJECT"), (1005, 77))
             self.assertEqual(runner.decision_filter_center(geometry, "KEEP"), (403, 154))
             self.assertEqual(runner.decision_filter_center(geometry, "ALL"), (292, 154))
             with self.assertRaisesRegex(ValueError, "unknown decision toolbar action"):
-                runner.decision_button_center(geometry, "MAYBE")
+                runner.decision_button_center(geometry, "MAYBE", Path("unused.png"))
             with self.assertRaisesRegex(ValueError, "unknown decision filter"):
                 runner.decision_filter_center(geometry, "MAYBE")
             runner.check_catalog(database, "generated-id", {"photo-01": "UNPROCESSED"})
             runner.check_counts(
                 database, "generated-id", keep=0, reject=0, unrated=13, total=13
             )
+
+    def test_toolbar_anchor_follows_keep_chip_in_both_sprint_layouts(self):
+        geometry = {"x": 1, "y": 20, "width": 1440, "height": 900}
+        self.assertTrue(runner.is_keep_chip_color((35, 149, 132)))
+        self.assertFalse(runner.is_keep_chip_color((35, 90, 132)))
+        for keep_x, expected_keep in ((770, (787, 75)), (912, (929, 75))):
+            with self.subTest(keep_x=keep_x):
+                pixels = [
+                    (x, y)
+                    for x in range(keep_x, keep_x + 32)
+                    for y in range(47, 64)
+                ]
+                local_center = runner.keep_chip_center_from_pixels(pixels)
+                self.assertEqual(local_center, (keep_x + 16, 55))
+                self.assertEqual(
+                    (geometry["x"] + local_center[0], geometry["y"] + local_center[1]),
+                    expected_keep,
+                )
+                self.assertEqual(
+                    (geometry["x"] + local_center[0] + 76,
+                     geometry["y"] + local_center[1]),
+                    (expected_keep[0] + 76, expected_keep[1]),
+                )
+
+    def test_decision_targets_use_two_visible_photos_when_ids_do_not_match_names(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            database = Path(temporary) / "catalog.sqlite3"
+            with sqlite3.connect(database) as connection:
+                connection.execute(
+                    "CREATE TABLE photos(gallery_id TEXT, photo_id TEXT, "
+                    "stem_name TEXT, decision TEXT)"
+                )
+                connection.executemany(
+                    "INSERT INTO photos VALUES (?, ?, ?, ?)",
+                    [
+                        ("generated-id", f"id-{14 - index:02}", f"photo-{index:02}", "UNPROCESSED")
+                        for index in range(1, 14)
+                    ],
+                )
+
+            display_names = runner.first_page_display_names(database, "generated-id")
+            targets = runner.decision_targets(display_names)
+
+            self.assertNotIn("photo-01.jpg", display_names)
+            self.assertEqual(targets, {"keep": "photo-13.jpg", "reject": "photo-12.jpg"})
+            self.assertEqual(
+                runner.expected_decisions(targets),
+                {"photo-13": "KEEP", "photo-12": "REJECT"},
+            )
+            with self.assertRaisesRegex(RuntimeError, "at least two unique photos"):
+                runner.decision_targets(["only-photo.jpg"])
 
 
 if __name__ == "__main__":
