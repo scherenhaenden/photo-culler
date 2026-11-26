@@ -57,9 +57,8 @@ class Sprint02RunnerTests(unittest.TestCase):
             ["xdotool", "mousemove", "535", "678", "click", "1"], check=True
         )
 
-    def test_estimate_requires_legible_enabled_button_text(self):
-        self.assertFalse(runner.estimate_button_enabled([{"text": "sotinnen", "confidence": 43}]))
-        self.assertTrue(runner.estimate_button_enabled([{"text": "Estimate", "confidence": 85}]))
+    def test_estimate_fallback_targets_enabled_button_in_modal(self):
+        self.assertEqual(runner.estimate_button_point(1440, 900), (517, 744))
 
     def test_folder_dialog_select_fallback_targets_the_lower_right_button(self):
         self.assertEqual(runner.folder_dialog_select_point(1097, 844), (1047, 818))
