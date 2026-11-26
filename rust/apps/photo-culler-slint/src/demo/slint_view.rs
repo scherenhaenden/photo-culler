@@ -526,6 +526,29 @@ fn wire_library_callbacks(
 ) {
     let weak = window.as_weak();
     let callback_library = library.clone();
+    window.on_inspect_requested(move |photo_id| {
+        let item = callback_library.lock().ok().and_then(|state| {
+            state
+                .items
+                .iter()
+                .find(|item| item.metadata.id == photo_id.as_str())
+                .map(|item| {
+                    (
+                        item.metadata.filename.clone(),
+                        decision_label(&item.metadata.decision, web_layout),
+                        decode_jpeg(&item.jpeg, "image/jpeg").unwrap_or_default(),
+                    )
+                })
+        });
+        if let (Some(window), Some((filename, decision, preview))) = (weak.upgrade(), item) {
+            window.set_inspector_photo_name(filename.into());
+            window.set_inspector_decision(decision.into());
+            window.set_inspector_thumbnail(preview);
+        }
+    });
+
+    let weak = window.as_weak();
+    let callback_library = library.clone();
     window.on_search_changed(move |query| {
         if let Ok(mut state) = callback_library.lock() {
             state.filters.search_query = query.to_string();
