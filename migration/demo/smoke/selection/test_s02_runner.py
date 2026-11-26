@@ -40,10 +40,7 @@ class Sprint02RunnerTests(unittest.TestCase):
         self.assertEqual(runner.folder_dialog_select_point(1097, 844), (1047, 818))
 
     def test_picker_folder_name_matches_ocr_without_diacritics(self):
-        self.assertEqual(
-            runner.normalize_text("Fotos de selección"),
-            runner.normalize_text("Fotos de seleccion"),
-        )
+        self.assertTrue(runner.text_matches("Fotos de seleccién/", "Fotos de selección"))
 
     def test_catalog_snapshot_reads_ids_and_full_hashes_for_jpegs(self):
         with tempfile.TemporaryDirectory() as temporary:
