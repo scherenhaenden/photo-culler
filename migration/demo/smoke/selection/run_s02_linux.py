@@ -262,7 +262,7 @@ def photo_index_text_visible(text: str, expected_index: int) -> bool:
 
 
 def navigation_crop_geometry(width: int, height: int) -> tuple[int, int, int, int]:
-    return (round(width * 0.56), round(height * 0.12), round(width * 0.14), round(height * 0.04))
+    return (round(width * 0.59), round(height * 0.122), round(width * 0.07), round(height * 0.033))
 
 
 def read_navigation_text(image: Path) -> str:
@@ -271,7 +271,7 @@ def read_navigation_text(image: Path) -> str:
     crop = image.with_name(f"{image.stem}-navigation.png")
     subprocess.run([
         "convert", str(image), "-crop", f"{crop_width}x{crop_height}+{x}+{y}",
-        "-resize", "400%", str(crop),
+        "+repage", "-resize", "600%", "-colorspace", "Gray", "-contrast-stretch", "2%x2%", str(crop),
     ], check=True)
     result = subprocess.run(
         ["tesseract", str(crop), "stdout", "--psm", "7"],

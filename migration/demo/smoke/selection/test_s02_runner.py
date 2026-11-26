@@ -143,7 +143,7 @@ class Sprint02RunnerTests(unittest.TestCase):
                 [{"text": "Foto 2 - página 1", "confidence": 90}], 13
             )
         )
-        self.assertEqual(runner.navigation_crop_geometry(1440, 900), (806, 108, 202, 36))
+        self.assertEqual(runner.navigation_crop_geometry(1440, 900), (850, 110, 101, 30))
         self.assertTrue(runner.photo_index_text_visible("Foto 3 · página 1", 3))
         self.assertFalse(runner.photo_index_text_visible("Foto 2 · página 1", 3))
 
