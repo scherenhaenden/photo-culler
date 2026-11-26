@@ -232,6 +232,22 @@ def wait_for_import_completion_dismissal(output: Path, timeout: float = 10) -> b
     return False
 
 
+def next_page_button_point(width: int, height: int) -> tuple[int, int]:
+    # The gallery pager sits above the photo grid, just right of its page label.
+    return (round(width * 0.667), round(height * 0.137))
+
+
+def click_next_page(rows: list[dict]) -> None:
+    candidates = [row for row in rows if row["confidence"] >= 35 and row["text"].strip() in {"›", ">"}]
+    if len(candidates) == 1:
+        click_text(rows, candidates[0]["text"])
+        return
+    width, height = map(int, subprocess.check_output(["xdotool", "getdisplaygeometry"], text=True).split())
+    x, y = next_page_button_point(width, height)
+    subprocess.run(["xdotool", "mousemove", str(x), str(y), "click", "1"], check=True)
+    time.sleep(0.5)
+
+
 def estimate_result_visible(rows: list[dict], expected_files: int) -> bool:
     expected = f"Estimate: {expected_files} files"
     return any(row["confidence"] >= 35 and expected in row["text"] for row in rows)
@@ -517,7 +533,7 @@ def main() -> None:
         rows = screenshot(output / "library-first-page.png")
         if not any("12 ON THIS PAGE" in row["text"] for row in rows):
             raise RuntimeError(f"expected twelve photos on the first page: {rows}")
-        click_text(rows, "›")
+        click_next_page(rows)
         rows = wait_text("1 ON THIS PAGE", output / "library-second-page.png")
         if not any("photo-13.jpg" in row["text"].casefold() for row in rows):
             rows = wait_text("photo-13", output / "library-second-page-visible.png")
@@ -531,7 +547,7 @@ def main() -> None:
         window = native.wait_for_linux_window(process.pid, output)
         rows = screenshot(output / "reopened.png")
         if not any("photo-13.jpg" in row["text"].casefold() for row in rows):
-            click_text(rows, "›")
+            click_next_page(rows)
             rows = wait_text("photo-13.jpg", output / "reopened-second-page.png")
         if database_snapshot(database) != (13, ids_before):
             raise RuntimeError("reopened catalog IDs or counts differ")
