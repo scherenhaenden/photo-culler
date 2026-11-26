@@ -161,29 +161,41 @@ def click_text(rows: list[dict], text: str, window_width: int, window_height: in
     time.sleep(0.5)
 
 
-def locate_visible_photo_cards(window_id: str, geometry: dict, output: Path) -> dict[str, tuple[int, int]]:
-    """Hover the visible grid cells to reveal Slint's filename overlays, then OCR them."""
-    origin_x, origin_y = geometry["x"], geometry["y"]
+def first_page_display_names(database: Path, gallery_id: str, limit: int = 12) -> list[str]:
+    """Mirror the first API page and the UI's filename-descending grid order."""
+    with sqlite3.connect(database) as connection:
+        page = connection.execute(
+            "SELECT photo_id, stem_name FROM photos WHERE gallery_id = ? "
+            "ORDER BY photo_id ASC LIMIT ?",
+            (gallery_id, limit),
+        ).fetchall()
+    # The deterministic JPEGs have no EXIF capture time. The desktop view sorts
+    # the API page by filename descending before placing it row-major in the grid.
+    page.sort(key=lambda row: row[1], reverse=True)
+    return [f"{stem_name}.jpg" for _photo_id, stem_name in page]
+
+
+def grid_cell_center(geometry: dict, index: int) -> tuple[int, int]:
+    """Return a card center for the fixed 1440x900 Linux acceptance layout."""
     width, height = geometry["width"], geometry["height"]
-    found: dict[str, tuple[int, int]] = {}
-    # The gallery occupies the area right of the left navigation and below the
-    # toolbar. Sampling more densely than the smallest supported card size
-    # ensures that each visible card receives at least one hover point.
-    x_values = range(origin_x + int(width * .24), origin_x + int(width * .99), 72)
-    y_values = range(origin_y + int(height * .16), origin_y + int(height * .90), 58)
-    probe = output / "hover-probe.png"
-    for y in y_values:
-        for x in x_values:
-            subprocess.run(["xdotool", "mousemove", str(x), str(y)], check=True)
-            time.sleep(.12)
-            rows = screenshot_and_ocr(window_id, probe)
-            for row in rows:
-                label = row["text"].casefold()
-                if label.startswith("photo-") and label.endswith(".jpg"):
-                    found.setdefault(label, (x, y))
-        if len(found) >= 12:
-            break
-    return found
+    if width < 1280 or height < 700:
+        raise RuntimeError(f"selection acceptance needs the 1440x900 grid layout: {geometry}")
+    if not 0 <= index < 12:
+        raise ValueError(f"first-page grid index is out of range: {index}")
+    columns = 5  # Medium density at viewport-width >= 1280, as defined by LibraryGallery.
+    row, column = divmod(index, columns)
+    origin_x, origin_y = geometry["x"], geometry["y"]
+    x = origin_x + 520 + column * 118
+    y = origin_y + 160 + row * 92
+    return x, y
+
+
+def next_photo_button_center(geometry: dict) -> tuple[int, int]:
+    """Return the center of the gallery header's Next Photo control."""
+    return (
+        geometry["x"] + round(geometry["width"] * 0.665),
+        geometry["y"] + round(geometry["height"] * 0.114),
+    )
 
 
 def click_photo_at(point: tuple[int, int]) -> None:
@@ -297,20 +309,22 @@ def main() -> None:
         first = output / "page-one.png"
         rows = screenshot_and_ocr(wid, first)
         evidence["screenshots"].append(str(first))
-        visible_cards = locate_visible_photo_cards(wid, window["geometry"], output)
-        expected_first_page = {f"photo-{index:02}.jpg" for index in range(1, 13)}
-        if not expected_first_page.issubset(visible_cards):
-            raise RuntimeError(f"could not reveal all first-page fixture labels by hovering: {sorted(visible_cards)}")
-        evidence["first_page_labels"] = sorted(visible_cards)
+        visible_names = first_page_display_names(database, gallery_id)
+        required_names = {"photo-01.jpg", "photo-02.jpg"}
+        if not required_names.issubset(visible_names):
+            raise RuntimeError(
+                f"decision targets are not on the first API page: {visible_names}"
+            )
+        evidence["first_page_display_order"] = visible_names
 
-        click_photo_at(visible_cards["photo-01.jpg"])
+        click_photo_at(grid_cell_center(window["geometry"], visible_names.index("photo-01.jpg")))
         rows = screenshot_and_ocr(wid, output / "selected-first.png")
         click_text(rows, "KEEP", width, height, below=0.55, left=False,
                    origin_x=origin_x, origin_y=origin_y)
         check_catalog(database, gallery_id, {"photo-01": "KEEP"})
 
         rows = screenshot_and_ocr(wid, output / "kept-first.png")
-        click_photo_at(visible_cards["photo-02.jpg"])
+        click_photo_at(grid_cell_center(window["geometry"], visible_names.index("photo-02.jpg")))
         rows = screenshot_and_ocr(wid, output / "selected-second.png")
         click_text(rows, "REJECT", width, height, below=0.55, left=False,
                    origin_x=origin_x, origin_y=origin_y)
@@ -421,8 +435,9 @@ def launch_desktop(desktop: Path, data_dir: Path, source: Path, status: Path,
 
 def click_next_photo(window_id: str, origin_x: int, origin_y: int,
                      width: int, height: int) -> None:
-    x = origin_x + width - 95
-    y = origin_y + height - 12
+    x, y = next_photo_button_center({
+        "x": origin_x, "y": origin_y, "width": width, "height": height,
+    })
     subprocess.run(["xdotool", "mousemove", str(x), str(y), "click", "1"], check=True)
     time.sleep(0.35)
 

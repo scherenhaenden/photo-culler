@@ -75,6 +75,21 @@ class SelectionRunnerTests(unittest.TestCase):
 
             self.assertEqual(len(ids), 13)
             self.assertEqual(runner.second_page_last_name(database, "generated-id"), "photo-13.jpg")
+            display_names = runner.first_page_display_names(database, "generated-id")
+            self.assertEqual(
+                display_names,
+                [f"photo-{index:02}.jpg" for index in range(12, 0, -1)],
+            )
+            geometry = {"x": 1, "y": 20, "width": 1440, "height": 900}
+            self.assertEqual(
+                runner.grid_cell_center(geometry, display_names.index("photo-01.jpg")),
+                (639, 364),
+            )
+            self.assertEqual(
+                runner.grid_cell_center(geometry, display_names.index("photo-02.jpg")),
+                (521, 364),
+            )
+            self.assertEqual(runner.next_photo_button_center(geometry), (959, 123))
             runner.check_catalog(database, "generated-id", {"photo-01": "UNPROCESSED"})
             runner.check_counts(
                 database, "generated-id", keep=0, reject=0, unrated=13, total=13
