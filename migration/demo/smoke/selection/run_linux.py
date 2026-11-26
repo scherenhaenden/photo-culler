@@ -140,27 +140,6 @@ def screenshot_and_ocr(window_id: str, path: Path) -> list[dict]:
     return rows
 
 
-def click_text(rows: list[dict], text: str, window_width: int, window_height: int,
-               *, left: bool | None = None, below: float | None = None,
-               above: float | None = None, origin_x: int = 0,
-               origin_y: int = 0) -> None:
-    candidates = [row for row in rows if row["text"].casefold() == text.casefold()
-                  and row["confidence"] >= 35]
-    if left is not None:
-        candidates = [row for row in candidates if (row["x"] < window_width * 0.23) == left]
-    if below is not None:
-        candidates = [row for row in candidates if row["y"] > window_height * below]
-    if above is not None:
-        candidates = [row for row in candidates if row["y"] < window_height * above]
-    if len(candidates) != 1:
-        raise RuntimeError(f"cannot uniquely locate {text!r} in OCR output: {candidates}")
-    row = candidates[0]
-    x = origin_x + row["x"] + row["width"] // 2
-    y = origin_y + row["y"] + row["height"] // 2
-    subprocess.run(["xdotool", "mousemove", str(x), str(y), "click", "1"], check=True)
-    time.sleep(0.5)
-
-
 def first_page_display_names(database: Path, gallery_id: str, limit: int = 12) -> list[str]:
     """Mirror the first API page and the UI's filename-descending grid order."""
     with sqlite3.connect(database) as connection:
@@ -198,7 +177,39 @@ def next_photo_button_center(geometry: dict) -> tuple[int, int]:
     )
 
 
-def click_photo_at(point: tuple[int, int]) -> None:
+def decision_button_center(geometry: dict, decision: str) -> tuple[int, int]:
+    """Return a selection-toolbar button center; these compact labels OCR poorly."""
+    x_fraction = {"KEEP": 0.646, "ALT": 0.671, "REJECT": 0.697, "CLEAR": 0.724}
+    try:
+        fraction = x_fraction[decision.upper()]
+    except KeyError as error:
+        raise ValueError(f"unknown decision toolbar action: {decision}") from error
+    return (
+        geometry["x"] + round(geometry["width"] * fraction),
+        geometry["y"] + round(geometry["height"] * 0.063),
+    )
+
+
+def decision_filter_center(geometry: dict, decision: str) -> tuple[int, int]:
+    """Return a decision-filter button center in the left filter sidebar."""
+    positions = {
+        "ALL": (0.202, 0.149),
+        "KEEP": (0.279, 0.149),
+        "ALT": (0.202, 0.186),
+        "REJECT": (0.279, 0.186),
+        "UNRATED": (0.202, 0.223),
+    }
+    try:
+        x_fraction, y_fraction = positions[decision.upper()]
+    except KeyError as error:
+        raise ValueError(f"unknown decision filter: {decision}") from error
+    return (
+        geometry["x"] + round(geometry["width"] * x_fraction),
+        geometry["y"] + round(geometry["height"] * y_fraction),
+    )
+
+
+def click_at(point: tuple[int, int]) -> None:
     subprocess.run(["xdotool", "mousemove", str(point[0]), str(point[1]), "click", "1"], check=True)
     time.sleep(.4)
 
@@ -317,17 +328,15 @@ def main() -> None:
             )
         evidence["first_page_display_order"] = visible_names
 
-        click_photo_at(grid_cell_center(window["geometry"], visible_names.index("photo-01.jpg")))
+        click_at(grid_cell_center(window["geometry"], visible_names.index("photo-01.jpg")))
         rows = screenshot_and_ocr(wid, output / "selected-first.png")
-        click_text(rows, "KEEP", width, height, below=0.55, left=False,
-                   origin_x=origin_x, origin_y=origin_y)
+        click_at(decision_button_center(window["geometry"], "KEEP"))
         check_catalog(database, gallery_id, {"photo-01": "KEEP"})
 
         rows = screenshot_and_ocr(wid, output / "kept-first.png")
-        click_photo_at(grid_cell_center(window["geometry"], visible_names.index("photo-02.jpg")))
+        click_at(grid_cell_center(window["geometry"], visible_names.index("photo-02.jpg")))
         rows = screenshot_and_ocr(wid, output / "selected-second.png")
-        click_text(rows, "REJECT", width, height, below=0.55, left=False,
-                   origin_x=origin_x, origin_y=origin_y)
+        click_at(decision_button_center(window["geometry"], "REJECT"))
         check_catalog(database, gallery_id, {"photo-01": "KEEP", "photo-02": "REJECT"})
         check_counts(database, gallery_id, keep=1, reject=1, unrated=11, total=13)
 
@@ -335,8 +344,7 @@ def main() -> None:
         assert_visible_summary(rows, kept=1, rejected=1, unrated=11)
         evidence["visible_summary"] = {"kept": 1, "rejected": 1, "unrated": 11}
         evidence["screenshots"].append(str(output / "reject-first.png"))
-        click_text(rows, "KEEP", width, height, left=True, above=0.40,
-                   origin_x=origin_x, origin_y=origin_y)
+        click_at(decision_filter_center(window["geometry"], "KEEP"))
         rows = screenshot_and_ocr(wid, output / "keep-filter.png")
         evidence["screenshots"].append(str(output / "keep-filter.png"))
         if "photo-01.jpg" not in [row["text"] for row in rows]:
@@ -347,8 +355,7 @@ def main() -> None:
         evidence["keep_filter"] = "only the KEEP photo is shown"
 
         rows = screenshot_and_ocr(wid, output / "keep-filter-before-next.png")
-        click_text(rows, "ALL", width, height, left=True, above=0.40,
-                   origin_x=origin_x, origin_y=origin_y)
+        click_at(decision_filter_center(window["geometry"], "ALL"))
         for _ in range(12):
             click_next_photo(wid, origin_x, origin_y, width, height)
         rows = screenshot_and_ocr(wid, output / "page-two.png")
@@ -372,9 +379,7 @@ def main() -> None:
         reopened_rows = screenshot_and_ocr(reopened_window["window_id"], output / "reopened.png")
         assert_visible_summary(reopened_rows, kept=1, rejected=1, unrated=11)
         reopened_geometry = reopened_window["geometry"]
-        click_text(reopened_rows, "KEEP", reopened_geometry["width"],
-                   reopened_geometry["height"], left=True, above=0.40,
-                   origin_x=reopened_geometry["x"], origin_y=reopened_geometry["y"])
+        click_at(decision_filter_center(reopened_geometry, "KEEP"))
         reopened_rows = screenshot_and_ocr(reopened_window["window_id"], output / "reopened-keep-filter.png")
         if "photo-01.jpg" not in [row["text"] for row in reopened_rows]:
             raise RuntimeError("KEEP decision was not visible after reopening and applying KEEP filter")
