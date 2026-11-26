@@ -109,6 +109,30 @@ class Sprint02RunnerTests(unittest.TestCase):
 
         self.assertTrue(runner.import_completed_visible(rows))
 
+    def test_reimport_completion_requires_a_new_completed_database_job(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            database = Path(temporary) / "catalog.sqlite3"
+            with sqlite3.connect(database) as connection:
+                connection.execute(
+                    "CREATE TABLE import_jobs (id TEXT, state TEXT, discovered INTEGER, "
+                    "imported INTEGER, issues INTEGER, created_at TEXT)"
+                )
+                connection.execute("INSERT INTO import_jobs VALUES ('old', 'completed', 13, 13, 0, '1')")
+                connection.execute("INSERT INTO import_jobs VALUES ('new', 'completed', 13, 13, 0, '2')")
+
+            self.assertEqual(
+                runner.import_job_snapshot(database),
+                [("old", "completed", 13, 13, 0), ("new", "completed", 13, 13, 0)],
+            )
+            with patch.object(
+                runner, "screenshot", return_value=[{"text": "Import completed", "confidence": 92}]
+            ):
+                rows = runner.wait_for_reimport_completion(
+                    database, Path("capture.png"), {"old"}, expected_files=13
+                )
+
+        self.assertTrue(runner.import_completed_visible(rows))
+
     def test_import_completion_dismissal_waits_for_modal_status_to_disappear(self):
         with (
             patch.object(runner, "screenshot", return_value=[]),

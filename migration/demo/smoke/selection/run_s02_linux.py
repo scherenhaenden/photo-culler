@@ -511,6 +511,41 @@ def database_snapshot(database: Path) -> tuple[int, list[tuple[str, str, str, st
     return len(rows), rows
 
 
+def import_job_snapshot(database: Path) -> list[tuple[str, str, int, int, int]]:
+    import sqlite3
+
+    with sqlite3.connect(database) as connection:
+        return connection.execute(
+            "SELECT id, state, discovered, imported, issues FROM import_jobs ORDER BY created_at, id"
+        ).fetchall()
+
+
+def wait_for_reimport_completion(
+    database: Path, output: Path, previous_job_ids: set[str], expected_files: int, timeout: float = 90
+) -> list[dict]:
+    deadline = time.monotonic() + timeout
+    latest_rows: list[dict] = []
+    latest_jobs: list[tuple[str, str, int, int, int]] = []
+    while time.monotonic() < deadline:
+        latest_rows = screenshot(output)
+        latest_jobs = import_job_snapshot(database)
+        new_jobs = [job for job in latest_jobs if job[0] not in previous_job_ids]
+        completed = any(
+            state.casefold() == "completed"
+            and discovered == expected_files
+            and imported == expected_files
+            and issues == 0
+            for _job_id, state, discovered, imported, issues in new_jobs
+        )
+        if completed and import_completed_visible(latest_rows):
+            return latest_rows
+        time.sleep(0.5)
+    raise TimeoutError(
+        f"reimport did not create a completed {expected_files}-file job; "
+        f"new jobs={[job for job in latest_jobs if job[0] not in previous_job_ids]}, last OCR={latest_rows}"
+    )
+
+
 def assert_source_hashes(source: Path, manifest: Path) -> None:
     expected = json.loads(manifest.read_text())
     for entry in expected["photos"]:
@@ -615,9 +650,15 @@ def main() -> None:
 
         rows = screenshot(output / "reopened-import.png")
         click_import_button(rows)
-        rows = wait_text("Start import", output / "reimport-dialog.png")
-        click_text(rows, "Start import")
-        rows = wait_for_import_completion(database, output / "reimport-complete.png", expected_files=13)
+        rows = wait_text("Available", output / "reimport-dialog.png")
+        click_estimate_button()
+        wait_for_estimate_result(output / "reimport-estimated.png", expected_files=13)
+        rows = screenshot(output / "reimport-start-ready.png")
+        previous_job_ids = {job[0] for job in import_job_snapshot(database)}
+        click_start_import_button(rows)
+        rows = wait_for_reimport_completion(
+            database, output / "reimport-complete.png", previous_job_ids, expected_files=13
+        )
         click_close_import(rows)
         if not wait_for_import_completion_dismissal(output / "reimport-after-close.png"):
             raise RuntimeError("completed reimport modal remained visible after clicking Close")
