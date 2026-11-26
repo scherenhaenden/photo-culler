@@ -147,7 +147,17 @@ class SelectionRunnerTests(unittest.TestCase):
             self.assertEqual(targets, {"keep": "photo-13.jpg", "reject": "photo-12.jpg"})
             self.assertEqual(
                 runner.expected_decisions(targets),
-                {"photo-13": "KEEP", "photo-12": "REJECT"},
+                {"photo-13": "KEEP", "photo-12": "REJECT_TECHNICAL"},
+            )
+            with sqlite3.connect(database) as connection:
+                connection.execute(
+                    "UPDATE photos SET decision = CASE stem_name "
+                    "WHEN 'photo-13' THEN 'KEEP' "
+                    "WHEN 'photo-12' THEN 'REJECT_TECHNICAL' "
+                    "ELSE decision END"
+                )
+            runner.check_catalog(
+                database, "generated-id", runner.expected_decisions(targets)
             )
             with self.assertRaisesRegex(RuntimeError, "at least two unique photos"):
                 runner.decision_targets(["only-photo.jpg"])
