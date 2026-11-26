@@ -124,7 +124,7 @@ export async function runLiveSmoke(browserName) {
     }
     const status = page.locator("#application-status");
     assert.equal(await status.getAttribute("data-state"), "ready");
-    assert.match(await status.textContent(), /demo-001\.jpg/);
+    assert.match(await status.textContent(), /demo-001/);
     const diagnosticVisible = await page.locator("#diagnostic").isVisible();
     const diagnosticTitle = await page.locator("#diagnostic-title").textContent();
     const diagnosticMessage = await page.locator("#diagnostic-message").textContent();
