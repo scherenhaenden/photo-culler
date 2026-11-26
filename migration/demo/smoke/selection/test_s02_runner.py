@@ -40,6 +40,9 @@ class Sprint02RunnerTests(unittest.TestCase):
     def test_folder_dialog_select_fallback_targets_the_lower_right_button(self):
         self.assertEqual(runner.folder_dialog_select_point(1097, 844), (1047, 818))
 
+    def test_folder_dialog_project_bookmark_targets_sidebar_entry(self):
+        self.assertEqual(runner.folder_dialog_project_bookmark_point(1097, 844), (86, 155))
+
     def test_picker_search_results_do_not_count_as_location_entry(self):
         self.assertFalse(
             runner.location_entry_visible(

@@ -112,6 +112,10 @@ def folder_dialog_select_point(width: int, height: int) -> tuple[int, int]:
     return (max(1, width - 50), max(1, height - 26))
 
 
+def folder_dialog_project_bookmark_point(width: int, height: int) -> tuple[int, int]:
+    return (max(1, round(width * 0.078)), max(1, round(height * 0.184)))
+
+
 def visible_folder_picker_id() -> str | None:
     result = subprocess.run(
         ["xdotool", "search", "--onlyvisible", "--name", "Choose photo folder"],
@@ -129,6 +133,16 @@ def click_folder_picker_select() -> None:
     geometry = subprocess.check_output(["xdotool", "getwindowgeometry", "--shell", window_id], text=True)
     values = dict(line.split("=", 1) for line in geometry.splitlines() if "=" in line)
     x, y = folder_dialog_select_point(int(values["WIDTH"]), int(values["HEIGHT"]))
+    subprocess.run(["xdotool", "mousemove", "--window", window_id, str(x), str(y), "click", "1"], check=True)
+
+
+def click_folder_picker_project_bookmark() -> None:
+    window_id = visible_folder_picker_id()
+    if not window_id:
+        raise RuntimeError("folder picker window was not visible when opening project bookmark")
+    geometry = subprocess.check_output(["xdotool", "getwindowgeometry", "--shell", window_id], text=True)
+    values = dict(line.split("=", 1) for line in geometry.splitlines() if "=" in line)
+    x, y = folder_dialog_project_bookmark_point(int(values["WIDTH"]), int(values["HEIGHT"]))
     subprocess.run(["xdotool", "mousemove", "--window", window_id, str(x), str(y), "click", "1"], check=True)
 
 
@@ -232,8 +246,10 @@ def open_source_picker(source: Path, output: Path) -> None:
     # The hosted GTK location entry autocompletes this path but does not commit
     # navigation reliably. Start from the repository bookmark and traverse the
     # real directory rows so the source selection is an actual folder row.
-    rows = screenshot(output.with_name("folder-picker-bookmarks.png"))
-    click_text(rows, "photo-culler")
+    screenshot(output.with_name("folder-picker-bookmarks.png"))
+    click_folder_picker_project_bookmark()
+    time.sleep(0.5)
+    wait_for_folder_list_row(source_folder_navigation_segments(source)[0], output.with_name("folder-picker-repository-root.png"))
     for index, folder_name in enumerate((*source_folder_navigation_segments(source), source.name), start=1):
         rows = wait_for_folder_list_row(folder_name, output.with_name(f"folder-picker-list-{index}.png"))
         click_folder_list_row(rows, folder_name)
