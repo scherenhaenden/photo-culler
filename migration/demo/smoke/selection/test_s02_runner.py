@@ -36,6 +36,15 @@ class Sprint02RunnerTests(unittest.TestCase):
     def test_first_run_folder_button_fallback_targets_center_of_action(self):
         self.assertEqual(runner.choose_folder_button_point(1440, 900), (756, 878))
 
+    def test_folder_dialog_select_fallback_targets_the_lower_right_button(self):
+        self.assertEqual(runner.folder_dialog_select_point(1097, 844), (1047, 818))
+
+    def test_picker_folder_name_matches_ocr_without_diacritics(self):
+        self.assertEqual(
+            runner.normalize_text("Fotos de selección"),
+            runner.normalize_text("Fotos de seleccion"),
+        )
+
     def test_catalog_snapshot_reads_ids_and_full_hashes_for_jpegs(self):
         with tempfile.TemporaryDirectory() as temporary:
             database = Path(temporary) / "catalog.sqlite3"

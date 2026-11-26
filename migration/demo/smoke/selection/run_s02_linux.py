@@ -10,6 +10,7 @@ import json
 import os
 import subprocess
 import time
+import unicodedata
 from pathlib import Path
 
 
@@ -56,7 +57,8 @@ def parse_tesseract_tsv(tsv: str) -> list[dict]:
 
 
 def click_text(rows: list[dict], text: str, *, near: tuple[int, int] | None = None) -> None:
-    candidates = [row for row in rows if row["text"].casefold() == text.casefold() and row["confidence"] >= 35]
+    target = normalize_text(text)
+    candidates = [row for row in rows if normalize_text(row["text"]) == target and row["confidence"] >= 35]
     if near is not None:
         candidates.sort(key=lambda row: abs(row["x"] - near[0]) + abs(row["y"] - near[1]))
         if candidates:
@@ -75,6 +77,11 @@ def click_text(rows: list[dict], text: str, *, near: tuple[int, int] | None = No
     time.sleep(0.5)
 
 
+def normalize_text(text: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", text.casefold())
+    return "".join(character for character in decomposed if not unicodedata.combining(character))
+
+
 def choose_folder_button_point(width: int, height: int) -> tuple[int, int]:
     # The first-run call to action is centered in the gallery panel, near the
     # bottom of the maximized 1440x900 runner window.
@@ -82,7 +89,7 @@ def choose_folder_button_point(width: int, height: int) -> tuple[int, int]:
 
 
 def click_choose_folder(rows: list[dict]) -> None:
-    if any(row["text"].casefold() == "elegir carpeta" for row in rows):
+    if any(normalize_text(row["text"]) == normalize_text("Elegir carpeta") for row in rows):
         click_text(rows, "Elegir carpeta")
         return
 
@@ -92,23 +99,43 @@ def click_choose_folder(rows: list[dict]) -> None:
     time.sleep(0.5)
 
 
+def folder_dialog_select_point(width: int, height: int) -> tuple[int, int]:
+    return (max(1, width - 50), max(1, height - 26))
+
+
+def select_current_folder(rows: list[dict]) -> None:
+    if any(row["text"].casefold() == "select" for row in rows):
+        click_text(rows, "Select")
+        return
+
+    window_ids = subprocess.check_output(
+        ["xdotool", "search", "--onlyvisible", "--name", "Choose photo folder"], text=True
+    ).split()
+    if not window_ids:
+        raise RuntimeError("folder picker window was not visible after entering the source path")
+    window_id = window_ids[-1]
+    geometry = subprocess.check_output(["xdotool", "getwindowgeometry", "--shell", window_id], text=True)
+    values = dict(line.split("=", 1) for line in geometry.splitlines() if "=" in line)
+    x, y = folder_dialog_select_point(int(values["WIDTH"]), int(values["HEIGHT"]))
+    subprocess.run(["xdotool", "mousemove", "--window", window_id, str(x), str(y), "click", "1"], check=True)
+    time.sleep(0.5)
+
+
 def open_source_picker(source: Path, output: Path) -> None:
     rows = screenshot(output)
     click_choose_folder(rows)
     time.sleep(1.0)
     subprocess.run(["xdotool", "key", "ctrl+l"], check=True)
-    subprocess.run(["xdotool", "type", "--clearmodifiers", str(source)], check=True)
+    # Navigate to the parent so GTK can select the source directory as a row;
+    # typing the source itself only navigates into it and leaves Select disabled.
+    subprocess.run(["xdotool", "type", "--clearmodifiers", str(source.parent)], check=True)
     subprocess.run(["xdotool", "key", "Return"], check=True)
+    time.sleep(2.0)
+    rows = screenshot(output.with_name("folder-picker-parent.png"))
+    click_text(rows, source.name)
     time.sleep(1.0)
-    rows = screenshot(output.with_name("folder-picker.png"))
-    picker_button = next(
-        (row["text"] for row in rows if row["text"].casefold() in {"open", "select", "choose"}),
-        None,
-    )
-    if picker_button:
-        click_text(rows, picker_button)
-    else:
-        subprocess.run(["xdotool", "key", "Return"], check=True)
+    rows = screenshot(output.with_name("folder-picker-selected.png"))
+    select_current_folder(rows)
     time.sleep(2.0)
 
 
