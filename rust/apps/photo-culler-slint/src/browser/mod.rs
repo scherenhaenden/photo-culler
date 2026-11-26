@@ -3,7 +3,7 @@
 //! Browser-facing contract and WASM startup integration. The browser-only
 //! transport and startup entry stay out of native builds.
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 mod demo_fetch;
 
 #[cfg(target_arch = "wasm32")]

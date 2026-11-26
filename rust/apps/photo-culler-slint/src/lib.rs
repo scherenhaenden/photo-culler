@@ -15,5 +15,5 @@ pub mod desktop;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod file_selection;
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", test))]
 mod browser;
