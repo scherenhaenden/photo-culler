@@ -20,6 +20,8 @@ pub type PreviewApiFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 pub struct PreviewAsset {
     pub bytes: Arc<Vec<u8>>,
     pub etag: String,
+    /// Representation used to make the preview (for example `paired-jpeg`).
+    pub source: &'static str,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -27,6 +29,7 @@ pub enum PreviewApiError {
     InvalidRequest,
     NotFound,
     UnsupportedSource,
+    RawPreviewUnavailable,
     TooLarge,
     Busy,
     Unavailable,
@@ -73,6 +76,10 @@ async fn preview<A: PreviewApi + 'static>(
                 .headers_mut()
                 .insert(header::CONTENT_TYPE, HeaderValue::from_static("image/jpeg"));
             response.headers_mut().insert(
+                "x-photo-culler-preview-source",
+                HeaderValue::from_static(asset.source),
+            );
+            response.headers_mut().insert(
                 header::CACHE_CONTROL,
                 HeaderValue::from_static("private, max-age=3600"),
             );
@@ -116,6 +123,11 @@ fn error_response(error: PreviewApiError) -> Response {
             StatusCode::UNPROCESSABLE_ENTITY,
             "unsupported_source",
             "The source format cannot produce a raster preview.",
+        ),
+        PreviewApiError::RawPreviewUnavailable => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "raw_preview_unavailable",
+            "This RAW file has no supported preview decoder. Its paired JPEG can be used when present; the original file is unchanged.",
         ),
         PreviewApiError::TooLarge => (
             StatusCode::PAYLOAD_TOO_LARGE,

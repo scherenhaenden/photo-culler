@@ -4,7 +4,7 @@
 The optional `size` query accepts `small`, `medium`, `large`, or `full` and
 defaults to `medium`. The response is a JPEG derivative; no source path or
 filesystem error is returned. `http::previews_sqlite::SqlitePreviewApi`
-resolves the preferred present source through `Catalog::display_path`, reads
+resolves the preferred present sources through `Catalog::display_paths`, reads
 the bytes without modifying them, and keys its bounded in-memory cache by the
 SHA-256 of those exact bytes, photo identity, render version, and size.
 
@@ -13,9 +13,19 @@ to 128 MiB, output to 16 MiB, and cache storage to 256 MiB. At most two
 generations may run concurrently; excess work returns `429`. These decoder
 limits do not equal total process memory: RGB conversion, resizing, and JPEG
 encoding use additional working buffers. EXIF orientation is applied by the
-image decoder before bounded resizing. Unsupported RAW data returns a typed
-`422`; embedded RAW preview extraction and paired-raster fallback are not wired
-to the catalog in this adapter.
+image decoder before bounded resizing. The response includes
+`X-Photo-Culler-Preview-Source`: `paired-jpeg` when catalog preference selects
+a JPEG alongside a RAW, `raster` for other raster files, and `raw` when the
+selected file is a lone RAW. A lone RAW without a raster decoder returns typed
+`422 raw_preview_unavailable` with an explanation; original bytes are never
+modified. No RAW decoding or embedded-preview extraction is implemented.
+
+Catalog association already groups a single RAW and JPEG with the same source
+directory and basename as one take. The SQLite preview adapter follows that
+association's current display preference and presents the JPEG derivative. This
+is not evidence of support for decoding any RAW format: the repository has no
+camera RAW acceptance fixture, so a specific RAW format and camera model still
+need agreement and real-sample validation before adding a RAW decoder.
 
 The route, SQLite adapter and `media::previews` are registered in `lib.rs` and
 mounted in both persistent catalog routers. The typed `PreviewClient` is used
