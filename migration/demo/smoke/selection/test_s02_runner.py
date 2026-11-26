@@ -37,6 +37,9 @@ class Sprint02RunnerTests(unittest.TestCase):
     def test_first_run_folder_button_fallback_targets_center_of_action(self):
         self.assertEqual(runner.choose_folder_button_point(1440, 900), (756, 878))
 
+    def test_import_toolbar_fallback_targets_top_right_button(self):
+        self.assertEqual(runner.import_button_point(1440, 900), (1152, 36))
+
     def test_folder_dialog_select_fallback_targets_the_lower_right_button(self):
         self.assertEqual(runner.folder_dialog_select_point(1097, 844), (1047, 818))
 
