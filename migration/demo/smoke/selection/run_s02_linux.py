@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import hashlib
 import importlib.util
 import json
@@ -57,8 +58,7 @@ def parse_tesseract_tsv(tsv: str) -> list[dict]:
 
 
 def click_text(rows: list[dict], text: str, *, near: tuple[int, int] | None = None) -> None:
-    target = normalize_text(text)
-    candidates = [row for row in rows if normalize_text(row["text"]) == target and row["confidence"] >= 35]
+    candidates = [row for row in rows if text_matches(row["text"], text) and row["confidence"] >= 35]
     if near is not None:
         candidates.sort(key=lambda row: abs(row["x"] - near[0]) + abs(row["y"] - near[1]))
         if candidates:
@@ -79,7 +79,16 @@ def click_text(rows: list[dict], text: str, *, near: tuple[int, int] | None = No
 
 def normalize_text(text: str) -> str:
     decomposed = unicodedata.normalize("NFKD", text.casefold())
-    return "".join(character for character in decomposed if not unicodedata.combining(character))
+    unaccented = "".join(character for character in decomposed if not unicodedata.combining(character))
+    return unaccented.strip().rstrip("/")
+
+
+def text_matches(observed: str, expected: str) -> bool:
+    observed_normalized = normalize_text(observed)
+    expected_normalized = normalize_text(expected)
+    return observed_normalized == expected_normalized or difflib.SequenceMatcher(
+        None, observed_normalized, expected_normalized
+    ).ratio() >= 0.9
 
 
 def choose_folder_button_point(width: int, height: int) -> tuple[int, int]:
@@ -89,7 +98,7 @@ def choose_folder_button_point(width: int, height: int) -> tuple[int, int]:
 
 
 def click_choose_folder(rows: list[dict]) -> None:
-    if any(normalize_text(row["text"]) == normalize_text("Elegir carpeta") for row in rows):
+    if any(text_matches(row["text"], "Elegir carpeta") for row in rows):
         click_text(rows, "Elegir carpeta")
         return
 
