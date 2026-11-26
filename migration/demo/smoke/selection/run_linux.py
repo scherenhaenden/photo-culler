@@ -154,6 +154,17 @@ def first_page_display_names(database: Path, gallery_id: str, limit: int = 12) -
     return [f"{stem_name}.jpg" for _photo_id, stem_name in page]
 
 
+def decision_targets(display_names: list[str]) -> dict[str, str]:
+    """Choose two distinct cards guaranteed to be present on the first page."""
+    if len(display_names) < 2 or len(set(display_names)) != len(display_names):
+        raise RuntimeError(f"first API page must contain at least two unique photos: {display_names}")
+    return {"keep": display_names[0], "reject": display_names[1]}
+
+
+def expected_decisions(targets: dict[str, str]) -> dict[str, str]:
+    return {Path(targets["keep"]).stem: "KEEP", Path(targets["reject"]).stem: "REJECT"}
+
+
 def grid_cell_center(geometry: dict, index: int) -> tuple[int, int]:
     """Return a card center for the fixed 1440x900 Linux acceptance layout."""
     width, height = geometry["width"], geometry["height"]
@@ -177,17 +188,53 @@ def next_photo_button_center(geometry: dict) -> tuple[int, int]:
     )
 
 
-def decision_button_center(geometry: dict, decision: str) -> tuple[int, int]:
-    """Return a selection-toolbar button center; these compact labels OCR poorly."""
-    x_fraction = {"KEEP": 0.646, "ALT": 0.671, "REJECT": 0.697, "CLEAR": 0.724}
+def keep_chip_center_from_pixels(points: list[tuple[int, int]]) -> tuple[int, int]:
+    """Find the teal KEEP chip in the screenshot's top toolbar crop."""
+    by_x: dict[int, list[int]] = {}
+    for x, y in points:
+        by_x.setdefault(x, []).append(y)
+    columns = sorted(x for x, ys in by_x.items() if len(ys) >= 4)
+    runs: list[list[int]] = []
+    for x in columns:
+        if not runs or x - runs[-1][-1] > 2:
+            runs.append([x])
+        else:
+            runs[-1].append(x)
+    runs = [run for run in runs if 20 <= run[-1] - run[0] + 1 <= 48]
+    if len(runs) != 1:
+        raise RuntimeError(f"could not uniquely locate the teal KEEP toolbar chip: {runs}")
+    run = runs[0]
+    ys = [y for x in run for y in by_x[x]]
+    return (run[0] + run[-1] + 1) // 2, (min(ys) + max(ys)) // 2
+
+
+def is_keep_chip_color(rgb: tuple[int, int, int]) -> bool:
+    # This is the stable fill color of the KEEP action chip, excluding nearby
+    # antialiased text and unrelated teal UI accents.
+    return all(abs(actual - expected) <= 5
+               for actual, expected in zip(rgb, (35, 149, 132)))
+
+
+def decision_button_center(geometry: dict, decision: str,
+                           screenshot: Path) -> tuple[int, int]:
+    """Anchor toolbar actions to the visible teal KEEP chip across sprint layouts."""
+    offsets = {"KEEP": 0, "ALT": 38, "REJECT": 76, "CLEAR": 113}
     try:
-        fraction = x_fraction[decision.upper()]
+        offset = offsets[decision.upper()]
     except KeyError as error:
         raise ValueError(f"unknown decision toolbar action: {decision}") from error
-    return (
-        geometry["x"] + round(geometry["width"] * fraction),
-        geometry["y"] + round(geometry["height"] * 0.063),
-    )
+    from PIL import Image
+
+    image = Image.open(screenshot).convert("RGB")
+    left, right = int(image.width * 0.40), int(image.width * 0.78)
+    top, bottom = int(image.height * 0.04), int(image.height * 0.10)
+    points = []
+    for y in range(top, bottom):
+        for x in range(left, right):
+            if is_keep_chip_color(image.getpixel((x, y))):
+                points.append((x, y))
+    anchor_x, anchor_y = keep_chip_center_from_pixels(points)
+    return geometry["x"] + anchor_x + offset, geometry["y"] + anchor_y
 
 
 def decision_filter_center(geometry: dict, decision: str) -> tuple[int, int]:
@@ -321,23 +368,23 @@ def main() -> None:
         rows = screenshot_and_ocr(wid, first)
         evidence["screenshots"].append(str(first))
         visible_names = first_page_display_names(database, gallery_id)
-        required_names = {"photo-01.jpg", "photo-02.jpg"}
-        if not required_names.issubset(visible_names):
-            raise RuntimeError(
-                f"decision targets are not on the first API page: {visible_names}"
-            )
+        targets = decision_targets(visible_names)
+        expected_catalog = expected_decisions(targets)
         evidence["first_page_display_order"] = visible_names
+        evidence["decision_targets"] = targets
 
-        click_at(grid_cell_center(window["geometry"], visible_names.index("photo-01.jpg")))
-        rows = screenshot_and_ocr(wid, output / "selected-first.png")
-        click_at(decision_button_center(window["geometry"], "KEEP"))
-        check_catalog(database, gallery_id, {"photo-01": "KEEP"})
+        click_at(grid_cell_center(window["geometry"], visible_names.index(targets["keep"])))
+        selected_first = output / "selected-first.png"
+        rows = screenshot_and_ocr(wid, selected_first)
+        click_at(decision_button_center(window["geometry"], "KEEP", selected_first))
+        check_catalog(database, gallery_id, {Path(targets["keep"]).stem: "KEEP"})
 
         rows = screenshot_and_ocr(wid, output / "kept-first.png")
-        click_at(grid_cell_center(window["geometry"], visible_names.index("photo-02.jpg")))
-        rows = screenshot_and_ocr(wid, output / "selected-second.png")
-        click_at(decision_button_center(window["geometry"], "REJECT"))
-        check_catalog(database, gallery_id, {"photo-01": "KEEP", "photo-02": "REJECT"})
+        click_at(grid_cell_center(window["geometry"], visible_names.index(targets["reject"])))
+        selected_second = output / "selected-second.png"
+        rows = screenshot_and_ocr(wid, selected_second)
+        click_at(decision_button_center(window["geometry"], "REJECT", selected_second))
+        check_catalog(database, gallery_id, expected_catalog)
         check_counts(database, gallery_id, keep=1, reject=1, unrated=11, total=13)
 
         rows = screenshot_and_ocr(wid, output / "reject-first.png")
@@ -347,11 +394,12 @@ def main() -> None:
         click_at(decision_filter_center(window["geometry"], "KEEP"))
         rows = screenshot_and_ocr(wid, output / "keep-filter.png")
         evidence["screenshots"].append(str(output / "keep-filter.png"))
-        if "photo-01.jpg" not in [row["text"] for row in rows]:
-            raise RuntimeError("KEEP filter omitted the confirmed photo-01 decision")
-        if "photo-02.jpg" in [row["text"] for row in rows]:
-            raise RuntimeError("KEEP filter retained the confirmed REJECT photo")
-        check_catalog(database, gallery_id, {"photo-01": "KEEP", "photo-02": "REJECT"})
+        visible_after_filter = [row["text"] for row in rows]
+        if targets["keep"] not in visible_after_filter:
+            raise RuntimeError(f"KEEP filter omitted the confirmed photo {targets['keep']}")
+        if targets["reject"] in visible_after_filter:
+            raise RuntimeError(f"KEEP filter retained the confirmed REJECT photo {targets['reject']}")
+        check_catalog(database, gallery_id, expected_catalog)
         evidence["keep_filter"] = "only the KEEP photo is shown"
 
         rows = screenshot_and_ocr(wid, output / "keep-filter-before-next.png")
@@ -381,9 +429,11 @@ def main() -> None:
         reopened_geometry = reopened_window["geometry"]
         click_at(decision_filter_center(reopened_geometry, "KEEP"))
         reopened_rows = screenshot_and_ocr(reopened_window["window_id"], output / "reopened-keep-filter.png")
-        if "photo-01.jpg" not in [row["text"] for row in reopened_rows]:
-            raise RuntimeError("KEEP decision was not visible after reopening and applying KEEP filter")
-        check_catalog(database, gallery_id, {"photo-01": "KEEP"})
+        if targets["keep"] not in [row["text"] for row in reopened_rows]:
+            raise RuntimeError(
+                f"KEEP decision for {targets['keep']} was not visible after reopening"
+            )
+        check_catalog(database, gallery_id, expected_catalog)
         if page_ids(database, gallery_id) != ids:
             raise RuntimeError("photo IDs changed after closing and reopening the library")
         check_counts(database, gallery_id, keep=1, reject=1, unrated=11, total=13)
