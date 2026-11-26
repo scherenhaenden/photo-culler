@@ -184,6 +184,54 @@ def click_start_import_button(rows: list[dict]) -> None:
     time.sleep(0.5)
 
 
+def close_import_button_point(width: int, height: int) -> tuple[int, int]:
+    # The completed-import modal keeps its close action in the upper-right.
+    return (round(width * 0.657), round(height * 0.161))
+
+
+def click_close_import(rows: list[dict]) -> None:
+    candidates = [row for row in rows if row["confidence"] >= 35 and text_matches(row["text"], "Close")]
+    if len(candidates) == 1:
+        click_text(rows, candidates[0]["text"])
+        return
+    width, height = map(int, subprocess.check_output(["xdotool", "getdisplaygeometry"], text=True).split())
+    x, y = close_import_button_point(width, height)
+    subprocess.run(["xdotool", "mousemove", str(x), str(y), "click", "1"], check=True)
+    time.sleep(0.5)
+
+
+def import_completed_visible(rows: list[dict]) -> bool:
+    return any(row["confidence"] >= 35 and text_matches(row["text"], "Import completed") for row in rows)
+
+
+def wait_for_import_completion(
+    database: Path, output: Path, expected_files: int, timeout: float = 90
+) -> list[dict]:
+    deadline = time.monotonic() + timeout
+    latest_rows: list[dict] = []
+    latest_count = 0
+    while time.monotonic() < deadline:
+        latest_rows = screenshot(output)
+        if import_completed_visible(latest_rows):
+            latest_count, _ = database_snapshot(database)
+            if latest_count == expected_files:
+                return latest_rows
+        time.sleep(0.5)
+    raise TimeoutError(
+        f"import completion not confirmed: visible={import_completed_visible(latest_rows)}, "
+        f"catalog JPEG count={latest_count}, expected={expected_files}; last OCR={latest_rows}"
+    )
+
+
+def wait_for_import_completion_dismissal(output: Path, timeout: float = 10) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not import_completed_visible(screenshot(output)):
+            return True
+        time.sleep(0.25)
+    return False
+
+
 def estimate_result_visible(rows: list[dict], expected_files: int) -> bool:
     expected = f"Estimate: {expected_files} files"
     return any(row["confidence"] >= 35 and expected in row["text"] for row in rows)
@@ -427,6 +475,7 @@ def main() -> None:
     source = fixture / "Fotos de selección"
     manifest = fixture / "manifest.json"
     xdg = output / "xdg"
+    database = xdg / "photo-culler" / "desktop" / "catalog.sqlite3"
     xdg.mkdir(parents=True, exist_ok=True)
     process = launch(desktop, xdg, output, "first")
     status = "PASS"
@@ -445,11 +494,11 @@ def main() -> None:
         click_estimate_button()
         wait_for_estimate_result(output / "estimated.png", expected_files=13)
         click_start_import_button(rows)
-        wait_text("13 imported", output / "import-progress.png", timeout=90)
-        rows = screenshot(output / "import-complete.png")
-        click_text(rows, "Close")
+        rows = wait_for_import_completion(database, output / "import-complete.png", expected_files=13)
+        click_close_import(rows)
+        if not wait_for_import_completion_dismissal(output / "import-after-close.png"):
+            raise RuntimeError("completed import modal remained visible after clicking Close")
 
-        database = xdg / "photo-culler" / "desktop" / "catalog.sqlite3"
         deadline = time.monotonic() + 30
         first_rows = []
         while time.monotonic() < deadline:
@@ -492,9 +541,10 @@ def main() -> None:
         click_text(rows, "Import")
         rows = wait_text("Start import", output / "reimport-dialog.png")
         click_text(rows, "Start import")
-        wait_text("13 imported", output / "reimport-progress.png", timeout=90)
-        rows = screenshot(output / "reimport-complete.png")
-        click_text(rows, "Close")
+        rows = wait_for_import_completion(database, output / "reimport-complete.png", expected_files=13)
+        click_close_import(rows)
+        if not wait_for_import_completion_dismissal(output / "reimport-after-close.png"):
+            raise RuntimeError("completed reimport modal remained visible after clicking Close")
         if database_snapshot(database) != (13, ids_before):
             raise RuntimeError("reimport changed photo IDs or duplicated catalog rows")
         assert_source_hashes(source, manifest)

@@ -75,6 +75,47 @@ class Sprint02RunnerTests(unittest.TestCase):
             )
         )
 
+    def test_completed_import_close_fallback_targets_modal_header_action(self):
+        self.assertEqual(runner.close_import_button_point(1440, 900), (946, 145))
+
+    def test_close_import_uses_geometric_fallback_when_ocr_misses_label(self):
+        with (
+            patch.object(runner.subprocess, "check_output", return_value="1440 900"),
+            patch.object(runner.subprocess, "run") as run,
+            patch.object(runner.time, "sleep"),
+        ):
+            runner.click_close_import([])
+
+        run.assert_called_once_with(["xdotool", "mousemove", "946", "145", "click", "1"], check=True)
+
+    def test_import_completion_uses_visible_title_when_count_line_is_dim(self):
+        self.assertTrue(
+            runner.import_completed_visible(
+                [{"text": "Import completed", "confidence": 92}]
+            )
+        )
+        self.assertFalse(
+            runner.import_completed_visible(
+                [{"text": "13 discovered · 13 imported · 0 issues", "confidence": 20}]
+            )
+        )
+
+    def test_import_completion_wait_requires_visible_status_and_catalog_count(self):
+        with (
+            patch.object(runner, "screenshot", return_value=[{"text": "Import completed", "confidence": 92}]),
+            patch.object(runner, "database_snapshot", return_value=(13, [])),
+        ):
+            rows = runner.wait_for_import_completion(Path("catalog.sqlite3"), Path("capture.png"), 13)
+
+        self.assertTrue(runner.import_completed_visible(rows))
+
+    def test_import_completion_dismissal_waits_for_modal_status_to_disappear(self):
+        with (
+            patch.object(runner, "screenshot", return_value=[]),
+            patch.object(runner.time, "sleep"),
+        ):
+            self.assertTrue(runner.wait_for_import_completion_dismissal(Path("capture.png")))
+
     def test_folder_dialog_select_fallback_targets_the_lower_right_button(self):
         self.assertEqual(runner.folder_dialog_select_point(1097, 844), (1047, 818))
 
