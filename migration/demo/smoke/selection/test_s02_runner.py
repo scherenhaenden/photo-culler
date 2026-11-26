@@ -15,6 +15,27 @@ SPEC.loader.exec_module(runner)
 
 
 class Sprint02RunnerTests(unittest.TestCase):
+    def test_tesseract_words_are_combined_into_lines_for_phrase_checks(self):
+        tsv = (
+            "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\t"
+            "height\tconf\ttext\n"
+            "5\t1\t12\t0\t0\t0\t10\t20\t20\t10\t95\tTu\n"
+            "5\t1\t12\t0\t0\t1\t35\t20\t60\t10\t90\tbiblioteca\n"
+            "5\t1\t12\t0\t1\t0\t10\t40\t40\t10\t80\tElegir\n"
+        )
+
+        rows = runner.parse_tesseract_tsv(tsv)
+
+        self.assertEqual([row["text"] for row in rows], ["Tu biblioteca", "Elegir"])
+        self.assertEqual(
+            (rows[0]["x"], rows[0]["y"], rows[0]["width"], rows[0]["height"]),
+            (10, 20, 85, 10),
+        )
+        self.assertEqual(rows[0]["confidence"], 92.5)
+
+    def test_first_run_folder_button_fallback_targets_center_of_action(self):
+        self.assertEqual(runner.choose_folder_button_point(1440, 900), (756, 878))
+
     def test_catalog_snapshot_reads_ids_and_full_hashes_for_jpegs(self):
         with tempfile.TemporaryDirectory() as temporary:
             database = Path(temporary) / "catalog.sqlite3"

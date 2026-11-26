@@ -26,11 +26,19 @@ def screenshot(output: Path) -> list[dict]:
     result = subprocess.run(
         ["tesseract", str(output), "stdout", "tsv"], check=True, capture_output=True, text=True
     )
-    lines: dict[tuple[str, str, str, str], list[dict]] = {}
-    for line in result.stdout.splitlines()[1:]:
+    rows = parse_tesseract_tsv(result.stdout)
+    output.with_suffix(".ocr.json").write_text(json.dumps(rows, indent=2) + "\n")
+    return rows
+
+
+def parse_tesseract_tsv(tsv: str) -> list[dict]:
+    lines: dict[tuple[str, str, str], list[dict]] = {}
+    for line in tsv.splitlines()[1:]:
         fields = line.split("\t")
         if len(fields) >= 12 and fields[11].strip():
-            key = tuple(fields[index] for index in (2, 3, 4, 5))
+            # TSV word_num is different for each token; group on line_num to
+            # recover visible phrases such as "Tu biblioteca empieza...".
+            key = tuple(fields[index] for index in (2, 3, 4))
             lines.setdefault(key, []).append({
                 "text": fields[11].strip(), "x": int(fields[6]), "y": int(fields[7]),
                 "width": int(fields[8]), "height": int(fields[9]), "confidence": float(fields[10]),
@@ -44,7 +52,6 @@ def screenshot(output: Path) -> list[dict]:
             "height": max(word["y"] + word["height"] for word in words) - min(word["y"] for word in words),
             "confidence": sum(word["confidence"] for word in words) / len(words),
         })
-    output.with_suffix(".ocr.json").write_text(json.dumps(rows, indent=2) + "\n")
     return rows
 
 
@@ -68,9 +75,26 @@ def click_text(rows: list[dict], text: str, *, near: tuple[int, int] | None = No
     time.sleep(0.5)
 
 
+def choose_folder_button_point(width: int, height: int) -> tuple[int, int]:
+    # The first-run call to action is centered in the gallery panel, near the
+    # bottom of the maximized 1440x900 runner window.
+    return (width // 2 + width // 40, height - max(20, height // 40))
+
+
+def click_choose_folder(rows: list[dict]) -> None:
+    if any(row["text"].casefold() == "elegir carpeta" for row in rows):
+        click_text(rows, "Elegir carpeta")
+        return
+
+    width, height = map(int, subprocess.check_output(["xdotool", "getdisplaygeometry"], text=True).split())
+    x, y = choose_folder_button_point(width, height)
+    subprocess.run(["xdotool", "mousemove", str(x), str(y), "click", "1"], check=True)
+    time.sleep(0.5)
+
+
 def open_source_picker(source: Path, output: Path) -> None:
     rows = screenshot(output)
-    click_text(rows, "Elegir carpeta")
+    click_choose_folder(rows)
     time.sleep(1.0)
     subprocess.run(["xdotool", "key", "ctrl+l"], check=True)
     subprocess.run(["xdotool", "type", "--clearmodifiers", str(source)], check=True)
