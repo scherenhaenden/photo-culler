@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium, firefox } from "playwright";
-import { assertFixtureGalleryPage, buildServerArguments } from "./smoke-config.mjs";
+import { assertFixtureGalleryPage, buildServerArguments, pairingWarmupDelayMs } from "./smoke-config.mjs";
 
 const MIME_BY_PATH = new Map([
   ["/api/v1/health", "application/json"],
@@ -82,7 +82,7 @@ export async function runLiveSmoke(browserName) {
     await wasmLoaded;
     // Firefox's headed WebGL initialization can finish fetching WASM before
     // the Slint pairing overlay is ready to receive focus.
-    await page.waitForTimeout(browserName === "firefox" ? 2000 : 250);
+    await page.waitForTimeout(pairingWarmupDelayMs(browserName));
     await page.bringToFront();
     await page.mouse.click(720, 450);
     await page.keyboard.type(pairingCode);

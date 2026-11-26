@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium, firefox } from "playwright";
 import pngjs from "pngjs";
-import { installSummaryFixture } from "../smoke-config.mjs";
+import { installSummaryFixture, pairingWarmupDelayMs } from "../smoke-config.mjs";
 
 const GALLERY_PATH = "/api/v1/galleries/demo/photos";
 const ERROR_BODY = {
@@ -289,7 +289,7 @@ async function navigateAndPair(page, origin, sessionToken) {
   await page.goto(origin, { waitUntil: "domcontentloaded" });
   await wasmLoaded;
   const pairingCode = await issuePairingCode(origin, sessionToken);
-  await page.waitForTimeout(250);
+  await page.waitForTimeout(pairingWarmupDelayMs(browserName));
   await page.mouse.click(
     Math.round((page.viewportSize()?.width ?? 1440) / 2),
     Math.round((page.viewportSize()?.height ?? 900) / 2),

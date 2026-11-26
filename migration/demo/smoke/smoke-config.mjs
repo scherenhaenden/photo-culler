@@ -7,6 +7,10 @@ export function buildServerArguments(webRoot, dataRoot, sourceRoot) {
   ];
 }
 
+export function pairingWarmupDelayMs(browserName) {
+  return browserName === "firefox" ? 2000 : 250;
+}
+
 export function assertFixtureGalleryPage(page) {
   assert.equal(page.items.length, 1, "the persistent browser fixture must contain one catalog photo");
   assert.equal(page.items[0].name, "demo-001", "the server page contract exposes the imported filename stem in `name`");
