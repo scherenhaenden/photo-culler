@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium, firefox } from "playwright";
 import pngjs from "pngjs";
-import { summaryForPhotoCount } from "../smoke-config.mjs";
+import { installSummaryFixture } from "../smoke-config.mjs";
 
 const GALLERY_PATH = "/api/v1/galleries/demo/photos";
 const ERROR_BODY = {
@@ -279,20 +279,6 @@ async function newPage(browser, viewport) {
     Object.defineProperty(window, "__photoCullerStateHistory", { value: [] });
   });
   return page;
-}
-
-async function installSummaryFixture(page, totalPhotos) {
-  let requests = 0;
-  const summary = summaryForPhotoCount(totalPhotos);
-  await page.route("**/api/v1/galleries/*/summary", async (route) => {
-    requests += 1;
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json; charset=utf-8",
-      body: JSON.stringify(summary),
-    });
-  });
-  return () => requests;
 }
 
 async function navigateAndPair(page, origin, sessionToken) {
