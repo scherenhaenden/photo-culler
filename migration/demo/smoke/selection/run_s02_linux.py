@@ -218,10 +218,22 @@ def wait_for_folder_list_row(folder_name: str, output: Path, timeout: float = 12
     raise TimeoutError(f"GTK folder list did not show {folder_name!r}; last OCR={latest_rows}")
 
 
-def click_folder_list_row(rows: list[dict], folder_name: str) -> None:
+def click_folder_list_row(rows: list[dict], folder_name: str, *, enter: bool = False) -> None:
     # Ignore same-named sidebar/bookmark/autocomplete text. Only click a row in
     # the actual file list below the header.
-    click_text([row for row in rows if row["y"] >= 130], folder_name)
+    candidates = [row for row in rows if row["y"] >= 130 and text_matches(row["text"], folder_name)]
+    if len(candidates) != 1:
+        raise RuntimeError(f"cannot uniquely locate folder list row {folder_name!r}: {candidates}")
+    row = candidates[0]
+    command = [
+        "xdotool", "mousemove", str(row["x"] + row["width"] // 2),
+        str(row["y"] + row["height"] // 2), "click",
+    ]
+    if enter:
+        command.extend(["--repeat", "2", "--delay", "150"])
+    command.append("1")
+    subprocess.run(command, check=True)
+    time.sleep(0.5)
 
 
 def open_picker_location_entry(output: Path) -> None:
@@ -250,10 +262,12 @@ def open_source_picker(source: Path, output: Path) -> None:
     click_folder_picker_project_bookmark()
     time.sleep(0.5)
     wait_for_folder_list_row(source_folder_navigation_segments(source)[0], output.with_name("folder-picker-repository-root.png"))
-    for index, folder_name in enumerate((*source_folder_navigation_segments(source), source.name), start=1):
+    segments = source_folder_navigation_segments(source)
+    for index, folder_name in enumerate(segments, start=1):
         rows = wait_for_folder_list_row(folder_name, output.with_name(f"folder-picker-list-{index}.png"))
-        click_folder_list_row(rows, folder_name)
-        time.sleep(0.5)
+        click_folder_list_row(rows, folder_name, enter=True)
+    rows = wait_for_folder_list_row(source.name, output.with_name("folder-picker-source-row.png"))
+    click_folder_list_row(rows, source.name)
     time.sleep(1.0)
     selected_rows = screenshot(output.with_name("folder-picker-selected.png"))
     if not folder_list_row_visible(selected_rows, source.name):
