@@ -31,6 +31,9 @@ def request(origin: str, token: str, path: str, body: dict | None = None) -> dic
     headers = {"Authorization": f"Bearer {token}"}
     if body is not None:
         headers["Content-Type"] = "application/json"
+        # Native acceptance POSTs are writes too; the API's ingress policy
+        # requires the exact loopback Origin even when no browser is involved.
+        headers["Origin"] = origin
     req = urllib.request.Request(origin + path, data=data, headers=headers)
     with urllib.request.urlopen(req, timeout=20) as response:
         return json.loads(response.read())
