@@ -25,6 +25,7 @@ import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright";
 import { issuePairingCode, waitForReady } from "../../../../../migration/demo/smoke/live-smoke.mjs";
+import { installSummaryFixture } from "../../../../../migration/demo/smoke/smoke-config.mjs";
 
 const EXPECTED_JPEG_SHA256 = "cc20c24844d2fc6fca729fcb66cfe661960f7b56be41a3dd462a0f1b22cfb4f2";
 const THUMBNAIL_PATH = "/api/v1/photos/demo-001/thumbnail/800";
@@ -58,6 +59,7 @@ try {
       viewport: { width: viewport.width, height: viewport.height },
       deviceScaleFactor: 1,
     });
+    const summaryRequests = await installSummaryFixture(page, 1);
     const thumbnailResponsePromise = page.waitForResponse(
       (response) => new URL(response.url()).pathname === THUMBNAIL_PATH,
       { timeout: 45_000 },
@@ -84,6 +86,7 @@ try {
       await delay(100);
     }
     assert.equal(await page.locator("html").getAttribute("data-photo-culler-state"), "ready");
+    assert.equal(summaryRequests(), 1, "the gallery summary fixture must resolve before the UI becomes ready");
     const browserViewport = await page.evaluate(() => ({
       inner_width: window.innerWidth,
       inner_height: window.innerHeight,
