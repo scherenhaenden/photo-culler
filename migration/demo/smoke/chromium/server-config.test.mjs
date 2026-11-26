@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertFixtureGalleryPage, buildServerArguments, installSummaryFixture, summaryForPhotoCount } from "../smoke-config.mjs";
+import { assertFixtureGalleryPage, buildServerArguments, installSummaryFixture, pairingWarmupDelayMs, summaryForPhotoCount } from "../smoke-config.mjs";
 
 test("live browser smoke starts an authorized persistent catalog for global summaries", () => {
   assert.deepEqual(
@@ -55,4 +55,9 @@ test("summary fixture intercepts the endpoint before the UI load and returns JSO
   assert.equal(response.status, 200);
   assert.match(response.contentType, /^application\/json/);
   assert.deepEqual(JSON.parse(response.body), summaryForPhotoCount(1));
+});
+
+test("Firefox pairing waits for the Slint WebGL auth overlay to receive focus", () => {
+  assert.equal(pairingWarmupDelayMs("firefox"), 2000);
+  assert.equal(pairingWarmupDelayMs("chromium"), 250);
 });
