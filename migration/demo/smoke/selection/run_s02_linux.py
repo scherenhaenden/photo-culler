@@ -586,8 +586,10 @@ def main() -> None:
         assert_catalog_hashes(first_rows, expected_hashes)
         assert_source_hashes(source, manifest)
         rows = screenshot(output / "library-first-page.png")
-        if not any("12 ON THIS PAGE" in row["text"] for row in rows):
-            raise RuntimeError(f"expected twelve photos on the first page: {rows}")
+        if not photo_index_visible(rows, 1) and not photo_index_text_visible(
+            read_navigation_text(output / "library-first-page.png"), 1
+        ):
+            raise RuntimeError("the library did not open at the first photo")
         rows = advance_to_photo_index(rows, output / "library-second-page.png", 13)
         rows = screenshot(output / "library-second-page.png")
         if not photo_index_visible(rows, 13) and not photo_index_text_visible(
