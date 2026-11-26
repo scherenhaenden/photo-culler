@@ -5,6 +5,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 RUNNER_PATH = Path(__file__).with_name("run_s02_linux.py")
@@ -50,6 +51,13 @@ class Sprint02RunnerTests(unittest.TestCase):
                 [{"text": "Recent Home /home/runner/work/fixture Other Locations"}]
             )
         )
+
+    def test_picker_close_wait_returns_only_after_dialog_disappears(self):
+        with (
+            patch.object(runner, "visible_folder_picker_id", side_effect=["1234", None]),
+            patch.object(runner.time, "sleep"),
+        ):
+            self.assertTrue(runner.wait_for_folder_picker_close(timeout=1))
 
     def test_picker_folder_name_matches_ocr_without_diacritics(self):
         self.assertTrue(runner.text_matches("Fotos de seleccién/", "Fotos de selección"))

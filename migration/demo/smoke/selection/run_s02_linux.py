@@ -112,22 +112,48 @@ def folder_dialog_select_point(width: int, height: int) -> tuple[int, int]:
     return (max(1, width - 50), max(1, height - 26))
 
 
-def select_current_folder(rows: list[dict]) -> None:
-    if any(row["text"].casefold() == "select" for row in rows):
-        click_text(rows, "Select")
-        return
+def visible_folder_picker_id() -> str | None:
+    result = subprocess.run(
+        ["xdotool", "search", "--onlyvisible", "--name", "Choose photo folder"],
+        capture_output=True,
+        text=True,
+    )
+    window_ids = result.stdout.split()
+    return window_ids[-1] if window_ids else None
 
-    window_ids = subprocess.check_output(
-        ["xdotool", "search", "--onlyvisible", "--name", "Choose photo folder"], text=True
-    ).split()
-    if not window_ids:
-        raise RuntimeError("folder picker window was not visible after entering the source path")
-    window_id = window_ids[-1]
+
+def click_folder_picker_select() -> None:
+    window_id = visible_folder_picker_id()
+    if not window_id:
+        raise RuntimeError("folder picker window was not visible after selecting the source folder")
     geometry = subprocess.check_output(["xdotool", "getwindowgeometry", "--shell", window_id], text=True)
     values = dict(line.split("=", 1) for line in geometry.splitlines() if "=" in line)
     x, y = folder_dialog_select_point(int(values["WIDTH"]), int(values["HEIGHT"]))
     subprocess.run(["xdotool", "mousemove", "--window", window_id, str(x), str(y), "click", "1"], check=True)
-    time.sleep(0.5)
+
+
+def wait_for_folder_picker_close(timeout: float = 8) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if visible_folder_picker_id() is None:
+            return True
+        time.sleep(0.25)
+    return False
+
+
+def select_current_folder(output: Path) -> None:
+    # The portal populates its footer controls asynchronously after the source
+    # row is selected. Wait for it before clicking the lower-right Select action.
+    time.sleep(2.5)
+    click_folder_picker_select()
+    if wait_for_folder_picker_close():
+        return
+
+    screenshot(output.with_name("folder-picker-after-select.png"))
+    time.sleep(1.0)
+    click_folder_picker_select()
+    if not wait_for_folder_picker_close():
+        raise RuntimeError("GTK Select action did not close the source folder picker")
 
 
 def wait_for_folder_picker(timeout: float = 15) -> str:
@@ -184,8 +210,8 @@ def open_source_picker(source: Path, output: Path) -> None:
     rows = screenshot(output.with_name("folder-picker-parent.png"))
     click_text(rows, source.name)
     time.sleep(1.0)
-    rows = screenshot(output.with_name("folder-picker-selected.png"))
-    select_current_folder(rows)
+    screenshot(output.with_name("folder-picker-selected.png"))
+    select_current_folder(output)
     time.sleep(2.0)
 
 
