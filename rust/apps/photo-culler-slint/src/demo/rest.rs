@@ -212,6 +212,7 @@ impl<T: Transport> ControllerClient for DemoRestClient<T> {
         &'a self,
         gallery_id: &'a str,
         cursor: Option<&'a CatalogCursor>,
+        decision_filter: Option<&'a str>,
     ) -> DemoFuture<'a> {
         Box::pin(async move {
             self.inner.health().await.map_err(map_client_error)?;
@@ -233,18 +234,27 @@ impl<T: Transport> ControllerClient for DemoRestClient<T> {
                 gallery_id.to_owned()
             };
 
+            let decision = cursor
+                .map(|cursor| cursor.filter.decision.clone())
+                .unwrap_or_else(|| decision_filter.map(str::to_owned));
+            let filter = CatalogFilter {
+                gallery_id: resolved_gallery_id.clone(),
+                decision,
+            };
+
             match self
                 .inner
-                .catalog_gallery_page(&resolved_gallery_id, cursor, CATALOG_PAGE_LIMIT)
+                .catalog_gallery_page(&filter, cursor, CATALOG_PAGE_LIMIT)
                 .await
             {
-                Ok(page) => catalog_gallery(resolved_gallery_id, page),
+                Ok(page) => catalog_gallery(filter, page),
                 // Old fixture servers reject query parameters. Do not hide other
                 // client errors behind the compatibility route.
                 Err(ClientError::Http {
                     status: 400,
                     body: Some(body),
                 }) if cursor.is_none()
+                    && filter.decision.is_none()
                     && body.code == "bad_request"
                     && body.message == "Query parameters are not supported" =>
                 {
@@ -252,6 +262,15 @@ impl<T: Transport> ControllerClient for DemoRestClient<T> {
                 }
                 Err(error) => Err(map_client_error(error)),
             }
+        })
+    }
+
+    fn summary<'a>(&'a self, gallery_id: &'a str) -> super::controller::SummaryFuture<'a> {
+        Box::pin(async move {
+            self.inner
+                .catalog_summary(gallery_id)
+                .await
+                .map_err(map_client_error)
         })
     }
 
@@ -320,18 +339,15 @@ impl<T: Transport> ControllerClient for DemoRestClient<T> {
 }
 
 fn catalog_gallery(
-    gallery_id: String,
+    filter: CatalogFilter,
     page: photo_culler_client::demo::CatalogPhotoPage,
 ) -> Result<DemoGallery, DemoError> {
+    let gallery_id = filter.gallery_id.clone();
     if page.contract_version != 1 || page.items.len() > CATALOG_PAGE_LIMIT {
         return Err(invalid_gallery_response());
     }
     if let Some(cursor) = &page.next_cursor {
-        if cursor.filter
-            != (CatalogFilter {
-                gallery_id: gallery_id.clone(),
-                decision: None,
-            })
+        if cursor.filter != filter
             || page
                 .items
                 .last()
