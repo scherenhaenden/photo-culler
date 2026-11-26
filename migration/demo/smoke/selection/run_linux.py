@@ -162,7 +162,12 @@ def decision_targets(display_names: list[str]) -> dict[str, str]:
 
 
 def expected_decisions(targets: dict[str, str]) -> dict[str, str]:
-    return {Path(targets["keep"]).stem: "KEEP", Path(targets["reject"]).stem: "REJECT"}
+    # The UI sends the categorical action "reject"; the write API persists
+    # its canonical catalog enum as REJECT_TECHNICAL.
+    return {
+        Path(targets["keep"]).stem: "KEEP",
+        Path(targets["reject"]).stem: "REJECT_TECHNICAL",
+    }
 
 
 def grid_cell_center(geometry: dict, index: int) -> tuple[int, int]:
