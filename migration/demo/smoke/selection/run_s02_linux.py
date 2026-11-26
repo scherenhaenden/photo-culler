@@ -158,19 +158,15 @@ def click_import_source(rows: list[dict], source_name: str) -> None:
     time.sleep(0.5)
 
 
-def estimate_button_enabled(rows: list[dict]) -> bool:
-    return any(row["confidence"] >= 35 and text_matches(row["text"], "Estimate") for row in rows)
+def estimate_button_point(width: int, height: int) -> tuple[int, int]:
+    return (round(width * 0.359), round(height * 0.827))
 
 
-def wait_for_estimate_button(output: Path, timeout: float = 12) -> list[dict]:
-    deadline = time.monotonic() + timeout
-    latest_rows: list[dict] = []
-    while time.monotonic() < deadline:
-        latest_rows = screenshot(output)
-        if estimate_button_enabled(latest_rows):
-            return latest_rows
-        time.sleep(0.25)
-    raise TimeoutError(f"Estimate did not become enabled; last OCR={latest_rows}")
+def click_estimate_button() -> None:
+    width, height = map(int, subprocess.check_output(["xdotool", "getdisplaygeometry"], text=True).split())
+    x, y = estimate_button_point(width, height)
+    subprocess.run(["xdotool", "mousemove", str(x), str(y), "click", "1"], check=True)
+    time.sleep(0.5)
 
 
 def folder_dialog_select_point(width: int, height: int) -> tuple[int, int]:
@@ -414,8 +410,8 @@ def main() -> None:
         click_import_button(rows)
         rows = wait_text("Available", output / "import-dialog.png")
         click_import_source(rows, source.name)
-        rows = wait_for_estimate_button(output / "import-estimate-ready.png")
-        click_text(rows, "Estimate")
+        screenshot(output / "import-estimate-ready.png")
+        click_estimate_button()
         rows = wait_text("logical photos", output / "estimated.png")
         if not any("13 logical photos" in row["text"] for row in rows):
             raise RuntimeError(f"expected 13 logical photos: {rows}")
