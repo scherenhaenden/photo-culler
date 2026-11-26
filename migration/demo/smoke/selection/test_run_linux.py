@@ -75,6 +75,10 @@ class SelectionRunnerTests(unittest.TestCase):
 
             self.assertEqual(len(ids), 13)
             self.assertEqual(runner.second_page_last_name(database, "generated-id"), "photo-13.jpg")
+            self.assertEqual(
+                runner.second_page_last_photo(database, "generated-id"),
+                ("photo-13", "photo-13"),
+            )
             display_names = runner.first_page_display_names(database, "generated-id")
             self.assertEqual(
                 display_names,
@@ -196,6 +200,34 @@ class SelectionRunnerTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "expected photo ID prefix"):
                 runner.assert_keep_filter(
                     Path("keep-filter.png"), [{"text": "not-the-photo", "x": 1076, "y": 66}], photo_id
+                )
+
+    def test_page_two_assertion_uses_catalog_photo_id_and_visible_counter(self):
+        photo_id = "ef96369c76b70738e1c78d02b833f8bb"
+        self.assertEqual(runner.photo_counter_from_ocr("« | Foto13de13 | > |"), (13, 13))
+        rows = [{"text": photo_id, "x": 1076, "y": 122}]
+        with mock.patch.object(runner, "enlarged_crop_ocr", return_value="Foto13de13"):
+            evidence = runner.assert_last_photo_visible(
+                Path("page-two.png"), rows, photo_id, total_photos=13
+            )
+        self.assertEqual(
+            evidence,
+            {
+                "visible_photo_index": 13,
+                "visible_photo_total": 13,
+                "photo_id_prefix": photo_id[:24],
+                "matching_inspector_id_rows": 1,
+            },
+        )
+        with mock.patch.object(runner, "enlarged_crop_ocr", return_value="Foto12de13"):
+            with self.assertRaisesRegex(RuntimeError, "expected 13 of 13"):
+                runner.assert_last_photo_visible(
+                    Path("page-two.png"), rows, photo_id, total_photos=13
+                )
+        with mock.patch.object(runner, "enlarged_crop_ocr", return_value="Foto13de13"):
+            with self.assertRaisesRegex(RuntimeError, "expected photo ID prefix"):
+                runner.assert_last_photo_visible(
+                    Path("page-two.png"), [], photo_id, total_photos=13
                 )
 
 

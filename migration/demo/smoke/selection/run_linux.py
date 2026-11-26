@@ -108,15 +108,20 @@ def page_ids(database: Path, gallery_id: str) -> list[str]:
         )]
 
 
-def second_page_last_name(database: Path, gallery_id: str) -> str:
+def second_page_last_photo(database: Path, gallery_id: str) -> tuple[str, str]:
     with sqlite3.connect(database) as connection:
         row = connection.execute(
-            "SELECT stem_name FROM photos WHERE gallery_id = ? ORDER BY photo_id ASC LIMIT 1 OFFSET 12",
+            "SELECT photo_id, stem_name FROM photos WHERE gallery_id = ? "
+            "ORDER BY photo_id ASC LIMIT 1 OFFSET 12",
             (gallery_id,),
         ).fetchone()
     if not row:
         raise RuntimeError("fixture catalog has no second page")
-    return row[0] + ".jpg"
+    return row[0], row[1]
+
+
+def second_page_last_name(database: Path, gallery_id: str) -> str:
+    return second_page_last_photo(database, gallery_id)[1] + ".jpg"
 
 
 def screenshot_and_ocr(window_id: str, path: Path) -> list[dict]:
@@ -375,6 +380,14 @@ def visible_page_count_from_ocr(text: str) -> int:
     return int(match.group(1))
 
 
+def photo_counter_from_ocr(text: str) -> tuple[int, int]:
+    compact = re.sub(r"[^a-z0-9]", "", text.lower())
+    match = re.search(r"foto(\d+)de(\d+)", compact)
+    if not match:
+        raise RuntimeError(f"could not read visible photo counter from enlarged OCR: {text!r}")
+    return int(match.group(1)), int(match.group(2))
+
+
 def normalized_photo_id_ocr(text: str) -> str:
     normalized = text.lower().replace("o", "0").replace("i", "1").replace("l", "1")
     return re.sub(r"[^0-9a-f]", "", normalized)
@@ -402,6 +415,35 @@ def assert_keep_filter(screenshot: Path, rows: list[dict], expected_photo_id: st
         )
     return {
         "visible_photo_count": visible_count,
+        "photo_id_prefix": expected_prefix,
+        "matching_inspector_id_rows": len(matching_ids),
+    }
+
+
+def assert_last_photo_visible(screenshot: Path, rows: list[dict],
+                              expected_photo_id: str, total_photos: int) -> dict[str, object]:
+    counter_text = enlarged_crop_ocr(screenshot, (850, 92, 125, 24))
+    current, total = photo_counter_from_ocr(counter_text)
+    if (current, total) != (total_photos, total_photos):
+        raise RuntimeError(
+            f"Next Photo navigation ended at {current} of {total}, "
+            f"expected {total_photos} of {total_photos}"
+        )
+    expected_prefix = expected_photo_id[:24].lower()
+    matching_ids = [
+        normalized_photo_id_ocr(row["text"])
+        for row in rows
+        if row["x"] >= 1000 and row["y"] < 150
+        and expected_prefix in normalized_photo_id_ocr(row["text"])
+    ]
+    if not matching_ids:
+        raise RuntimeError(
+            f"last-photo inspector did not show the expected photo ID prefix "
+            f"{expected_prefix}: {rows}"
+        )
+    return {
+        "visible_photo_index": current,
+        "visible_photo_total": total,
         "photo_id_prefix": expected_prefix,
         "matching_inspector_id_rows": len(matching_ids),
     }
@@ -513,12 +555,13 @@ def main() -> None:
         click_at(decision_filter_center(window["geometry"], "ALL"))
         for _ in range(12):
             click_next_photo(wid, origin_x, origin_y, width, height)
-        rows = screenshot_and_ocr(wid, output / "page-two.png")
-        evidence["screenshots"].append(str(output / "page-two.png"))
-        expected_last = second_page_last_name(database, gallery_id)
-        if expected_last not in [row["text"] for row in rows]:
-            raise RuntimeError(f"last fixture photo did not appear after 12 Next Photo actions: {expected_last}")
-        evidence["pagination"] = f"reached second-page item {expected_last} after 12 Next Photo actions"
+        page_two = output / "page-two.png"
+        rows = screenshot_and_ocr(wid, page_two)
+        evidence["screenshots"].append(str(page_two))
+        last_photo_id, _last_stem_name = second_page_last_photo(database, gallery_id)
+        evidence["pagination"] = assert_last_photo_visible(
+            page_two, rows, last_photo_id, total_photos=len(ids)
+        )
         snapshot_catalog(database, output / "catalog-after-decisions.sqlite3")
 
         native.close_window("linux", process.pid, window, output)
