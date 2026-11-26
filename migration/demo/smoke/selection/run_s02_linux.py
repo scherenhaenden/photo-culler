@@ -189,6 +189,27 @@ def folder_list_row_visible(rows: list[dict], folder_name: str) -> bool:
     return any(row["y"] >= 130 and text_matches(row["text"], folder_name) for row in rows)
 
 
+def source_folder_navigation_segments(source: Path) -> tuple[str, str]:
+    return (source.parent.parent.name, source.parent.name)
+
+
+def wait_for_folder_list_row(folder_name: str, output: Path, timeout: float = 12) -> list[dict]:
+    deadline = time.monotonic() + timeout
+    latest_rows: list[dict] = []
+    while time.monotonic() < deadline:
+        latest_rows = screenshot(output)
+        if folder_list_row_visible(latest_rows, folder_name):
+            return latest_rows
+        time.sleep(0.25)
+    raise TimeoutError(f"GTK folder list did not show {folder_name!r}; last OCR={latest_rows}")
+
+
+def click_folder_list_row(rows: list[dict], folder_name: str) -> None:
+    # Ignore same-named sidebar/bookmark/autocomplete text. Only click a row in
+    # the actual file list below the header.
+    click_text([row for row in rows if row["y"] >= 130], folder_name)
+
+
 def open_picker_location_entry(output: Path) -> None:
     latest_rows: list[dict] = []
     for attempt in range(3):
@@ -208,23 +229,15 @@ def open_source_picker(source: Path, output: Path) -> None:
     rows = screenshot(output)
     click_choose_folder(rows)
     wait_for_folder_picker()
-    open_picker_location_entry(output)
-    # Navigate to the parent so GTK can select the source directory as a row;
-    # typing the source itself only navigates into it and leaves Select disabled.
-    subprocess.run(["xdotool", "key", "ctrl+a"], check=True)
-    subprocess.run(["xdotool", "type", "--clearmodifiers", str(source.parent)], check=True)
-    rows = []
-    for attempt in range(3):
-        subprocess.run(["xdotool", "key", "Return"], check=True)
-        time.sleep(1.0)
-        rows = screenshot(output.with_name(f"folder-picker-parent-{attempt + 1}.png"))
-        if folder_list_row_visible(rows, source.name):
-            break
-    else:
-        raise RuntimeError(
-            f"GTK folder chooser did not open the source parent; expected row {source.name!r}, last OCR={rows}"
-        )
-    click_text([row for row in rows if row["y"] >= 130], source.name)
+    # The hosted GTK location entry autocompletes this path but does not commit
+    # navigation reliably. Start from the repository bookmark and traverse the
+    # real directory rows so the source selection is an actual folder row.
+    rows = screenshot(output.with_name("folder-picker-bookmarks.png"))
+    click_text(rows, "photo-culler")
+    for index, folder_name in enumerate((*source_folder_navigation_segments(source), source.name), start=1):
+        rows = wait_for_folder_list_row(folder_name, output.with_name(f"folder-picker-list-{index}.png"))
+        click_folder_list_row(rows, folder_name)
+        time.sleep(0.5)
     time.sleep(1.0)
     selected_rows = screenshot(output.with_name("folder-picker-selected.png"))
     if not folder_list_row_visible(selected_rows, source.name):

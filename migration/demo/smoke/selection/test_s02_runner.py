@@ -68,6 +68,11 @@ class Sprint02RunnerTests(unittest.TestCase):
                 [{"text": "Fotos de selección/", "y": 115}], "Fotos de selección"
             )
         )
+
+    def test_source_picker_navigation_uses_repository_folder_segments(self):
+        source = Path("/workspace/photo-culler/artifacts/s02-selection-fixture/Fotos de selección")
+
+        self.assertEqual(runner.source_folder_navigation_segments(source), ("artifacts", "s02-selection-fixture"))
         self.assertTrue(
             runner.folder_list_row_visible(
                 [{"text": "Fotos de selección", "y": 142}], "Fotos de selección"
