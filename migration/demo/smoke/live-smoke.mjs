@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium, firefox } from "playwright";
-import { buildServerArguments } from "./smoke-config.mjs";
+import { assertFixtureGalleryPage, buildServerArguments } from "./smoke-config.mjs";
 
 const MIME_BY_PATH = new Map([
   ["/api/v1/health", "application/json"],
@@ -237,8 +237,7 @@ async function importBrowserFixture(origin, sessionToken) {
       const pageBody = await pageResponse.text();
       assert.equal(pageResponse.status, 200, `the persistent gallery page route must accept its bounded page query: ${pageBody}`);
       const page = JSON.parse(pageBody);
-      assert.equal(page.items.length, 1);
-      assert.equal(page.items[0].filename, "demo-001.jpg");
+      assertFixtureGalleryPage(page);
       const summaryResponse = await fetch(`${origin}/api/v1/galleries/${galleryId}/summary`, { headers });
       const summaryBody = await summaryResponse.text();
       assert.equal(summaryResponse.status, 200, `the persistent gallery summary route must be available: ${summaryBody}`);
