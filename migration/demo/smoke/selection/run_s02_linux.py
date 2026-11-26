@@ -91,6 +91,22 @@ def text_matches(observed: str, expected: str) -> bool:
     ).ratio() >= 0.9
 
 
+def folder_name_matches_ocr(observed: str, expected: str) -> bool:
+    if text_matches(observed, expected):
+        return True
+    # OCR can attach the folder icon or a checkbox-like glyph as a one- or
+    # two-character prefix (for example, "Ml Fotos de seleccién"). Retry the
+    # phrase after that short visual prefix while preserving the same fuzzy
+    # threshold for the actual folder name.
+    observed_words = normalize_text(observed).split()
+    expected_normalized = normalize_text(expected)
+    return bool(
+        observed_words
+        and len(observed_words[0]) <= 2
+        and text_matches(" ".join(observed_words[1:]), expected_normalized)
+    )
+
+
 def choose_folder_button_point(width: int, height: int) -> tuple[int, int]:
     # The first-run call to action is centered in the gallery panel, near the
     # bottom of the maximized 1440x900 runner window.
@@ -200,7 +216,7 @@ def folder_list_row_visible(rows: list[dict], folder_name: str) -> bool:
     # Autocomplete suggestions sit above the file list (around y=115) and can
     # look like a selectable directory even though the chooser is still in its
     # location entry. Only accept a matching row below the list header.
-    return any(row["y"] >= 130 and text_matches(row["text"], folder_name) for row in rows)
+    return any(row["y"] >= 130 and folder_name_matches_ocr(row["text"], folder_name) for row in rows)
 
 
 def source_folder_navigation_segments(source: Path) -> tuple[str, str]:
@@ -221,7 +237,7 @@ def wait_for_folder_list_row(folder_name: str, output: Path, timeout: float = 12
 def click_folder_list_row(rows: list[dict], folder_name: str, *, enter: bool = False) -> None:
     # Ignore same-named sidebar/bookmark/autocomplete text. Only click a row in
     # the actual file list below the header.
-    candidates = [row for row in rows if row["y"] >= 130 and text_matches(row["text"], folder_name)]
+    candidates = [row for row in rows if row["y"] >= 130 and folder_name_matches_ocr(row["text"], folder_name)]
     if len(candidates) != 1:
         raise RuntimeError(f"cannot uniquely locate folder list row {folder_name!r}: {candidates}")
     row = candidates[0]
