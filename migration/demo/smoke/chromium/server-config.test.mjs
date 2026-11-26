@@ -13,9 +13,9 @@ test("live browser smoke starts an authorized persistent catalog for global summ
 });
 
 test("persistent gallery fixture validates the catalog DTO filename field", () => {
-  assert.doesNotThrow(() => assertFixtureGalleryPage({ items: [{ id: "photo-1", name: "demo-001.jpg" }] }));
+  assert.doesNotThrow(() => assertFixtureGalleryPage({ items: [{ id: "photo-1", name: "demo-001" }] }));
   assert.throws(
-    () => assertFixtureGalleryPage({ items: [{ id: "photo-1", filename: "demo-001.jpg" }] }),
+    () => assertFixtureGalleryPage({ items: [{ id: "photo-1", filename: "demo-001" }] }),
     /name/,
   );
 });

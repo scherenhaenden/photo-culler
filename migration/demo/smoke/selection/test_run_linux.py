@@ -4,6 +4,7 @@ import importlib.util
 import sqlite3
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -15,6 +16,28 @@ SPEC.loader.exec_module(runner)
 
 
 class SelectionRunnerTests(unittest.TestCase):
+    def test_mutating_api_requests_send_exact_local_origin(self):
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return b"{}"
+
+        origin = "http://127.0.0.1:43127"
+        with mock.patch.object(runner.urllib.request, "urlopen", return_value=Response()) as urlopen:
+            runner.request(
+                origin, "session-token", "/api/v2/import-estimates",
+                {"source_id": "source-id", "recursive": True, "exclude_patterns": []},
+            )
+
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.get_header("Origin"), origin)
+        self.assertEqual(request.get_header("Authorization"), "Bearer session-token")
+
     def test_active_gallery_response_supplies_the_dynamic_id(self):
         self.assertEqual(
             runner.active_gallery_id({"contract_version": 1, "gallery_id": "generated-id"}),
