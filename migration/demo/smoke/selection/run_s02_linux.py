@@ -612,7 +612,7 @@ def main() -> None:
         assert_source_hashes(source, manifest)
 
         rows = screenshot(output / "reopened-import.png")
-        click_text(rows, "Import")
+        click_import_button(rows)
         rows = wait_text("Start import", output / "reimport-dialog.png")
         click_text(rows, "Start import")
         rows = wait_for_import_completion(database, output / "reimport-complete.png", expected_files=13)
