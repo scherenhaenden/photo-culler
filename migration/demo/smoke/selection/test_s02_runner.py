@@ -60,6 +60,18 @@ class Sprint02RunnerTests(unittest.TestCase):
     def test_estimate_fallback_targets_enabled_button_in_modal(self):
         self.assertEqual(runner.estimate_button_point(1440, 900), (517, 744))
 
+    def test_estimate_result_uses_legible_file_count_line(self):
+        self.assertTrue(
+            runner.estimate_result_visible(
+                [{"text": "Estimate: 13 files - 205072 bytes", "confidence": 94}], 13
+            )
+        )
+        self.assertFalse(
+            runner.estimate_result_visible(
+                [{"text": "Estimate: 12 files - 205072 bytes", "confidence": 94}], 13
+            )
+        )
+
     def test_folder_dialog_select_fallback_targets_the_lower_right_button(self):
         self.assertEqual(runner.folder_dialog_select_point(1097, 844), (1047, 818))
 
