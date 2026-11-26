@@ -146,7 +146,7 @@ def main() -> None:
     source = fixture / "Fotos de selección"
     manifest = fixture / "manifest.json"
     xdg = output / "xdg"
-    xdg.mkdir()
+    xdg.mkdir(parents=True, exist_ok=True)
     process = launch(desktop, xdg, output, "first")
     status = "PASS"
     try:
