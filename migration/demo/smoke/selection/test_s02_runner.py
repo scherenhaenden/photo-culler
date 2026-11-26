@@ -62,6 +62,18 @@ class Sprint02RunnerTests(unittest.TestCase):
     def test_picker_folder_name_matches_ocr_without_diacritics(self):
         self.assertTrue(runner.text_matches("Fotos de seleccién/", "Fotos de selección"))
 
+    def test_picker_autocomplete_does_not_count_as_folder_list_row(self):
+        self.assertFalse(
+            runner.folder_list_row_visible(
+                [{"text": "Fotos de selección/", "y": 115}], "Fotos de selección"
+            )
+        )
+        self.assertTrue(
+            runner.folder_list_row_visible(
+                [{"text": "Fotos de selección", "y": 142}], "Fotos de selección"
+            )
+        )
+
     def test_catalog_snapshot_reads_ids_and_full_hashes_for_jpegs(self):
         with tempfile.TemporaryDirectory() as temporary:
             database = Path(temporary) / "catalog.sqlite3"
