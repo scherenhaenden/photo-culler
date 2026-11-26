@@ -66,6 +66,9 @@ class Sprint02RunnerTests(unittest.TestCase):
                 [{"text": "Estimate: 13 files - 205072 bytes", "confidence": 94}], 13
             )
         )
+
+    def test_start_import_fallback_targets_enabled_button(self):
+        self.assertEqual(runner.start_import_button_point(1440, 900), (514, 792))
         self.assertFalse(
             runner.estimate_result_visible(
                 [{"text": "Estimate: 12 files - 205072 bytes", "confidence": 94}], 13

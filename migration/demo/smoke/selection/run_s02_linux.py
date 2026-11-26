@@ -169,6 +169,21 @@ def click_estimate_button() -> None:
     time.sleep(0.5)
 
 
+def start_import_button_point(width: int, height: int) -> tuple[int, int]:
+    return (round(width * 0.357), round(height * 0.88))
+
+
+def click_start_import_button(rows: list[dict]) -> None:
+    candidates = [row for row in rows if row["confidence"] >= 35 and text_matches(row["text"], "Start import")]
+    if len(candidates) == 1:
+        click_text(rows, candidates[0]["text"])
+        return
+    width, height = map(int, subprocess.check_output(["xdotool", "getdisplaygeometry"], text=True).split())
+    x, y = start_import_button_point(width, height)
+    subprocess.run(["xdotool", "mousemove", str(x), str(y), "click", "1"], check=True)
+    time.sleep(0.5)
+
+
 def estimate_result_visible(rows: list[dict], expected_files: int) -> bool:
     expected = f"Estimate: {expected_files} files"
     return any(row["confidence"] >= 35 and expected in row["text"] for row in rows)
@@ -429,7 +444,7 @@ def main() -> None:
         screenshot(output / "import-estimate-ready.png")
         click_estimate_button()
         wait_for_estimate_result(output / "estimated.png", expected_files=13)
-        click_text(rows, "Start import")
+        click_start_import_button(rows)
         wait_text("13 imported", output / "import-progress.png", timeout=90)
         rows = screenshot(output / "import-complete.png")
         click_text(rows, "Close")
