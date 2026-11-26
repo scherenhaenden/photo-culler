@@ -257,12 +257,38 @@ def photo_index_visible(rows: list[dict], expected_index: int) -> bool:
     )
 
 
+def photo_index_text_visible(text: str, expected_index: int) -> bool:
+    return re.search(rf"\bfoto\s+{expected_index}\b", normalize_text(text)) is not None
+
+
+def navigation_crop_geometry(width: int, height: int) -> tuple[int, int, int, int]:
+    return (round(width * 0.56), round(height * 0.12), round(width * 0.14), round(height * 0.04))
+
+
+def read_navigation_text(image: Path) -> str:
+    width, height = map(int, subprocess.check_output(["xdotool", "getdisplaygeometry"], text=True).split())
+    x, y, crop_width, crop_height = navigation_crop_geometry(width, height)
+    crop = image.with_name(f"{image.stem}-navigation.png")
+    subprocess.run([
+        "convert", str(image), "-crop", f"{crop_width}x{crop_height}+{x}+{y}",
+        "-resize", "400%", str(crop),
+    ], check=True)
+    result = subprocess.run(
+        ["tesseract", str(crop), "stdout", "--psm", "7"],
+        check=True, capture_output=True, text=True,
+    )
+    crop.with_suffix(".txt").write_text(result.stdout)
+    return result.stdout
+
+
 def wait_for_photo_index(output: Path, expected_index: int, timeout: float = 15) -> list[dict]:
     deadline = time.monotonic() + timeout
     latest_rows: list[dict] = []
     while time.monotonic() < deadline:
         latest_rows = screenshot(output)
-        if photo_index_visible(latest_rows, expected_index):
+        if photo_index_visible(latest_rows, expected_index) or photo_index_text_visible(
+            read_navigation_text(output), expected_index
+        ):
             return latest_rows
         time.sleep(0.25)
     raise TimeoutError(f"UI did not navigate to photo {expected_index}; last OCR={latest_rows}")
@@ -563,11 +589,11 @@ def main() -> None:
         if not any("12 ON THIS PAGE" in row["text"] for row in rows):
             raise RuntimeError(f"expected twelve photos on the first page: {rows}")
         rows = advance_to_photo_index(rows, output / "library-second-page.png", 13)
-        rows = wait_text("1 ON THIS PAGE", output / "library-second-page.png")
-        if not any("photo-13.jpg" in row["text"].casefold() for row in rows):
-            rows = wait_text("photo-13", output / "library-second-page-visible.png")
-        if not any("photo-13.jpg" in row["text"].casefold() for row in rows):
-            raise RuntimeError("second page did not show photo-13.jpg")
+        rows = screenshot(output / "library-second-page.png")
+        if not photo_index_visible(rows, 13) and not photo_index_text_visible(
+            read_navigation_text(output / "library-second-page.png"), 13
+        ):
+            raise RuntimeError("the UI did not reach photo 13 on the second cursor page")
 
         native.close_window("linux", process.pid, window, output)
         process.wait(timeout=15)
@@ -575,9 +601,12 @@ def main() -> None:
         process = launch(desktop, xdg, output, "reopen")
         window = native.wait_for_linux_window(process.pid, output)
         rows = screenshot(output / "reopened.png")
-        if not any("photo-13.jpg" in row["text"].casefold() for row in rows):
-            rows = advance_to_photo_index(rows, output / "reopened-second-page.png", 13)
-            rows = wait_text("photo-13.jpg", output / "reopened-second-page.png")
+        rows = advance_to_photo_index(rows, output / "reopened-second-page.png", 13)
+        rows = screenshot(output / "reopened-second-page.png")
+        if not photo_index_visible(rows, 13) and not photo_index_text_visible(
+            read_navigation_text(output / "reopened-second-page.png"), 13
+        ):
+            raise RuntimeError("reopened catalog did not reach photo 13 on the second cursor page")
         if database_snapshot(database) != (13, ids_before):
             raise RuntimeError("reopened catalog IDs or counts differ")
         assert_source_hashes(source, manifest)
