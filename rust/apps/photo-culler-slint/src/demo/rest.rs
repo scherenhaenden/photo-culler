@@ -577,7 +577,7 @@ mod tests {
         };
         let client = DemoRestClient::new(transport);
         poll_ready(async {
-            let gallery = client.gallery("demo", None).await.unwrap();
+            let gallery = client.gallery("demo", None, None).await.unwrap();
             assert_eq!(gallery.photos[0].filename, "demo-001.jpg");
             assert_eq!(gallery.photos[0].decision, "undecided");
             assert_eq!(
@@ -602,7 +602,7 @@ mod tests {
             ]))),
         };
         let client = DemoRestClient::new(transport);
-        let result = poll_ready(client.gallery("demo", None));
+        let result = poll_ready(client.gallery("demo", None, None));
         assert!(matches!(result, Err(DemoError { .. })));
     }
 }
