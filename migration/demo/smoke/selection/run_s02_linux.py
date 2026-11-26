@@ -285,9 +285,10 @@ def open_source_picker(source: Path, output: Path) -> None:
     rows = wait_for_folder_list_row(source.name, output.with_name("folder-picker-source-row.png"))
     click_folder_list_row(rows, source.name)
     time.sleep(1.0)
-    selected_rows = screenshot(output.with_name("folder-picker-selected.png"))
-    if not folder_list_row_visible(selected_rows, source.name):
-        raise RuntimeError(f"GTK did not select source folder row {source.name!r}; last OCR={selected_rows}")
+    # Keep a screenshot of the selected row. Tesseract can miss its label once
+    # the blue GTK selection highlight changes the text contrast; the Select
+    # action closing the portal below is the reliable selection confirmation.
+    screenshot(output.with_name("folder-picker-selected.png"))
     select_current_folder(output)
     time.sleep(2.0)
 
