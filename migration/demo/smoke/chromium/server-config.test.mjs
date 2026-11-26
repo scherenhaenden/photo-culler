@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assertFixtureGalleryPage, buildServerArguments } from "../smoke-config.mjs";
+import { assertFixtureGalleryPage, buildServerArguments, summaryForPhotoCount } from "../smoke-config.mjs";
 
 test("live browser smoke starts an authorized persistent catalog for global summaries", () => {
   assert.deepEqual(
@@ -18,4 +18,24 @@ test("persistent gallery fixture validates the catalog DTO filename field", () =
     () => assertFixtureGalleryPage({ items: [{ id: "photo-1", filename: "demo-001" }] }),
     /name/,
   );
+});
+
+test("UI state fixture returns a valid global summary for empty and populated galleries", () => {
+  assert.deepEqual(summaryForPhotoCount(0), {
+    total_photos: 0,
+    total_files: 0,
+    selected_count: 0,
+    pending_count: 0,
+    decisions: { undecided: 0 },
+    quality_tiers: {},
+  });
+  assert.deepEqual(summaryForPhotoCount(1), {
+    total_photos: 1,
+    total_files: 1,
+    selected_count: 0,
+    pending_count: 1,
+    decisions: { undecided: 1 },
+    quality_tiers: {},
+  });
+  assert.throws(() => summaryForPhotoCount(-1), /nonnegative/);
 });
