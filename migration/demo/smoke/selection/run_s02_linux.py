@@ -113,6 +113,10 @@ def choose_folder_button_point(width: int, height: int) -> tuple[int, int]:
     return (width // 2 + width // 40, height - max(20, height // 40))
 
 
+def import_button_point(width: int, height: int) -> tuple[int, int]:
+    return (round(width * 0.8), max(1, round(height * 0.04)))
+
+
 def click_choose_folder(rows: list[dict]) -> None:
     if any(text_matches(row["text"], "Elegir carpeta") for row in rows):
         click_text(rows, "Elegir carpeta")
@@ -120,6 +124,21 @@ def click_choose_folder(rows: list[dict]) -> None:
 
     width, height = map(int, subprocess.check_output(["xdotool", "getdisplaygeometry"], text=True).split())
     x, y = choose_folder_button_point(width, height)
+    subprocess.run(["xdotool", "mousemove", str(x), str(y), "click", "1"], check=True)
+    time.sleep(0.5)
+
+
+def click_import_button(rows: list[dict]) -> None:
+    candidates = [
+        row for row in rows
+        if row["confidence"] >= 35
+        and (text_matches(row["text"], "Import") or row["text"].strip().casefold().startswith("importar"))
+    ]
+    if len(candidates) == 1:
+        click_text(rows, candidates[0]["text"])
+        return
+    width, height = map(int, subprocess.check_output(["xdotool", "getdisplaygeometry"], text=True).split())
+    x, y = import_button_point(width, height)
     subprocess.run(["xdotool", "mousemove", str(x), str(y), "click", "1"], check=True)
     time.sleep(0.5)
 
@@ -362,7 +381,7 @@ def main() -> None:
         open_source_picker(source, output / "choose-folder.png")
         time.sleep(1.0)
         rows = screenshot(output / "source-selected.png")
-        click_text(rows, "Import")
+        click_import_button(rows)
         rows = wait_text("Estimate", output / "import-dialog.png")
         if not any("Estimate" in row["text"] for row in rows):
             raise RuntimeError("import dialog did not expose Estimate")
