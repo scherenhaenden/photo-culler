@@ -7,8 +7,8 @@ async fn setup() -> (tempfile::TempDir, Catalog) {
         .unwrap();
     for sql in [
         "CREATE TABLE galleries (id TEXT PRIMARY KEY)",
-        "CREATE TABLE volumes (id INTEGER PRIMARY KEY)",
-        "CREATE TABLE import_sources (id TEXT PRIMARY KEY)",
+        "CREATE TABLE volumes (id INTEGER PRIMARY KEY, mount_point TEXT)",
+        "CREATE TABLE import_sources (id TEXT PRIMARY KEY, path TEXT)",
         "CREATE TABLE scan_revisions (id TEXT PRIMARY KEY)",
         "CREATE TABLE photos (id INTEGER PRIMARY KEY, photo_id TEXT NOT NULL UNIQUE, gallery_id TEXT REFERENCES galleries(id), stem_name TEXT NOT NULL, perceptual_hash TEXT, session_id TEXT, burst_id TEXT, decision TEXT, score REAL, quality_tier TEXT, analysis_summary_json TEXT NOT NULL, created_at TEXT)",
         "CREATE TABLE files (id INTEGER PRIMARY KEY, photo_id INTEGER NOT NULL REFERENCES photos(id), volume_id INTEGER REFERENCES volumes(id), import_source_id TEXT REFERENCES import_sources(id), last_seen_revision_id TEXT REFERENCES scan_revisions(id), relative_path TEXT NOT NULL, source_relative_path TEXT, status TEXT NOT NULL, role TEXT NOT NULL, size_bytes INTEGER NOT NULL CHECK(size_bytes >= 0), modified_time REAL NOT NULL, quick_hash TEXT, full_hash TEXT, UNIQUE(photo_id, relative_path))",
@@ -197,5 +197,43 @@ async fn gallery_pages_are_ordered_filtered_and_keep_child_data() {
     );
     assert!(db.list_gallery("gallery-1", None, 0).await.is_err());
     assert!(db.list_gallery("gallery-1", None, 201).await.is_err());
+    db.close().await;
+}
+
+#[tokio::test]
+async fn raw_jpeg_pair_is_one_catalog_take_and_prefers_jpeg_for_display() {
+    let (dir, db) = setup().await;
+    let source = dir.path().join("source");
+    std::fs::create_dir_all(source.join("DCIM/100")).unwrap();
+    std::fs::write(source.join("DCIM/100/take-001.ARW"), b"synthetic raw bytes").unwrap();
+    std::fs::write(
+        source.join("DCIM/100/take-001.JPG"),
+        b"synthetic jpeg bytes",
+    )
+    .unwrap();
+    sqlx::query("UPDATE import_sources SET path = ? WHERE id = 'source-1'")
+        .bind(source.to_string_lossy().as_ref())
+        .execute(&db.writer)
+        .await
+        .unwrap();
+
+    let mut take = photo();
+    take.files[0].relative_path = "DCIM/100/take-001.ARW".into();
+    take.files[0].source_relative_path = Some("DCIM/100/take-001.ARW".into());
+    take.files[0].role = "RAW".into();
+    let mut jpeg = take.files[0].clone();
+    jpeg.relative_path = "DCIM/100/take-001.JPG".into();
+    jpeg.source_relative_path = Some("DCIM/100/take-001.JPG".into());
+    jpeg.role = "JPEG".into();
+    take.files.push(jpeg);
+    db.save(&take).await.unwrap();
+
+    let loaded = db.get("p1").await.unwrap().unwrap();
+    assert_eq!(loaded.files.len(), 2, "both originals belong to one take");
+    assert_eq!(loaded.decision.as_deref(), Some("KEEP"));
+    let paths = db.display_paths("p1").await.unwrap();
+    assert_eq!(paths.len(), 2);
+    assert_eq!(paths[0].extension().unwrap(), "JPG");
+    assert_eq!(paths[1].extension().unwrap(), "ARW");
     db.close().await;
 }
