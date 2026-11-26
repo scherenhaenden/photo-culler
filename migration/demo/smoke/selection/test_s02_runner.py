@@ -65,6 +65,9 @@ class Sprint02RunnerTests(unittest.TestCase):
     def test_picker_folder_name_matches_ocr_without_diacritics(self):
         self.assertTrue(runner.text_matches("Fotos de seleccién/", "Fotos de selección"))
 
+    def test_picker_folder_row_matches_short_ocr_prefix_and_one_character_error(self):
+        self.assertTrue(runner.folder_name_matches_ocr("Ml Fotos de seleccién", "Fotos de selección"))
+
     def test_picker_autocomplete_does_not_count_as_folder_list_row(self):
         self.assertFalse(
             runner.folder_list_row_visible(
