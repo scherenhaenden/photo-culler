@@ -43,7 +43,7 @@ El selector de carpetas y primer importado pertenecen a Sprint 02. Sus runners L
 ## Evidencia de integración
 
 - El head `79c2439a70fdc430d2bc6f75fca3c73397efcd30` pasó el workflow de compilación e integración `45862827930` y la matriz de paquete Slint `45869568546`; dentro de esta última, `Run persistent library decision selection acceptance` pasó en Linux. La ejecución nativa Linux registrada es el artefacto `15142017983`.
-- Sprint 02 avanzó después a `0fc7d3c2f4806d80b7e511794c6907a434c3cc47`. Esta rama integra ese head y conserva pasos independientes para las aceptaciones Linux/macOS de S02 y la aceptación Linux de S03.
+- Sprint 02 avanzó después con `69334ec68af75be24c745d8697b0f2e9e07563f9`, que corrige la apertura del diálogo tras seleccionar la carpeta. Esta rama integra ese head y conserva pasos independientes para las aceptaciones Linux/macOS de S02 y la aceptación Linux de S03.
 - La integración crea un SHA nuevo. Repetir los workflows de paquete y la suite pertinente sobre ese SHA antes de considerar la aceptación final de S03 cerrada.
 
 ## Secuencia de ramas
