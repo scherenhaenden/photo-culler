@@ -2,6 +2,7 @@
 
 import importlib.util
 import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -121,6 +122,19 @@ class Sprint02MacOSRunnerTests(unittest.TestCase):
 
         process.stdin.close.assert_called_once()
         process.wait.assert_called_once_with(timeout=5)
+
+    def test_api_requests_send_the_exact_origin_required_for_mutations(self):
+        response = MagicMock()
+        response.read.return_value = json.dumps({"ok": True}).encode()
+        response.__enter__.return_value = response
+        with patch.object(runner.urllib.request, "urlopen", return_value=response) as urlopen:
+            self.assertEqual(
+                runner.request("http://127.0.0.1:49231", "token", "/api/v2/import-estimates", {"source_id": "source-1"}),
+                {"ok": True},
+            )
+
+        req = urlopen.call_args.args[0]
+        self.assertEqual(req.get_header("Origin"), "http://127.0.0.1:49231")
 
 
 if __name__ == "__main__":
