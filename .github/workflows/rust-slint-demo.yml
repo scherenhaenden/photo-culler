@@ -83,7 +83,7 @@ jobs:
       - if: runner.os == 'Linux'
         name: Install Slint native build dependencies
         run: |
-          packages=(build-essential pkg-config libfontconfig1-dev libx11-dev libx11-xcb-dev libxcb1-dev libxcursor-dev libxkbcommon-dev libxkbcommon-x11-dev libinput-dev libgbm-dev libwayland-dev xvfb openbox xdotool x11-utils imagemagick tesseract-ocr)
+          packages=(build-essential pkg-config libfontconfig1-dev libx11-dev libx11-xcb-dev libxcb1-dev libxcursor-dev libxkbcommon-dev libxkbcommon-x11-dev libinput-dev libgbm-dev libwayland-dev xvfb openbox xdotool x11-utils imagemagick tesseract-ocr dbus-x11 xdg-desktop-portal xdg-desktop-portal-gtk)
           for attempt in 1 2 3; do
             if sudo apt-get -o Acquire::Retries=3 update && sudo apt-get -o Acquire::Retries=3 install -y "${packages[@]}"; then
               exit 0
@@ -150,6 +150,44 @@ jobs:
               --server "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-server" \
               --fixture "$RUNNER_TEMP/photo-culler-selection-fixture" \
               --output "$GITHUB_WORKSPACE/artifacts/selection/${{ matrix.key }}"
+      - name: Prepare deterministic Sprint 02 import fixture
+        if: runner.os == 'Linux'
+        run: |
+          python3 -m pip install --disable-pip-version-check Pillow==12.1.0
+          python3 migration/demo/smoke/selection/fixture.py "$GITHUB_WORKSPACE/artifacts/s02-selection-fixture"
+      - name: Run packaged Linux Sprint 02 import and reopen acceptance
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/artifacts/s02-acceptance"
+          # Give xdg-document-portal an owned runtime directory on hosted runners.
+          mkdir -p "$RUNNER_TEMP/s02-xdg-runtime"
+          chmod 700 "$RUNNER_TEMP/s02-xdg-runtime"
+          # Slint sizes the Linux desktop to 1440×900; keep the Xvfb display
+          # at that size so the first-run folder action stays on-screen.
+          XDG_RUNTIME_DIR="$RUNNER_TEMP/s02-xdg-runtime" xvfb-run --auto-servernum --server-args="-screen 0 1440x900x24" dbus-run-session -- bash -c '
+            set -euo pipefail
+            openbox --sm-disable >/tmp/photo-culler-s02-openbox.log 2>&1 &
+            window_manager_pid=$!
+            export XDG_CURRENT_DESKTOP=GNOME
+            export GTK_USE_PORTAL=1
+            export XDG_DATA_HOME="$GITHUB_WORKSPACE/artifacts/s02-acceptance/xdg"
+            mkdir -p "$XDG_DATA_HOME"
+            /usr/libexec/xdg-desktop-portal-gtk >/tmp/photo-culler-s02-portal-gtk.log 2>&1 &
+            portal_gtk_pid=$!
+            /usr/libexec/xdg-desktop-portal >/tmp/photo-culler-s02-portal.log 2>&1 &
+            portal_pid=$!
+            cleanup() {
+              kill "$portal_pid" "$portal_gtk_pid" "$window_manager_pid" 2>/dev/null || true
+            }
+            trap cleanup EXIT
+            sleep 3
+            if ! kill -0 "$window_manager_pid" 2>/dev/null; then cat /tmp/photo-culler-s02-openbox.log; exit 1; fi
+            if ! kill -0 "$portal_pid" 2>/dev/null; then cat /tmp/photo-culler-s02-portal.log; exit 1; fi
+            unset WAYLAND_DISPLAY WAYLAND_SOCKET
+            python3 "$GITHUB_WORKSPACE/migration/demo/smoke/selection/run_s02_linux.py" \
+              --desktop "$GITHUB_WORKSPACE/artifacts/linux-x64/photo-culler-desktop" \
+              --fixture "$GITHUB_WORKSPACE/artifacts/s02-selection-fixture" \
+              --output "$GITHUB_WORKSPACE/artifacts/s02-acceptance"
           '
       - name: Run packaged macOS Slint desktop smoke
         if: runner.os == 'macOS'
@@ -159,6 +197,20 @@ jobs:
           --desktop "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-desktop"
           --server "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-server"
           --output "$GITHUB_WORKSPACE/artifacts/native-gui/${{ matrix.key }}"
+      - name: Prepare deterministic Sprint 02 macOS import fixture
+        if: runner.os == 'macOS'
+        run: |
+          python3 -m pip install pillow
+          python3 migration/demo/smoke/selection/fixture.py "$GITHUB_WORKSPACE/artifacts/s02-selection-fixture"
+      - name: Run packaged macOS Sprint 02 import and persistence acceptance
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/artifacts/s02-macos-acceptance"
+          python3 migration/demo/smoke/selection/run_s02_macos_api.py \
+            --desktop "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-desktop" \
+            --server "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-server" \
+            --fixture "$GITHUB_WORKSPACE/artifacts/s02-selection-fixture" \
+            --output "$GITHUB_WORKSPACE/artifacts/s02-macos-acceptance"
       - name: Set hosted Windows display resolution for GUI smoke
         if: runner.os == 'Windows'
         shell: pwsh
@@ -184,6 +236,18 @@ jobs:
           path: |
             artifacts/native-gui/${{ matrix.key }}/
             artifacts/selection/${{ matrix.key }}/
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'Linux'
+        with:
+          name: rust-slint-demo-sprint02-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/s02-acceptance/
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'macOS'
+        with:
+          name: rust-slint-demo-sprint02-macos-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/s02-macos-acceptance/
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:

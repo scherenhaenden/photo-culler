@@ -1,6 +1,6 @@
 # Sprint 02 · Mi primera carpeta de fotos en Linux
 
-**Estado: implementación integrada; aceptación de paquetes pendiente.** La rama `feature/sprint-02-linux-library` ya contiene los PR revisados #162–#166. El flujo permite elegir una carpeta, arrancar el catálogo local, abrir el diálogo de importación y recordar la carpeta y galería. Falta comprobarlo desde los paquetes nativos Linux y macOS; hasta registrar esa evidencia, Sprint 02 no está cerrado.
+**Estado: aceptación funcional completada en Linux y macOS; revisión visual, foco y teclado de macOS pendiente.** La rama `feature/sprint-02-linux-library` contiene los PR revisados #162–#166. El flujo permite elegir una carpeta, arrancar el catálogo local, abrir el diálogo de importación y recordar la carpeta y galería. CI recorre el paquete Linux con interacción de escritorio y el paquete macOS arm64 con importación vía API, persistencia del perfil y capturas del desktop antes y después de reabrirlo. La automatización macOS no opera el selector nativo ni valida controles, foco o teclado.
 
 ## Qué verá el fotógrafo
 
@@ -14,11 +14,11 @@ La [guía de arquitectura e implementación del cliente](SPRINT_02_ARQUITECTURA.
 
 El launcher lee el perfil local por usuario, permite elegir la carpeta desde la pantalla inicial, abre su servidor hermano en loopback y muestra el diálogo existente de importación. Al guardar, asocia la ruta con el ID de galería de la carga vigente; cancela sin cambiar el perfil y conserva perfiles ilegibles para recuperación. `--demo` mantiene disponible la fixture de Sprint 01. La importación usa IDs de fuente y el catálogo SQLite sigue bajo control del servicio. Esta entrega se acota a JPEG; RAW+JPEG permanece en Sprint 05.
 
-Linux y macOS comparten componentes Slint, textos, orden de acciones, estados y navegación por teclado. Los adaptadores nativos resuelven el selector y el directorio de datos del usuario. Usar la [referencia visual de Library](../rust-slint-demo/PHOTO_CULLER_PRO_DESIGN_SPEC.md) al revisar ambos paquetes.
+Linux y macOS comparten componentes Slint, textos, orden de acciones, estados y navegación por teclado. Los adaptadores nativos resuelven el selector y el directorio de datos del usuario. El selector GTK Linux se abre mediante el portal XDG; la prueba empaquetada configura un runtime XDG privado para el portal en el runner hospedado. La app de escritorio inicia a 1440×900 en Linux; macOS CI captura la ventana a 1212×840. Por eso, las capturas de CI sirven para revisar el flujo de cada plataforma, no como comparación píxel a píxel de tamaños iguales. Usar la [referencia visual de Library](../rust-slint-demo/PHOTO_CULLER_PRO_DESIGN_SPEC.md) al revisar ambos paquetes.
 
 ## Entregas de implementación
 
-Rama de integración: `feature/sprint-02-linux-library`. Los cambios están integrados en orden de dependencia; la aceptación completa sigue pendiente.
+Rama de integración: `feature/sprint-02-linux-library`. Los cambios están integrados en orden de dependencia y la aceptación funcional automatizada pasó en las dos plataformas. La revisión de UI macOS descrita abajo sigue pendiente.
 
 | PR | Entrega integrada | Evidencia de revisión |
 |---|---|---|
@@ -28,20 +28,21 @@ Rama de integración: `feature/sprint-02-linux-library`. Los cambios están inte
 | [#165](https://github.com/scherenhaenden/photo-culler/pull/165) | Smoke nativo selecciona explícitamente `--demo` para el fixture. | Review aprobado; sintaxis Python y diff limpios. |
 | [#166](https://github.com/scherenhaenden/photo-culler/pull/166) | Launcher integra selección, servidor local, perfil, ID de galería y apertura del diálogo de importación; conserva el modo externo. | Review aprobado; checks de formato y metadatos. Se corrigieron cargas obsoletas y persistencia prematura del perfil. |
 
-El modo de estimación, confirmación, progreso, paginación y refresco usa el flujo de importación ya existente. La prueba nativa aún debe confirmar que toda la secuencia queda conectada de extremo a extremo en el paquete.
+El modo de estimación, confirmación, progreso, paginación y refresco usa el flujo de importación ya existente. La aceptación Linux recorre el paquete de extremo a extremo; macOS cubre importación, catálogo y persistencia con el servidor empaquetado y comprueba que el desktop vuelve a cargar la galería.
 
 ## Aceptación sobre la rama del sprint
 
 - Preparar una carpeta con JPEG distintos y autorizados, con al menos una foto más que el tamaño de página que use el cliente. Registrar nombres, cantidad y hashes iniciales. Preparar también una carpeta vacía.
-- En Linux x86-64, ejecutar los cuatro pasos de usuario desde el paquete. Registrar pantalla inicial, progreso, biblioteca, foto de segunda página y reapertura. Comparar los hashes de los originales antes y después.
-- En macOS arm64, repetir con los mismos datos y tamaño de ventana. Comparar capturas lado a lado, controles, orden de foco y resultado de teclado. Corregir diferencias en la pantalla compartida antes de cerrar.
-- Sobre el SHA integrado, ejecutar la suite completa del workspace y la aceptación de paquetes vigente, incluida regresión de la demo. Los workflows ahora incluyen la rama Sprint 02 y ejecutan sus gates sobre este PR; confirmar los resultados antes del cierre. Los PR de función ejecutan solo sus pruebas acotadas.
+- En Linux x86-64, la aceptación empaquetada pasó sobre `f75fe36`: selector, importación, progreso, catálogo, página 2, cierre/reapertura, IDs estables y hashes de origen. El runner conserva coordenadas OCR por palabra para separar el nombre de carpeta del texto de la barra lateral.
+- En macOS arm64, la aceptación empaquetada pasó sobre `f75fe36`: 13 JPEG, hashes, página 2, reinicio/reimportación sin duplicados y reapertura estable del catálogo. El artefacto contiene `desktop-first.png` y `desktop-reopen.png`; la prueba no automatiza el selector nativo ni la interacción visual/teclado.
+- Sobre el SHA integrado, ejecutar la suite completa del workspace y la aceptación de paquetes vigente, incluida regresión de la demo. Los workflows ejecutan esos gates al actualizar la rama Sprint 02; conservar el SHA, enlaces de ejecución y artefactos de la última ejecución verde en el informe de cierre. Los PR de función ejecutan sus pruebas acotadas.
 - Publicar en la entrega el enlace al paquete Linux y al de macOS, el SHA, los resultados y un guion de reapertura. Revisar y fusionar sprint → master, comprobar que master contiene ese SHA y retirar las ramas de función integradas. Si falla el recorrido, corregirlo en este sprint antes de empezar la selección del Sprint 03.
 
-### Evidencia hasta ahora
+### Evidencia de cierre
 
-- En el checkout limpio del sprint, `photo-culler-api` (4), `photo-culler-client` (9) y `photo-culler-server` (87 unitarios + 4 de runtime) pasaron: **104 pruebas**. Los tests del servidor que enlazan loopback se ejecutaron fuera del sandbox.
-- `cargo fmt --manifest-path rust/Cargo.toml --all -- --check`, `cargo metadata --locked --no-deps`, `git diff --check` y la sintaxis del smoke Python pasaron.
-- La suite completa del workspace no llegó a compilar Slint: el entorno local no tiene `pkg-config` para `glib-sys`/Fontconfig. La aceptación interactiva Linux/macOS y la reabrir/cerrar con paquetes aún no tienen evidencia. Los nuevos disparadores de CI se entregan en el PR de cierre de gates.
+- En `d5258e2`, `7d56f4f`, `9b75cf7`, `55ab879` y `f75fe36`, `cargo test --locked --manifest-path rust/Cargo.toml --workspace`, formato y Clippy pasaron; la última ejecución es [45966667891](https://github.com/scherenhaenden/photo-culler/actions/runs/45966667891).
+- La aceptación empaquetada macOS arm64 pasó en [45959953004](https://github.com/scherenhaenden/photo-culler/actions/runs/45959953004). El artefacto [macOS Sprint 02](https://github.com/scherenhaenden/photo-culler/actions/runs/45959953004/artifacts/15180727686) confirma 13 importaciones, hashes correctos, página 2 y persistencia estable. Las dos capturas son 1212×840.
+- En el SHA final `f75fe36`, la matriz de paquetes, WASM, navegadores y la aceptación de catálogo Linux/macOS arm64 pasaron en [45966667966](https://github.com/scherenhaenden/photo-culler/actions/runs/45966667966). Artefactos de aceptación: [Linux](https://github.com/scherenhaenden/photo-culler/actions/runs/45966667966/artifacts/15183932003) y [macOS](https://github.com/scherenhaenden/photo-culler/actions/runs/45966667966/artifacts/15183052860).
+- Las pruebas focales del runner Linux, runner macOS y fixture pasaron 39/39 con Pillow disponible; `git diff --check` y análisis YAML pasaron. La revisión macOS del selector nativo, controles, foco y teclado sigue pendiente.
 
 [Entregas posteriores y criterio común de cierre](ROADMAP.md)
