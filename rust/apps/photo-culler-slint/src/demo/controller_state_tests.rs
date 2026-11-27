@@ -40,9 +40,27 @@ struct RetryClient {
 }
 
 impl DemoClient for RetryClient {
-    fn gallery<'a>(&'a self, _: &'a str, _: Option<&'a CatalogCursor>) -> DemoFuture<'a> {
+    fn gallery<'a>(
+        &'a self,
+        _: &'a str,
+        _: Option<&'a CatalogCursor>,
+        _: Option<&'a str>,
+    ) -> DemoFuture<'a> {
         let result = self.galleries.lock().unwrap().pop_front().unwrap();
         Box::pin(async move { result })
+    }
+
+    fn summary<'a>(&'a self, _: &'a str) -> SummaryFuture<'a> {
+        Box::pin(async {
+            Ok(photo_culler_client::demo::CatalogSummary {
+                total_photos: 1,
+                total_files: 1,
+                selected_count: 0,
+                pending_count: 1,
+                decisions: Default::default(),
+                quality_tiers: Default::default(),
+            })
+        })
     }
 
     fn thumbnail<'a>(&'a self, _: &'a DemoPhoto) -> ThumbnailFuture<'a> {

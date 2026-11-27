@@ -133,6 +133,17 @@ pub struct CatalogPhotoPage {
     pub next_cursor: Option<CatalogCursor>,
 }
 
+/// Whole-catalog aggregates returned by the persistent gallery summary route.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct CatalogSummary {
+    pub total_photos: u64,
+    pub total_files: u64,
+    pub selected_count: u64,
+    pub pending_count: u64,
+    pub decisions: std::collections::BTreeMap<String, u64>,
+    pub quality_tiers: std::collections::BTreeMap<String, u64>,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct CatalogPhotoItem {
     pub id: String,
@@ -391,28 +402,44 @@ impl<T: Transport> DemoClient<T> {
     /// serialized as JSON and percent-encoded before it enters the query.
     pub async fn catalog_gallery_page(
         &self,
-        gallery_id: &str,
+        filter: &CatalogFilter,
         cursor: Option<&CatalogCursor>,
         limit: usize,
     ) -> Result<CatalogPhotoPage, ClientError> {
         if !(1..=200).contains(&limit) {
             return Err(ClientError::InvalidBody("invalid page limit".into()));
         }
+        if filter.gallery_id.is_empty() || cursor.is_some_and(|cursor| cursor.filter != *filter) {
+            return Err(ClientError::InvalidBody(
+                "catalog cursor does not match its filter".into(),
+            ));
+        }
         let mut path = format!(
             "{API_PREFIX}/galleries/{}/photos?limit={limit}",
-            encode_segment(gallery_id)
+            encode_segment(&filter.gallery_id)
         );
+        if let Some(decision) = &filter.decision {
+            path.push_str("&decision=");
+            path.push_str(&encode_query_value(decision));
+        }
         if let Some(cursor) = cursor {
-            if cursor.filter.gallery_id != gallery_id {
-                return Err(ClientError::InvalidBody(
-                    "cursor belongs to another gallery".into(),
-                ));
-            }
             let serialized = serde_json::to_string(cursor)
                 .map_err(|error| ClientError::InvalidBody(error.to_string()))?;
             path.push_str("&cursor=");
             path.push_str(&encode_query_value(&serialized));
         }
+        self.json(&path).await
+    }
+
+    /// Fetch decision and quality aggregates for the whole gallery.
+    pub async fn catalog_summary(&self, gallery_id: &str) -> Result<CatalogSummary, ClientError> {
+        if gallery_id.is_empty() {
+            return Err(ClientError::InvalidBody("invalid gallery ID".into()));
+        }
+        let path = format!(
+            "{API_PREFIX}/galleries/{}/summary",
+            encode_segment(gallery_id)
+        );
         self.json(&path).await
     }
 
@@ -1359,6 +1386,67 @@ mod tests {
         let page = block_on(client.gallery("demo")).unwrap();
         assert_eq!(page.gallery_id, "demo");
         assert_eq!(page.items[0], demo_photo());
+    }
+
+    #[test]
+    fn catalog_filter_and_cursor_are_sent_as_one_server_filter() {
+        let filter = CatalogFilter {
+            gallery_id: "demo".into(),
+            decision: Some("KEEP".into()),
+        };
+        let cursor = CatalogCursor {
+            filter: filter.clone(),
+            after_id: "p-12".into(),
+        };
+        let fake = Fake::new(Ok(json(
+            r#"{"contract_version":1,"items":[],"next_cursor":null}"#,
+        )));
+        let client = DemoClient::new(fake);
+        block_on(client.catalog_gallery_page(&filter, Some(&cursor), 12)).unwrap();
+        let request = client.transport.paths.borrow()[0].clone();
+        assert!(
+            request.starts_with("/api/v1/galleries/demo/photos?limit=12&decision=KEEP&cursor=")
+        );
+        assert!(request.contains("%22decision%22%3A%22KEEP%22"));
+        assert!(request.contains("%22after_id%22%3A%22p-12%22"));
+    }
+
+    #[test]
+    fn catalog_summary_reads_typed_whole_gallery_counts() {
+        let fake = Fake::new(Ok(json(
+            r#"{"total_photos":14,"total_files":17,"selected_count":3,"pending_count":5,"decisions":{"BEST":2,"KEEP":1,"REVIEW":2,"UNPROCESSED":3},"quality_tiers":{"unknown":14}}"#,
+        )));
+        let client = DemoClient::new(fake);
+        let summary = block_on(client.catalog_summary("demo")).unwrap();
+        assert_eq!(summary.total_photos, 14);
+        assert_eq!(summary.decisions.get("REVIEW"), Some(&2));
+        assert_eq!(
+            client.transport.paths.borrow()[0],
+            "/api/v1/galleries/demo/summary"
+        );
+    }
+
+    #[test]
+    fn catalog_cursor_with_different_filter_is_rejected_before_request() {
+        let filter = CatalogFilter {
+            gallery_id: "demo".into(),
+            decision: Some("KEEP".into()),
+        };
+        let cursor = CatalogCursor {
+            filter: CatalogFilter {
+                gallery_id: "demo".into(),
+                decision: None,
+            },
+            after_id: "p-12".into(),
+        };
+        let client = DemoClient::new(Fake::new(Ok(json(
+            r#"{"contract_version":1,"items":[],"next_cursor":null}"#,
+        ))));
+        assert!(matches!(
+            block_on(client.catalog_gallery_page(&filter, Some(&cursor), 12)),
+            Err(ClientError::InvalidBody(_))
+        ));
+        assert!(client.transport.paths.borrow().is_empty());
     }
     #[test]
     fn image_response_requires_mime_and_enforces_limit() {

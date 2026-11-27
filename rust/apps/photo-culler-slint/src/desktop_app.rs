@@ -256,6 +256,23 @@ fn run_application(initial_config: LaunchConfig) -> Result<(), String> {
     )));
     let view = Arc::new(SlintDemoView::new(window.as_weak(), false));
     let controller = Arc::new(DemoController::new(view.clone(), Arc::new(SlintDispatcher)));
+    let filter_controller = controller.clone();
+    let filter_client = client.clone();
+    view.bind_decision_filter_handler(Arc::new(move |filter| {
+        let controller = filter_controller.clone();
+        let client = filter_client.clone();
+        let decision = match filter.as_str() {
+            "all" => None,
+            "keep" => Some("KEEP".into()),
+            "alt" => Some("ALT".into()),
+            "reject" => Some("REJECT".into()),
+            "unrated" => Some("UNRATED".into()),
+            _ => None,
+        };
+        let _ = slint::spawn_local(async move {
+            let _ = controller.set_decision_filter(client.as_ref(), decision).await;
+        });
+    }));
     let server = Rc::new(RefCell::new(None));
     let launch_config = Rc::new(RefCell::new(initial_config.clone()));
     window.set_folder_selection_available(initial_config.folder_selection_available);

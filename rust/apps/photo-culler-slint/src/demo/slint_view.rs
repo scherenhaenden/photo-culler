@@ -7,6 +7,7 @@ use crate::demo::{
     controller::{DemoError, DemoView, LoadedPhoto, UiDispatcher, ViewState},
     thumbnail_image::decode_jpeg,
 };
+use photo_culler_client::demo::CatalogSummary;
 use slint::ComponentHandle;
 use std::{
     cmp::Ordering,
@@ -219,6 +220,7 @@ struct LibraryInteractionState {
     density: GridDensity,
     sort_descending: bool,
     metadata_available: bool,
+    summary: Option<CatalogSummary>,
 }
 
 impl Default for LibraryInteractionState {
@@ -230,6 +232,7 @@ impl Default for LibraryInteractionState {
             density: GridDensity::Medium,
             sort_descending: true,
             metadata_available: false,
+            summary: None,
         }
     }
 }
@@ -308,12 +311,14 @@ pub struct SlintDemoView {
     web_layout: bool,
     smoke_fixture: bool,
     library: Arc<Mutex<LibraryInteractionState>>,
+    decision_filter_handler: Arc<Mutex<Option<Arc<dyn Fn(String) + Send + Sync>>>>,
 }
 
 impl SlintDemoView {
     pub fn new(window: slint::Weak<crate::DemoWindow>, web_layout: bool) -> Self {
         let smoke_fixture = explicit_smoke_mode(web_layout);
         let library = Arc::new(Mutex::new(LibraryInteractionState::default()));
+        let decision_filter_handler = Arc::new(Mutex::new(None));
         if let Some(window) = window.upgrade() {
             window
                 .global::<crate::DesignTokens>()
@@ -323,13 +328,25 @@ impl SlintDemoView {
             if web_layout {
                 bind_browser_window_resize(window.as_weak());
             }
-            wire_library_callbacks(&window, library.clone(), web_layout);
+            wire_library_callbacks(
+                &window,
+                library.clone(),
+                decision_filter_handler.clone(),
+                web_layout,
+            );
         }
         Self {
             window,
             web_layout,
             smoke_fixture,
             library,
+            decision_filter_handler,
+        }
+    }
+
+    pub fn bind_decision_filter_handler(&self, handler: Arc<dyn Fn(String) + Send + Sync>) {
+        if let Ok(mut slot) = self.decision_filter_handler.lock() {
+            *slot = Some(handler);
         }
     }
 
@@ -356,6 +373,13 @@ impl SlintDemoView {
 }
 
 impl DemoView for SlintDemoView {
+    fn set_global_summary(&self, summary: Option<CatalogSummary>) {
+        if let Ok(mut state) = self.library.lock() {
+            state.summary = summary;
+        }
+        refresh_library(&self.window, &self.library, self.web_layout);
+    }
+
     fn set_state(&self, state: ViewState) {
         let Some(window) = self.window.upgrade() else {
             return;
@@ -497,6 +521,7 @@ impl DemoView for SlintDemoView {
 fn wire_library_callbacks(
     window: &crate::DemoWindow,
     library: Arc<Mutex<LibraryInteractionState>>,
+    decision_filter_handler: Arc<Mutex<Option<Arc<dyn Fn(String) + Send + Sync>>>>,
     web_layout: bool,
 ) {
     let weak = window.as_weak();
@@ -511,10 +536,17 @@ fn wire_library_callbacks(
     let weak = window.as_weak();
     let callback_library = library.clone();
     window.on_filter_requested(move |name, value| {
+        let mut server_filter = None;
         if let Ok(mut state) = callback_library.lock() {
             match name.as_str() {
-                "reset" => state.reset_filters(),
-                "cull-status" => state.filters.cull_status = value.to_string(),
+                "reset" => {
+                    state.reset_filters();
+                    server_filter = Some(String::new());
+                }
+                "cull-status" => {
+                    state.filters.cull_status = value.to_string();
+                    server_filter = Some(value.to_string());
+                }
                 "camera-body" => {
                     let camera = value.to_string();
                     if !state.filters.cameras.remove(&camera) {
@@ -539,6 +571,12 @@ fn wire_library_callbacks(
                 "raw-only" => state.filters.raw_only = value.as_str() == "true",
                 _ => {}
             }
+        }
+        if let Some(server_filter) = server_filter
+            && let Ok(handler) = decision_filter_handler.lock()
+            && let Some(handler) = handler.as_ref()
+        {
+            handler(server_filter);
         }
         if name.as_str() == "reset"
             && let Some(window) = weak.upgrade()
@@ -667,6 +705,18 @@ fn refresh_library(
         .iter()
         .filter(|item| decision_category(&item.metadata.decision) == "unrated")
         .count() as i32;
+    let (kept, alternate, rejected, unrated) =
+        state
+            .summary
+            .as_ref()
+            .map_or((kept, alternate, rejected, unrated), |summary| {
+                (
+                    summary_decision_count(&summary.decisions, "keep"),
+                    summary_decision_count(&summary.decisions, "alt"),
+                    summary_decision_count(&summary.decisions, "reject"),
+                    summary_decision_count(&summary.decisions, "unrated"),
+                )
+            });
     // The decision toolbar and its count refer to photos currently visible
     // under the active filters. Keep hidden multi-selections stored so they
     // can reappear when filters change, but never imply they will be changed.
@@ -688,6 +738,18 @@ fn refresh_library(
     window.set_alternate_count(alternate);
     window.set_rejected_count(rejected);
     window.set_unrated_count(unrated);
+}
+
+fn summary_decision_count(
+    decisions: &std::collections::BTreeMap<String, u64>,
+    category: &str,
+) -> i32 {
+    decisions
+        .iter()
+        .filter(|(decision, _)| decision_category(decision) == category)
+        .map(|(_, count)| *count)
+        .sum::<u64>()
+        .min(i32::MAX as u64) as i32
 }
 
 fn decision_label(decision: &str, web_layout: bool) -> &'static str {
@@ -1043,6 +1105,23 @@ mod tests {
         assert_eq!(visible_ids(&state).len(), 5);
         state.filters.cull_status = "unrated".into();
         assert_eq!(visible_ids(&state), ["photo-06", "photo-08"]);
+    }
+
+    #[test]
+    fn global_summary_counts_are_used_for_decision_categories_and_aliases() {
+        let decisions = std::collections::BTreeMap::from([
+            ("BEST".to_owned(), 2),
+            ("KEEP".to_owned(), 1),
+            ("REVIEW".to_owned(), 3),
+            ("ALT".to_owned(), 1),
+            ("REJECT_TECHNICAL".to_owned(), 4),
+            ("UNPROCESSED".to_owned(), 7),
+        ]);
+
+        assert_eq!(summary_decision_count(&decisions, "keep"), 3);
+        assert_eq!(summary_decision_count(&decisions, "alt"), 4);
+        assert_eq!(summary_decision_count(&decisions, "reject"), 4);
+        assert_eq!(summary_decision_count(&decisions, "unrated"), 7);
     }
 
     #[test]

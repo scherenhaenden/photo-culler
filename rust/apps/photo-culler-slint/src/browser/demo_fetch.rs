@@ -132,7 +132,8 @@ pub fn request_limit(path: &str) -> Result<usize, TransportError> {
         || route == SESSION_PAIR_PATH
         || route == GALLERY_PATH
         || route == "/api/v1/galleries/active"
-        || (route.starts_with("/api/v1/galleries/") && route.ends_with("/photos"))
+        || (route.starts_with("/api/v1/galleries/")
+            && (route.ends_with("/photos") || route.ends_with("/summary")))
     {
         return Ok(MAX_JSON_BYTES);
     }
@@ -443,6 +444,10 @@ mod tests {
     fn app_routes_are_relative_and_have_contract_limits() {
         assert_eq!(request_limit(HEALTH_PATH), Ok(MAX_JSON_BYTES));
         assert_eq!(request_limit(GALLERY_PATH), Ok(MAX_JSON_BYTES));
+        assert_eq!(
+            request_limit("/api/v1/galleries/demo/summary"),
+            Ok(MAX_JSON_BYTES)
+        );
         assert_eq!(request_limit(THUMBNAIL_PATH), Ok(MAX_THUMBNAIL_BYTES));
         assert_eq!(
             request_limit("/api/v1/photos/demo-001/preview?size=medium"),

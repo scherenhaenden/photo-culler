@@ -204,6 +204,25 @@ pub fn start() -> Result<(), wasm_bindgen::JsValue> {
     let browser_transport = BrowserTransport::default();
     browser_transport.set_window(window.as_weak());
     let client = Arc::new(DemoRestClient::new(browser_transport.clone()));
+    let filter_controller = controller.clone();
+    let filter_client = client.clone();
+    view.bind_decision_filter_handler(Arc::new(move |filter| {
+        let controller = filter_controller.clone();
+        let client = filter_client.clone();
+        let decision = match filter.as_str() {
+            "all" => None,
+            "keep" => Some("KEEP".into()),
+            "alt" => Some("ALT".into()),
+            "reject" => Some("REJECT".into()),
+            "unrated" => Some("UNRATED".into()),
+            _ => None,
+        };
+        let _ = slint::spawn_local(async move {
+            let _ = controller
+                .set_decision_filter(client.as_ref(), decision)
+                .await;
+        });
+    }));
     let analysis_gallery_changed = analysis_flow::bind(&window, controller.clone(), client.clone());
     import_flow::bind(&window, controller.clone(), client.clone());
     recipe_flow::bind(

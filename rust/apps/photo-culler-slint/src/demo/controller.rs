@@ -7,9 +7,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use photo_culler_client::demo::{CatalogCursor, Decision};
+use photo_culler_client::demo::{CatalogCursor, CatalogSummary, Decision};
 
 pub type DemoFuture<'a> = Pin<Box<dyn Future<Output = Result<DemoGallery, DemoError>> + 'a>>;
+pub type SummaryFuture<'a> = Pin<Box<dyn Future<Output = Result<CatalogSummary, DemoError>> + 'a>>;
 pub type ThumbnailFuture<'a> = Pin<Box<dyn Future<Output = Result<Vec<u8>, DemoError>> + 'a>>;
 pub type DecisionFuture<'a> = Pin<Box<dyn Future<Output = Result<u64, DemoError>> + 'a>>;
 pub trait DemoClient {
@@ -17,7 +18,9 @@ pub trait DemoClient {
         &'a self,
         gallery_id: &'a str,
         cursor: Option<&'a CatalogCursor>,
+        decision_filter: Option<&'a str>,
     ) -> DemoFuture<'a>;
+    fn summary<'a>(&'a self, gallery_id: &'a str) -> SummaryFuture<'a>;
     fn thumbnail<'a>(&'a self, photo: &'a DemoPhoto) -> ThumbnailFuture<'a>;
     fn update_decision<'a>(
         &'a self,
@@ -71,6 +74,10 @@ pub enum ViewState {
 pub trait DemoView: Send + Sync + 'static {
     fn set_state(&self, state: ViewState);
 
+    /// Supply confirmed whole-gallery decision counts. `None` means no
+    /// summary has been confirmed for the currently displayed gallery yet.
+    fn set_global_summary(&self, _summary: Option<CatalogSummary>) {}
+
     /// Report an edge-page request failure without discarding the current page.
     /// A user can retry the same navigation action after seeing the message.
     fn set_navigation_error(&self, _message: String) {}
@@ -92,6 +99,9 @@ struct State {
     active_gallery_id: Option<String>,
     page_history: Vec<PageStart>,
     current_page_index: usize,
+    decision_filter: Option<String>,
+    summary_gallery_id: Option<String>,
+    summary: Option<CatalogSummary>,
     // Confirmed writes must survive a concurrent page load whose response was
     // produced before the write completed.
     confirmed_decisions: std::collections::HashMap<(String, String), (u64, String)>,
@@ -124,6 +134,9 @@ impl<V: DemoView, D: UiDispatcher> DemoController<V, D> {
                 active_gallery_id: None,
                 page_history: Vec::new(),
                 current_page_index: 0,
+                decision_filter: None,
+                summary_gallery_id: None,
+                summary: None,
                 confirmed_decisions: std::collections::HashMap::new(),
             })),
             view,
@@ -187,13 +200,33 @@ impl<V: DemoView, D: UiDispatcher> DemoController<V, D> {
         client: &C,
         ticket: LoadTicket,
     ) -> Result<(), DemoError> {
-        let result = load_page(client, &ticket.gallery_id, None).await;
+        let decision_filter = self
+            .state
+            .lock()
+            .map_err(|_| DemoError {
+                message: "Gallery state is unavailable.".into(),
+            })?
+            .decision_filter
+            .clone();
+        let result = load_page(client, &ticket.gallery_id, None, decision_filter.as_deref()).await;
+        let summary_result = match &result {
+            Ok((gallery, _)) => Some(client.summary(&gallery.gallery_id).await),
+            Err(_) => None,
+        };
         if let Ok((gallery, _)) = &result {
             let mut state = self.state.lock().map_err(|_| DemoError {
                 message: "Gallery state is unavailable.".into(),
             })?;
             if state.generation == ticket.generation {
                 state.active_gallery_id = Some(gallery.gallery_id.clone());
+                if state.summary_gallery_id.as_deref() != Some(&gallery.gallery_id) {
+                    state.summary_gallery_id = Some(gallery.gallery_id.clone());
+                    state.summary = None;
+                }
+                if let Some(Ok(summary)) = &summary_result {
+                    state.summary_gallery_id = Some(gallery.gallery_id.clone());
+                    state.summary = Some(summary.clone());
+                }
             }
         }
         let (next, transition) = match result {
@@ -218,7 +251,71 @@ impl<V: DemoView, D: UiDispatcher> DemoController<V, D> {
                 Some(PageTransition::Reset),
             ),
         };
-        self.publish(ticket.generation, next, transition)
+        self.publish(ticket.generation, next, transition)?;
+        if let Some(Err(error)) = summary_result
+            && self.is_current_generation(ticket.generation)
+        {
+            self.publish_summary_error(ticket.generation, error.message)?;
+        }
+        Ok(())
+    }
+
+    /// Replace the server-side decision filter and restart pagination at its
+    /// first page. A failed request is surfaced as an error state while the
+    /// selected filter remains active so the normal retry path can repeat it.
+    pub async fn set_decision_filter<C: DemoClient>(
+        &self,
+        client: &C,
+        decision_filter: Option<String>,
+    ) -> Result<(), DemoError> {
+        let (generation, gallery_id) = {
+            let mut state = self.state.lock().map_err(|_| DemoError {
+                message: "Gallery state is unavailable.".into(),
+            })?;
+            if state.decision_filter == decision_filter {
+                return Ok(());
+            }
+            state.decision_filter = decision_filter.clone();
+            state.generation = state.generation.wrapping_add(1);
+            state.page_history.clear();
+            state.current_page_index = 0;
+            let generation = state.generation;
+            (generation, state.active_gallery_id.clone())
+        };
+        let Some(gallery_id) = gallery_id else {
+            return Ok(());
+        };
+
+        let view = self.view.clone();
+        self.dispatcher
+            .dispatch(Box::new(move || view.set_state(ViewState::Loading)))?;
+        match load_page(client, &gallery_id, None, decision_filter.as_deref()).await {
+            Ok((gallery, photos)) => {
+                let next = if photos.is_empty() {
+                    ViewState::Empty
+                } else {
+                    ViewState::Ready {
+                        gallery_id: gallery.gallery_id,
+                        photos,
+                        selected_index: 0,
+                        page_offset: 0,
+                        page_number: 1,
+                        next_cursor: gallery.next_cursor,
+                    }
+                };
+                self.publish(generation, next, Some(PageTransition::Reset))
+            }
+            Err(error) => {
+                self.publish(
+                    generation,
+                    ViewState::Error {
+                        message: error.message.clone(),
+                    },
+                    Some(PageTransition::Reset),
+                )?;
+                Err(error)
+            }
+        }
     }
 
     pub fn select_photo(&self, photo_id: &str) -> Result<(), DemoError> {
@@ -326,6 +423,7 @@ impl<V: DemoView, D: UiDispatcher> DemoController<V, D> {
         };
 
         let mut seen = std::collections::HashSet::new();
+        let mut confirmed_write = false;
         let mut first_error = None;
         for photo_id in photo_ids.iter().filter(|id| seen.insert((*id).clone())) {
             let Some(loaded) = photos
@@ -340,6 +438,7 @@ impl<V: DemoView, D: UiDispatcher> DemoController<V, D> {
                 .await
             {
                 Ok(revision) => {
+                    confirmed_write = true;
                     loaded.photo.decision = decision_name(decision).into();
                     loaded.photo.decision_revision = revision;
                     let mut current = self.state.lock().map_err(|_| DemoError {
@@ -361,6 +460,21 @@ impl<V: DemoView, D: UiDispatcher> DemoController<V, D> {
             }
         }
 
+        let summary_result = if confirmed_write {
+            Some(client.summary(gallery_id).await)
+        } else {
+            None
+        };
+        if let Some(Ok(summary)) = &summary_result {
+            let mut current = self.state.lock().map_err(|_| DemoError {
+                message: "Gallery state is unavailable.".into(),
+            })?;
+            if current.active_gallery_id.as_deref() == Some(gallery_id.as_str()) {
+                current.summary_gallery_id = Some(gallery_id.clone());
+                current.summary = Some(summary.clone());
+            }
+        }
+
         let next = ViewState::Ready {
             gallery_id: gallery_id.clone(),
             photos: photos.clone(),
@@ -371,6 +485,9 @@ impl<V: DemoView, D: UiDispatcher> DemoController<V, D> {
         };
         self.publish(generation, next, None)?;
         self.publish_confirmed_decisions()?;
+        if let Some(Err(error)) = summary_result {
+            self.publish_summary_error_for_gallery(gallery_id.clone(), error.message)?;
+        }
         if let Some(error) = first_error {
             Err(error)
         } else {
@@ -388,6 +505,7 @@ impl<V: DemoView, D: UiDispatcher> DemoController<V, D> {
                 generation: u64,
                 gallery_id: String,
                 cursor: Option<CatalogCursor>,
+                decision_filter: Option<String>,
                 offset: usize,
                 target_page: usize,
                 selected_index: Option<usize>,
@@ -441,11 +559,13 @@ impl<V: DemoView, D: UiDispatcher> DemoController<V, D> {
                     return Ok(());
                 };
                 let current_page_index = state.current_page_index;
+                let decision_filter = state.decision_filter.clone();
                 state.generation = state.generation.wrapping_add(1);
                 Navigation::Fetch {
                     generation: state.generation,
                     gallery_id,
                     cursor: Some(cursor),
+                    decision_filter,
                     offset: page_offset + photos.len(),
                     target_page: current_page_index + 1,
                     selected_index: Some(0),
@@ -458,11 +578,13 @@ impl<V: DemoView, D: UiDispatcher> DemoController<V, D> {
                 let Some(start) = state.page_history.get(target_page).cloned() else {
                     return Ok(());
                 };
+                let decision_filter = state.decision_filter.clone();
                 state.generation = state.generation.wrapping_add(1);
                 Navigation::Fetch {
                     generation: state.generation,
                     gallery_id,
                     cursor: start.cursor,
+                    decision_filter,
                     offset: start.offset,
                     target_page,
                     selected_index: None,
@@ -476,11 +598,18 @@ impl<V: DemoView, D: UiDispatcher> DemoController<V, D> {
                 generation,
                 gallery_id,
                 cursor,
+                decision_filter,
                 offset,
                 target_page,
                 selected_index,
             } => {
-                let (gallery, photos) = match load_page(client, &gallery_id, cursor.as_ref()).await
+                let (gallery, photos) = match load_page(
+                    client,
+                    &gallery_id,
+                    cursor.as_ref(),
+                    decision_filter.as_deref(),
+                )
+                .await
                 {
                     Ok(page) => page,
                     Err(error) => {
@@ -545,8 +674,50 @@ impl<V: DemoView, D: UiDispatcher> DemoController<V, D> {
             }
             let mut next = next;
             apply_confirmed_decisions(&mut next, &state.confirmed_decisions);
+            let next_gallery_id = match &next {
+                ViewState::Ready { gallery_id, .. } => Some(gallery_id.as_str()),
+                ViewState::Empty => state.active_gallery_id.as_deref(),
+                ViewState::Loading | ViewState::Error { .. } => None,
+            };
+            let summary = next_gallery_id
+                .zip(state.summary_gallery_id.as_deref())
+                .filter(|(gallery_id, summary_gallery_id)| gallery_id == summary_gallery_id)
+                .and(state.summary.clone());
+            view.set_global_summary(summary);
             state.current = next.clone();
             view.set_state(next);
+        }))
+    }
+
+    fn is_current_generation(&self, generation: u64) -> bool {
+        self.state
+            .lock()
+            .is_ok_and(|state| state.generation == generation)
+    }
+
+    fn publish_summary_error(&self, generation: u64, message: String) -> Result<(), DemoError> {
+        let state = self.state.clone();
+        let view = self.view.clone();
+        self.dispatcher.dispatch(Box::new(move || {
+            let Ok(state) = state.lock() else { return };
+            if state.generation == generation {
+                view.set_navigation_error(message);
+            }
+        }))
+    }
+
+    fn publish_summary_error_for_gallery(
+        &self,
+        gallery_id: String,
+        message: String,
+    ) -> Result<(), DemoError> {
+        let state = self.state.clone();
+        let view = self.view.clone();
+        self.dispatcher.dispatch(Box::new(move || {
+            let Ok(state) = state.lock() else { return };
+            if state.active_gallery_id.as_deref() == Some(gallery_id.as_str()) {
+                view.set_navigation_error(message);
+            }
         }))
     }
 
@@ -568,6 +739,15 @@ impl<V: DemoView, D: UiDispatcher> DemoController<V, D> {
             let Ok(mut state) = state.lock() else { return };
             let mut current = state.current.clone();
             apply_confirmed_decisions(&mut current, &state.confirmed_decisions);
+            let current_gallery_id = match &current {
+                ViewState::Ready { gallery_id, .. } => Some(gallery_id.as_str()),
+                _ => None,
+            };
+            let summary = current_gallery_id
+                .zip(state.summary_gallery_id.as_deref())
+                .filter(|(gallery_id, summary_gallery_id)| gallery_id == summary_gallery_id)
+                .and(state.summary.clone());
+            view.set_global_summary(summary);
             if current != state.current {
                 state.current = current.clone();
                 view.set_state(current);
@@ -601,8 +781,9 @@ async fn load_page<C: DemoClient>(
     client: &C,
     gallery_id: &str,
     cursor: Option<&CatalogCursor>,
+    decision_filter: Option<&str>,
 ) -> Result<(DemoGallery, Vec<LoadedPhoto>), DemoError> {
-    let gallery = client.gallery(gallery_id, cursor).await?;
+    let gallery = client.gallery(gallery_id, cursor, decision_filter).await?;
     let mut photos = Vec::with_capacity(gallery.photos.len());
     for photo in &gallery.photos {
         let (jpeg, preview_error) = match client.thumbnail(photo).await {
@@ -697,13 +878,30 @@ mod tests {
         image: Result<Vec<u8>, DemoError>,
     }
     impl DemoClient for FakeClient {
-        fn gallery<'a>(&'a self, _: &'a str, _: Option<&'a CatalogCursor>) -> DemoFuture<'a> {
+        fn gallery<'a>(
+            &'a self,
+            _: &'a str,
+            _: Option<&'a CatalogCursor>,
+            _: Option<&'a str>,
+        ) -> DemoFuture<'a> {
             let photos = self.photos.clone();
             Box::pin(async move {
                 Ok(DemoGallery {
                     gallery_id: "demo".into(),
                     photos,
                     next_cursor: None,
+                })
+            })
+        }
+        fn summary<'a>(&'a self, _: &'a str) -> SummaryFuture<'a> {
+            Box::pin(async {
+                Ok(CatalogSummary {
+                    total_photos: 0,
+                    total_files: 0,
+                    selected_count: 0,
+                    pending_count: 0,
+                    decisions: Default::default(),
+                    quality_tiers: Default::default(),
                 })
             })
         }

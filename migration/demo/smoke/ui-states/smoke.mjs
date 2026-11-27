@@ -6,6 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium, firefox } from "playwright";
 import pngjs from "pngjs";
+import { installSummaryFixture } from "../smoke-config.mjs";
 import { pairingWarmupDelayMs } from "../pairing-warmup.mjs";
 
 const GALLERY_PATH = "/api/v1/galleries/demo/photos";
@@ -122,6 +123,7 @@ async function captureLoading(browser, origin, viewport, outputDir, sessionToken
   const requestSeen = deferred();
   const releaseRequest = deferred();
   let galleryRequests = 0;
+  const summaryRequests = await installSummaryFixture(page, 1);
   await page.route(`**${GALLERY_PATH}**`, async (route) => {
     galleryRequests += 1;
     requestSeen.resolve();
@@ -139,6 +141,7 @@ async function captureLoading(browser, origin, viewport, outputDir, sessionToken
     });
     releaseRequest.resolve();
     await waitForState(page, "ready");
+    assert.equal(summaryRequests(), 1, "loading capture must resolve a real gallery summary before ready");
     await assertReadyTransport(page, origin, sessionToken);
     return capture;
   } finally {
@@ -150,6 +153,7 @@ async function captureLoading(browser, origin, viewport, outputDir, sessionToken
 async function captureEmpty(browser, origin, viewport, outputDir, sessionToken) {
   const page = await newPage(browser, viewport);
   let galleryRequests = 0;
+  const summaryRequests = await installSummaryFixture(page, 0);
   await page.route(`**${GALLERY_PATH}**`, async (route) => {
     galleryRequests += 1;
     await route.fulfill({
@@ -161,6 +165,7 @@ async function captureEmpty(browser, origin, viewport, outputDir, sessionToken) 
   try {
     await navigateAndPair(page, origin, sessionToken);
     await waitForState(page, "empty");
+    assert.equal(summaryRequests(), 1, "empty capture must resolve its deterministic zero-photo summary");
     assert.equal(galleryRequests, 1, "empty state must use exactly one deterministic gallery response");
     const statusText = await statusTextOf(page);
     assert.match(statusText, /contains no photos/i, "empty state must announce why the Library is empty");
@@ -183,6 +188,7 @@ async function captureErrorAndRetry(browser, origin, viewport, outputDir, sessio
   const releaseInitial = deferred();
   const retryRequestSeen = deferred();
   const releaseRetry = deferred();
+  const summaryRequests = await installSummaryFixture(page, 1);
   await page.route(`**${GALLERY_PATH}**`, async (route) => {
     galleryRequests += 1;
     if (galleryRequests === 1) {
@@ -211,6 +217,7 @@ async function captureErrorAndRetry(browser, origin, viewport, outputDir, sessio
     releaseInitial.resolve();
     await waitForState(page, "error");
     assert.equal(galleryRequests, 1, "initial error state must use the fixture HTTP 503");
+    assert.equal(summaryRequests(), 0, "a failed gallery request must not request a summary");
     const errorText = await statusTextOf(page);
     assert.match(errorText, /503/, "accessible status must expose the REST failure");
     assert.match(errorText, /ui_state_fixture/, "accessible status must preserve the typed REST error code");
@@ -233,6 +240,7 @@ async function captureErrorAndRetry(browser, origin, viewport, outputDir, sessio
 
     releaseRetry.resolve();
     await waitForState(page, "ready");
+    assert.equal(summaryRequests(), 1, "retry must resolve the summary before reaching ready");
     const readyCapture = await saveState(page, viewport, outputDir, "retry-ready", {
       gallery_requests: galleryRequests,
       click: retryClick,
