@@ -150,6 +150,7 @@ jobs:
               --server "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-server" \
               --fixture "$RUNNER_TEMP/photo-culler-selection-fixture" \
               --output "$GITHUB_WORKSPACE/artifacts/selection/${{ matrix.key }}"
+          '
       - name: Prepare deterministic Sprint 02 import fixture
         if: runner.os == 'Linux'
         run: |
