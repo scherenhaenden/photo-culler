@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [master, feature/sprint-02-linux-library]
   pull_request:
-    branches: [master]
+    branches: [master, feature/sprint-02-linux-library]
 
 permissions:
   contents: read
