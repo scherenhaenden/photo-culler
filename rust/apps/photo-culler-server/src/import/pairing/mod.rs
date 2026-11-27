@@ -255,6 +255,24 @@ mod tests {
     }
 
     #[test]
+    fn dotted_basename_case_variants_and_compound_sidecar_pair_by_final_extension() {
+        let result = associate([
+            file("raw", "shoot/IMG.2026.001.NEF"),
+            file("jpeg", "shoot/img.2026.001.jpeg"),
+            file("xmp", "shoot/IMG.2026.001.JPEG.XMP"),
+        ]);
+
+        assert_eq!(result.photos.len(), 1);
+        let photo = &result.photos[0];
+        assert_eq!(photo.key, "shoot/img.2026.001");
+        assert_eq!(photo.association, Association::RawJpegPair);
+        assert_eq!(photo.media.len(), 2);
+        assert_eq!(photo.sidecars.len(), 1);
+        assert_eq!(photo.sidecars[0].id, "xmp");
+        assert!(result.unattached_sidecars.is_empty());
+    }
+
+    #[test]
     fn same_basename_in_different_directories_stays_separate() {
         let result = associate([
             file("a-raw", "day-a/IMG_1.CR2"),
