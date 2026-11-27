@@ -140,8 +140,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           mkdir -p "$GITHUB_WORKSPACE/artifacts/s02-acceptance"
-          # The hosted runner's /run/user/<uid> mount blocks the portal's FUSE
-          # document store. Use a private runtime directory for this session.
+          # Give xdg-document-portal an owned runtime directory on hosted runners.
           mkdir -p "$RUNNER_TEMP/s02-xdg-runtime"
           chmod 700 "$RUNNER_TEMP/s02-xdg-runtime"
           # Slint sizes the Linux desktop to 1440×900; keep the Xvfb display
