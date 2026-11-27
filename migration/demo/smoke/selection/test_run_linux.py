@@ -27,7 +27,7 @@ class SelectionRunnerTests(unittest.TestCase):
 
     def test_inspector_button_uses_a_focused_crop_for_low_contrast_text(self):
         geometry = {"x": 11, "y": 23, "width": 1440, "height": 900}
-        with mock.patch.object(runner, "enlarged_crop_ocr", return_value="Inspeccionar foco -") as ocr:
+        with mock.patch.object(runner, "enlarged_crop_ocr", return_value="Inspeccionar") as ocr:
             self.assertEqual(
                 runner.inspector_button_center(Path("reject-first.png"), geometry),
                 (803, 95),
