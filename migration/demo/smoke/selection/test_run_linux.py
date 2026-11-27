@@ -25,6 +25,18 @@ class SelectionRunnerTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "expected one visible"):
             runner.visible_text_center(rows, "volver a galería")
 
+    def test_inspector_button_uses_a_focused_crop_for_low_contrast_text(self):
+        geometry = {"x": 11, "y": 23, "width": 1440, "height": 900}
+        with mock.patch.object(runner, "enlarged_crop_ocr", return_value="Inspeccionar foco -") as ocr:
+            self.assertEqual(
+                runner.inspector_button_center(Path("reject-first.png"), geometry),
+                (803, 95),
+            )
+        ocr.assert_called_once_with(Path("reject-first.png"), (720, 36, 216, 72))
+        with mock.patch.object(runner, "enlarged_crop_ocr", return_value="texto ilegible"):
+            with self.assertRaisesRegex(RuntimeError, "action was not visible"):
+                runner.inspector_button_center(Path("reject-first.png"), geometry)
+
     def test_inspector_overlay_asserts_identity_decision_and_focus_controls(self):
         rows = [
             {"text": "INSPECCIÓN DE FOCO · photo-13.jpg", "x": 10, "y": 10},

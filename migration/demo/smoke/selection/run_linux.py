@@ -451,6 +451,19 @@ def visible_text_center(rows: list[dict], phrase: str) -> tuple[int, int]:
     return row["x"] + row["width"] // 2, row["y"] + row["height"] // 2
 
 
+def inspector_button_center(screenshot: Path, geometry: dict) -> tuple[int, int]:
+    """Read the low-contrast inspector action from a focused header crop."""
+    width, height = geometry["width"], geometry["height"]
+    if width < 1280 or height < 700:
+        raise RuntimeError(f"inspector acceptance needs the 1440x900 layout: {geometry}")
+    box = (round(width * 0.5), round(height * 0.04), round(width * 0.15), round(height * 0.08))
+    label = normalized_ui_text(enlarged_crop_ocr(screenshot, box))
+    if "inspeccionar foco" not in label:
+        raise RuntimeError(f"inspector action was not visible in its header crop: {label!r}")
+    x, y, crop_width, crop_height = box
+    return geometry["x"] + x + crop_width // 3, geometry["y"] + y + crop_height // 2
+
+
 def assert_inspector_overlay(rows: list[dict], photo_name: str, decision: str) -> dict[str, str]:
     text = normalized_ui_text(" ".join(row["text"] for row in rows))
     expected_name = normalized_ui_text(photo_name)
@@ -619,8 +632,7 @@ def main() -> None:
         )
         evidence["screenshots"].append(str(output / "reject-first.png"))
 
-        inspect_x, inspect_y = visible_text_center(rows, "Inspeccionar foco")
-        click_at((origin_x + inspect_x, origin_y + inspect_y))
+        click_at(inspector_button_center(reject_first, window["geometry"]))
         inspector_path = output / "inspector-reject.png"
         inspector_rows = screenshot_and_ocr(wid, inspector_path)
         evidence["screenshots"].append(str(inspector_path))
