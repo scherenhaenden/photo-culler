@@ -258,6 +258,13 @@ class SelectionRunnerTests(unittest.TestCase):
                     Path("keep-filter.png"), [{"text": "not-the-photo", "x": 1076, "y": 66}], photo_id
                 )
 
+    def test_inspector_return_counts_visible_first_page_not_entire_catalog(self):
+        self.assertEqual(runner.first_page_visible_count(13), 12)
+        self.assertEqual(runner.first_page_visible_count(12), 12)
+        self.assertEqual(runner.first_page_visible_count(1), 1)
+        with self.assertRaisesRegex(ValueError, "must not be negative"):
+            runner.first_page_visible_count(-1)
+
     def test_inspector_photo_id_ocr_tolerates_two_errors_but_rejects_other_ids(self):
         photo_id = "8c2999e5a9393c9850cbeee4f435bec9"
         # Captured from the S05 Linux artifact: OCR split the ID across rows and
