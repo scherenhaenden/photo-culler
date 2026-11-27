@@ -1,6 +1,6 @@
 # Sprint 02 · Mi primera carpeta de fotos en Linux
 
-**Estado: implementación integrada; aceptación de paquetes pendiente.** La rama `feature/sprint-02-linux-library` ya contiene los PR revisados #162–#166. El flujo permite elegir una carpeta, arrancar el catálogo local, abrir el diálogo de importación y recordar la carpeta y galería. Falta comprobarlo desde los paquetes nativos Linux y macOS; hasta registrar esa evidencia, Sprint 02 no está cerrado.
+**Estado: aceptación funcional de catálogo integrada; revisión visual macOS pendiente.** La rama `feature/sprint-02-linux-library` ya contiene los PR revisados #162–#166. El flujo permite elegir una carpeta, arrancar el catálogo local, abrir el diálogo de importación y recordar la carpeta y galería. CI verifica el recorrido de catálogo empaquetado en Linux con interacción de escritorio y en macOS arm64 mediante las APIs del servidor y el perfil persistido, además de guardar capturas del desktop macOS antes y después de reabrirlo. La automatización macOS no opera el selector nativo ni valida controles, foco o teclado; esos puntos requieren revisión visual manual antes del cierre completo.
 
 ## Qué verá el fotógrafo
 
@@ -35,6 +35,7 @@ El modo de estimación, confirmación, progreso, paginación y refresco usa el f
 - Preparar una carpeta con JPEG distintos y autorizados, con al menos una foto más que el tamaño de página que use el cliente. Registrar nombres, cantidad y hashes iniciales. Preparar también una carpeta vacía.
 - En Linux x86-64, ejecutar los cuatro pasos de usuario desde el paquete. Registrar pantalla inicial, progreso, biblioteca, foto de segunda página y reapertura. Comparar los hashes de los originales antes y después.
 - En macOS arm64, repetir con los mismos datos y tamaño de ventana. Comparar capturas lado a lado, controles, orden de foco y resultado de teclado. Corregir diferencias en la pantalla compartida antes de cerrar.
+- La aceptación automatizada macOS genera la misma fixture de 13 JPEG, importa por la API del servidor empaquetado, verifica hash y página de catálogo 2, reinicia el servidor, reimporta sin duplicar IDs y abre/cierra/reabre el desktop desde un `HOME` aislado con su perfil `desktop.json`. El artefacto contiene las capturas `desktop-first.png` y `desktop-reopen.png`; estas capturas requieren revisión humana y no acreditan por sí solas el selector nativo ni foco/teclado.
 - Sobre el SHA integrado, ejecutar la suite completa del workspace y la aceptación de paquetes vigente, incluida regresión de la demo. Los workflows ahora incluyen la rama Sprint 02 y ejecutan sus gates sobre este PR; confirmar los resultados antes del cierre. Los PR de función ejecutan solo sus pruebas acotadas.
 - Publicar en la entrega el enlace al paquete Linux y al de macOS, el SHA, los resultados y un guion de reapertura. Revisar y fusionar sprint → master, comprobar que master contiene ese SHA y retirar las ramas de función integradas. Si falla el recorrido, corregirlo en este sprint antes de empezar la selección del Sprint 03.
 

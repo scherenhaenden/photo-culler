@@ -173,6 +173,20 @@ jobs:
           --desktop "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-desktop"
           --server "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-server"
           --output "$GITHUB_WORKSPACE/artifacts/native-gui/${{ matrix.key }}"
+      - name: Prepare deterministic Sprint 02 macOS import fixture
+        if: runner.os == 'macOS'
+        run: |
+          python3 -m pip install pillow
+          python3 migration/demo/smoke/selection/fixture.py "$GITHUB_WORKSPACE/artifacts/s02-selection-fixture"
+      - name: Run packaged macOS Sprint 02 import and persistence acceptance
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/artifacts/s02-macos-acceptance"
+          python3 migration/demo/smoke/selection/run_s02_macos_api.py \
+            --desktop "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-desktop" \
+            --server "$GITHUB_WORKSPACE/artifacts/${{ matrix.key }}/photo-culler-server" \
+            --fixture "$GITHUB_WORKSPACE/artifacts/s02-selection-fixture" \
+            --output "$GITHUB_WORKSPACE/artifacts/s02-macos-acceptance"
       - name: Set hosted Windows display resolution for GUI smoke
         if: runner.os == 'Windows'
         shell: pwsh
@@ -202,6 +216,12 @@ jobs:
         with:
           name: rust-slint-demo-sprint02-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/s02-acceptance/
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v4
+        if: always() && runner.os == 'macOS'
+        with:
+          name: rust-slint-demo-sprint02-macos-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/s02-macos-acceptance/
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
