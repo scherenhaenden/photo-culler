@@ -33,6 +33,7 @@ class Sprint02RunnerTests(unittest.TestCase):
             (10, 20, 85, 10),
         )
         self.assertEqual(rows[0]["confidence"], 92.5)
+        self.assertEqual(rows[0]["words"][0]["text"], "Tu")
 
     def test_first_run_folder_button_fallback_targets_center_of_action(self):
         self.assertEqual(runner.choose_folder_button_point(1440, 900), (756, 878))
@@ -224,6 +225,28 @@ class Sprint02RunnerTests(unittest.TestCase):
 
     def test_picker_folder_row_matches_short_ocr_prefix_and_one_character_error(self):
         self.assertTrue(runner.folder_name_matches_ocr("Ml Fotos de seleccién", "Fotos de selección"))
+
+    def test_folder_name_matcher_finds_expected_token_when_tesseract_merges_sidebar_text(self):
+        self.assertTrue(runner.folder_name_matches_ocr("doc ry artifacts", "artifacts"))
+
+    def test_folder_row_click_uses_word_coordinates_when_tesseract_merges_columns(self):
+        rows = [{
+            "text": "doc ry artifacts", "x": 187, "y": 162, "width": 227,
+            "height": 31, "confidence": 76,
+            "words": [
+                {"text": "doc", "x": 187, "y": 174, "width": 28, "height": 12, "confidence": 80},
+                {"text": "artifacts", "x": 337, "y": 174, "width": 77, "height": 16, "confidence": 90},
+            ],
+        }]
+        with (
+            patch.object(runner.subprocess, "run") as run,
+            patch.object(runner.time, "sleep"),
+        ):
+            runner.click_folder_list_row(rows, "artifacts")
+
+        run.assert_called_once_with(
+            ["xdotool", "mousemove", "375", "182", "click", "1"], check=True
+        )
 
     def test_picker_autocomplete_does_not_count_as_folder_list_row(self):
         self.assertFalse(

@@ -54,6 +54,7 @@ def parse_tesseract_tsv(tsv: str) -> list[dict]:
             "width": max(word["x"] + word["width"] for word in words) - min(word["x"] for word in words),
             "height": max(word["y"] + word["height"] for word in words) - min(word["y"] for word in words),
             "confidence": sum(word["confidence"] for word in words) / len(words),
+            "words": words,
         })
     return rows
 
@@ -101,6 +102,8 @@ def folder_name_matches_ocr(observed: str, expected: str) -> bool:
     # threshold for the actual folder name.
     observed_words = normalize_text(observed).split()
     expected_normalized = normalize_text(expected)
+    if expected_normalized in observed_words:
+        return True
     return bool(
         observed_words
         and len(observed_words[0]) <= 2
@@ -451,10 +454,18 @@ def click_folder_list_row(rows: list[dict], folder_name: str, *, enter: bool = F
     if len(candidates) != 1:
         raise RuntimeError(f"cannot uniquely locate folder list row {folder_name!r}: {candidates}")
     row = candidates[0]
+    matching_words = [
+        word for word in row.get("words", [])
+        if text_matches(word["text"], folder_name)
+    ]
+    target = matching_words[0] if len(matching_words) == 1 else row
     command = [
         "xdotool", "mousemove", str(row["x"] + row["width"] // 2),
         str(row["y"] + row["height"] // 2), "click",
     ]
+    if len(matching_words) == 1:
+        command[2] = str(target["x"] + target["width"] // 2)
+        command[3] = str(target["y"] + target["height"] // 2)
     if enter:
         command.extend(["--repeat", "2", "--delay", "150"])
     command.append("1")
