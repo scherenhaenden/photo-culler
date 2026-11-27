@@ -16,6 +16,32 @@ SPEC.loader.exec_module(runner)
 
 
 class SelectionRunnerTests(unittest.TestCase):
+    def test_visible_text_center_finds_one_normalized_label(self):
+        rows = [
+            {"text": "Inspeccionar foco", "x": 100, "y": 40, "width": 120, "height": 20},
+            {"text": "Photo 13", "x": 30, "y": 80, "width": 70, "height": 18},
+        ]
+        self.assertEqual(runner.visible_text_center(rows, "inspeccionar FOCO"), (160, 50))
+        with self.assertRaisesRegex(RuntimeError, "expected one visible"):
+            runner.visible_text_center(rows, "volver a galería")
+
+    def test_inspector_overlay_asserts_identity_decision_and_focus_controls(self):
+        rows = [
+            {"text": "INSPECCIÓN DE FOCO · photo-13.jpg", "x": 10, "y": 10},
+            {"text": "REJECTED", "x": 900, "y": 10},
+            {"text": "Zoom 100%", "x": 700, "y": 850},
+            {"text": "Recorte −", "x": 600, "y": 850},
+            {"text": "Restablecer", "x": 800, "y": 850},
+        ]
+        self.assertEqual(
+            runner.assert_inspector_overlay(rows, "photo-13.jpg", "REJECTED"),
+            {"photo_name": "photo-13.jpg", "decision": "REJECTED", "zoom": "100%"},
+        )
+        with self.assertRaisesRegex(RuntimeError, "did not identify"):
+            runner.assert_inspector_overlay(rows, "photo-12.jpg", "REJECTED")
+        with self.assertRaisesRegex(RuntimeError, "did not show the 'UNRATED'"):
+            runner.assert_inspector_overlay(rows, "photo-13.jpg", "UNRATED")
+
     def test_mutating_api_requests_send_exact_local_origin(self):
         class Response:
             def __enter__(self):
