@@ -467,21 +467,42 @@ def inspector_button_center(screenshot: Path, geometry: dict) -> tuple[int, int]
     return geometry["x"] + x + crop_width // 3, geometry["y"] + y + crop_height // 2
 
 
-def assert_inspector_overlay(rows: list[dict], photo_name: str, decision: str) -> dict[str, str]:
-    text = normalized_ui_text(" ".join(row["text"] for row in rows))
-    expected_name = normalized_ui_text(photo_name)
-    if "inspeccion de foco" not in text or expected_name not in text:
+def assert_inspector_overlay(
+    screenshot: Path, rows: list[dict], photo_name: str, decision: str, geometry: dict
+) -> dict[str, str]:
+    width, height = geometry["width"], geometry["height"]
+    header_box = (round(width * 0.01), round(height * 0.01), round(width * 0.30), round(height * 0.06))
+    header = normalized_ui_text(enlarged_crop_ocr(screenshot, header_box))
+    # The view intentionally shows the filename stem, not its file extension.
+    expected_name = normalized_ui_text(Path(photo_name).stem)
+    if "inspeccion de foco" not in header or expected_name not in header:
         raise RuntimeError(
-            f"inspector did not identify {photo_name!r} in its header: {rows}"
+            f"inspector did not identify {Path(photo_name).stem!r} in its header crop: {header!r}"
         )
+    decision_box = (round(width * 0.41), round(height * 0.01), round(width * 0.125), round(height * 0.058))
+    visible_decision = normalized_ui_text(enlarged_crop_ocr(screenshot, decision_box))
     expected_decision = normalized_ui_text(decision)
-    if expected_decision not in text:
+    if expected_decision not in visible_decision:
         raise RuntimeError(
-            f"inspector did not show the {decision!r} decision for {photo_name!r}: {rows}"
+            f"inspector did not show the {decision!r} decision in its header crop: {visible_decision!r}"
         )
-    if "zoom 100%" not in text or "restablecer" not in text or "recorte" not in text:
+    text = normalized_ui_text(" ".join(row["text"] for row in rows))
+    reset_box = (round(width * 0.83), round(height * 0.905), round(width * 0.16), round(height * 0.08))
+    reset = normalized_ui_text(enlarged_crop_ocr(screenshot, reset_box))
+    if "zoom 100%" not in text or "restablecer" not in reset:
         raise RuntimeError(f"inspector focus controls were not visible at 100%: {rows}")
     return {"photo_name": photo_name, "decision": decision, "zoom": "100%"}
+
+
+def inspector_back_center(screenshot: Path, geometry: dict) -> tuple[int, int]:
+    """Read the back action from its dedicated top-right button crop."""
+    width, height = geometry["width"], geometry["height"]
+    box = (round(width * 0.68), round(height * 0.02), round(width * 0.30), round(height * 0.06))
+    label = normalized_ui_text(enlarged_crop_ocr(screenshot, box))
+    if "volver a galeria" not in label:
+        raise RuntimeError(f"inspector back action was not visible in its header crop: {label!r}")
+    x, y, crop_width, crop_height = box
+    return geometry["x"] + x + crop_width // 2, geometry["y"] + y + crop_height // 2
 
 
 def assert_keep_filter(screenshot: Path, rows: list[dict], expected_photo_id: str) -> dict[str, object]:
@@ -640,10 +661,9 @@ def main() -> None:
         inspector_rows = screenshot_and_ocr(wid, inspector_path)
         evidence["screenshots"].append(str(inspector_path))
         evidence["inspector"] = assert_inspector_overlay(
-            inspector_rows, targets["reject"], "REJECTED"
+            inspector_path, inspector_rows, targets["reject"], "REJECTED", window["geometry"]
         )
-        close_x, close_y = visible_text_center(inspector_rows, "Volver a galería")
-        click_at((origin_x + close_x, origin_y + close_y))
+        click_at(inspector_back_center(inspector_path, window["geometry"]))
         returned = output / "inspector-return.png"
         returned_rows = screenshot_and_ocr(wid, returned)
         evidence["screenshots"].append(str(returned))

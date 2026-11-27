@@ -39,20 +39,38 @@ class SelectionRunnerTests(unittest.TestCase):
 
     def test_inspector_overlay_asserts_identity_decision_and_focus_controls(self):
         rows = [
-            {"text": "INSPECCIÓN DE FOCO · photo-13.jpg", "x": 10, "y": 10},
-            {"text": "REJECTED", "x": 900, "y": 10},
             {"text": "Zoom 100%", "x": 700, "y": 850},
-            {"text": "Recorte −", "x": 600, "y": 850},
-            {"text": "Restablecer", "x": 800, "y": 850},
         ]
+        screenshot = Path("inspector.png")
+        geometry = {"x": 11, "y": 23, "width": 1440, "height": 900}
+        with mock.patch.object(
+            runner, "enlarged_crop_ocr", side_effect=["INSPECCIÓN DE FOCO - photo-13", "REJECTED", "Restablecer"]
+        ) as ocr:
+            self.assertEqual(
+                runner.assert_inspector_overlay(screenshot, rows, "photo-13.jpg", "REJECTED", geometry),
+                {"photo_name": "photo-13.jpg", "decision": "REJECTED", "zoom": "100%"},
+            )
         self.assertEqual(
-            runner.assert_inspector_overlay(rows, "photo-13.jpg", "REJECTED"),
-            {"photo_name": "photo-13.jpg", "decision": "REJECTED", "zoom": "100%"},
+            [call.args[1] for call in ocr.call_args_list],
+            [(14, 9, 432, 54), (590, 9, 180, 52), (1195, 814, 230, 72)],
         )
-        with self.assertRaisesRegex(RuntimeError, "did not identify"):
-            runner.assert_inspector_overlay(rows, "photo-12.jpg", "REJECTED")
-        with self.assertRaisesRegex(RuntimeError, "did not show the 'UNRATED'"):
-            runner.assert_inspector_overlay(rows, "photo-13.jpg", "UNRATED")
+
+        with mock.patch.object(
+            runner, "enlarged_crop_ocr", side_effect=["INSPECCIÓN DE FOCO - photo-13", "REJECTED"]
+        ):
+            with self.assertRaisesRegex(RuntimeError, "did not identify"):
+                runner.assert_inspector_overlay(screenshot, rows, "photo-12.jpg", "REJECTED", geometry)
+        with mock.patch.object(
+            runner, "enlarged_crop_ocr", side_effect=["INSPECCIÓN DE FOCO - photo-13", "REJECTED"]
+        ):
+            with self.assertRaisesRegex(RuntimeError, "did not show the 'UNRATED'"):
+                runner.assert_inspector_overlay(screenshot, rows, "photo-13.jpg", "UNRATED", geometry)
+
+    def test_inspector_back_button_uses_a_focused_top_right_crop(self):
+        geometry = {"x": 11, "y": 23, "width": 1440, "height": 900}
+        with mock.patch.object(runner, "enlarged_crop_ocr", return_value="Volver a galeria") as ocr:
+            self.assertEqual(runner.inspector_back_center(Path("inspector.png"), geometry), (1206, 68))
+        ocr.assert_called_once_with(Path("inspector.png"), (979, 18, 432, 54))
 
     def test_mutating_api_requests_send_exact_local_origin(self):
         class Response:
