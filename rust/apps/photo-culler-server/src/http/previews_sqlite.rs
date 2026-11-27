@@ -54,12 +54,13 @@ impl PreviewApi for SqlitePreviewApi {
         preset: PreviewPreset,
     ) -> PreviewApiFuture<'a, Result<PreviewAsset, PreviewApiError>> {
         Box::pin(async move {
-            let path = self
+            let paths = self
                 .catalog
-                .display_path(photo_id)
+                .display_paths(photo_id)
                 .await
-                .map_err(|_| PreviewApiError::Unavailable)?
-                .ok_or(PreviewApiError::NotFound)?;
+                .map_err(|_| PreviewApiError::Unavailable)?;
+            let path = paths.first().cloned().ok_or(PreviewApiError::NotFound)?;
+            let source = preview_source(&path, &paths);
             let cache = self.cache.clone();
             let task_path = path.clone();
             let photo_id = photo_id.to_owned();
@@ -72,7 +73,7 @@ impl PreviewApi for SqlitePreviewApi {
             runtime
                 .spawn_blocking(move || {
                     let _permit = permit;
-                    render_cached(&cache, &photo_id, &task_path, preset)
+                    render_cached(&cache, &photo_id, &task_path, preset, source)
                 })
                 .await
                 .map_err(|_| PreviewApiError::Unavailable)?
@@ -138,6 +139,7 @@ fn render_cached(
     photo_id: &str,
     path: &Path,
     preset: PreviewPreset,
+    source: &'static str,
 ) -> Result<PreviewAsset, PreviewApiError> {
     let (bytes, hash) = read_and_hash(path)?;
     let hash_hex = hex(&hash);
@@ -153,11 +155,65 @@ fn render_cached(
         orientation: Orientation::Normal,
     };
     if let Some(preview) = cache.get(&key)? {
-        return Ok(asset(preview));
+        return Ok(asset(preview, source));
     }
-    let preview = Arc::new(render(bytes, hash_hex, preset)?);
+    let preview = Arc::new(render(bytes, hash_hex, preset).map_err(|error| {
+        if error == PreviewApiError::UnsupportedSource && source == "raw" {
+            PreviewApiError::RawPreviewUnavailable
+        } else {
+            error
+        }
+    })?);
     cache.put(key, preview.clone())?;
-    Ok(asset(preview))
+    Ok(asset(preview, source))
+}
+
+fn preview_source(path: &Path, candidates: &[std::path::PathBuf]) -> &'static str {
+    let extension = path
+        .extension()
+        .and_then(std::ffi::OsStr::to_str)
+        .unwrap_or("");
+    if is_raw_extension(extension) {
+        return "raw";
+    }
+    if matches!(
+        extension.to_ascii_lowercase().as_str(),
+        "jpg" | "jpeg" | "jpe"
+    ) && candidates.iter().any(|candidate| {
+        candidate
+            .extension()
+            .and_then(std::ffi::OsStr::to_str)
+            .is_some_and(is_raw_extension)
+    }) {
+        return "paired-jpeg";
+    }
+    "raster"
+}
+
+fn is_raw_extension(extension: &str) -> bool {
+    matches!(
+        extension.to_ascii_lowercase().as_str(),
+        "3fr"
+            | "arw"
+            | "cr2"
+            | "cr3"
+            | "dng"
+            | "fff"
+            | "iiq"
+            | "kdc"
+            | "mef"
+            | "mos"
+            | "mrw"
+            | "nef"
+            | "nrw"
+            | "orf"
+            | "pef"
+            | "raf"
+            | "raw"
+            | "rw2"
+            | "rwl"
+            | "srw"
+    )
 }
 
 fn read_and_hash(path: &Path) -> Result<(Vec<u8>, [u8; 32]), PreviewApiError> {
@@ -264,7 +320,7 @@ fn render(
     })
 }
 
-fn asset(preview: Arc<GeneratedPreview>) -> PreviewAsset {
+fn asset(preview: Arc<GeneratedPreview>, source: &'static str) -> PreviewAsset {
     let etag = format!(
         "{}-{}-{}",
         preview.source_hash,
@@ -274,6 +330,7 @@ fn asset(preview: Arc<GeneratedPreview>) -> PreviewAsset {
     PreviewAsset {
         bytes: Arc::new(preview.bytes.clone()),
         etag,
+        source,
     }
 }
 
@@ -285,4 +342,32 @@ fn hex(hash: &[u8]) -> String {
         output.push(HEX[(byte & 0x0f) as usize] as char);
     }
     output
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn paired_jpeg_is_reported_as_the_preview_source() {
+        let jpeg = std::path::PathBuf::from("take-001.JPG");
+        let raw = std::path::PathBuf::from("take-001.ARW");
+        assert_eq!(preview_source(&jpeg, &[jpeg.clone(), raw]), "paired-jpeg");
+    }
+
+    #[test]
+    fn standalone_jpeg_and_raster_sources_are_distinguished_from_a_pair() {
+        let jpeg = std::path::PathBuf::from("take-001.jpg");
+        let png = std::path::PathBuf::from("take-002.png");
+        assert_eq!(preview_source(&jpeg, std::slice::from_ref(&jpeg)), "raster");
+        assert_eq!(preview_source(&png, std::slice::from_ref(&png)), "raster");
+    }
+
+    #[test]
+    fn a_lone_known_raw_format_is_classified_for_a_clear_unavailable_response() {
+        let raw = std::path::PathBuf::from("take-001.NEF");
+        assert!(is_raw_extension("NEF"));
+        assert_eq!(preview_source(&raw, std::slice::from_ref(&raw)), "raw");
+        assert!(!is_raw_extension("jpg"));
+    }
 }
