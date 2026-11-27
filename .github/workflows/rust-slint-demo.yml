@@ -144,7 +144,9 @@ jobs:
           # document store. Use a private runtime directory for this session.
           mkdir -p "$RUNNER_TEMP/s02-xdg-runtime"
           chmod 700 "$RUNNER_TEMP/s02-xdg-runtime"
-          XDG_RUNTIME_DIR="$RUNNER_TEMP/s02-xdg-runtime" xvfb-run --auto-servernum --server-args="-screen 0 1212x840x24" dbus-run-session -- bash -c '
+          # Slint sizes the Linux desktop to 1440×900; keep the Xvfb display
+          # at that size so the first-run folder action stays on-screen.
+          XDG_RUNTIME_DIR="$RUNNER_TEMP/s02-xdg-runtime" xvfb-run --auto-servernum --server-args="-screen 0 1440x900x24" dbus-run-session -- bash -c '
             set -euo pipefail
             openbox --sm-disable >/tmp/photo-culler-s02-openbox.log 2>&1 &
             window_manager_pid=$!
