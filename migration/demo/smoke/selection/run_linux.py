@@ -458,7 +458,10 @@ def inspector_button_center(screenshot: Path, geometry: dict) -> tuple[int, int]
         raise RuntimeError(f"inspector acceptance needs the 1440x900 layout: {geometry}")
     box = (round(width * 0.5), round(height * 0.04), round(width * 0.15), round(height * 0.08))
     label = normalized_ui_text(enlarged_crop_ocr(screenshot, box))
-    if "inspeccionar foco" not in label:
+    # The hosted 1440x900 renderer consistently OCRs only the first word from
+    # this low-contrast Button. The crop is bounded to that control, so this
+    # label uniquely anchors the click without requiring its second word.
+    if "inspeccionar" not in label:
         raise RuntimeError(f"inspector action was not visible in its header crop: {label!r}")
     x, y, crop_width, crop_height = box
     return geometry["x"] + x + crop_width // 3, geometry["y"] + y + crop_height // 2
