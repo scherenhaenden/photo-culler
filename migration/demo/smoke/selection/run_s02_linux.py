@@ -110,7 +110,7 @@ def folder_name_matches_ocr(observed: str, expected: str) -> bool:
 
 def choose_folder_button_point(width: int, height: int) -> tuple[int, int]:
     # The first-run call to action is centered in the gallery panel, near the
-    # bottom of the maximized 1440x900 runner window.
+    # bottom of the maximized runner window.
     return (width // 2 + width // 40, height - max(20, height // 40))
 
 

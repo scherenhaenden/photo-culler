@@ -140,7 +140,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           mkdir -p "$GITHUB_WORKSPACE/artifacts/s02-acceptance"
-          xvfb-run --auto-servernum --server-args="-screen 0 1440x900x24" dbus-run-session -- bash -c '
+          xvfb-run --auto-servernum --server-args="-screen 0 1212x840x24" dbus-run-session -- bash -c '
             set -euo pipefail
             openbox --sm-disable >/tmp/photo-culler-s02-openbox.log 2>&1 &
             window_manager_pid=$!
