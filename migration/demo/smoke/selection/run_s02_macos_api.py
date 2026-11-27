@@ -40,6 +40,7 @@ def request(origin: str, token: str, route: str, body: dict | None = None) -> di
         headers={
             "Authorization": f"Bearer {token}",
             "Accept": "application/json",
+            "Origin": origin,
             **({"Content-Type": "application/json"} if payload is not None else {}),
         },
         method="POST" if payload is not None else "GET",
