@@ -1,6 +1,6 @@
 # Sprint 02 · Mi primera carpeta de fotos en Linux
 
-**Estado: cierre funcional en curso; falta validar Linux tras el ajuste de viewport y completar la revisión visual/teclado en macOS.** La rama `feature/sprint-02-linux-library` contiene los PR revisados #162–#166. El flujo permite elegir una carpeta, arrancar el catálogo local, abrir el diálogo de importación y recordar la carpeta y galería. CI cubre el paquete Linux con interacción de escritorio y el paquete macOS arm64 con importación vía API, persistencia del perfil y capturas del desktop antes y después de reabrirlo. La automatización macOS no opera el selector nativo ni valida controles, foco o teclado.
+**Estado: aceptación funcional completada en Linux y macOS; revisión visual, foco y teclado de macOS pendiente.** La rama `feature/sprint-02-linux-library` contiene los PR revisados #162–#166. El flujo permite elegir una carpeta, arrancar el catálogo local, abrir el diálogo de importación y recordar la carpeta y galería. CI recorre el paquete Linux con interacción de escritorio y el paquete macOS arm64 con importación vía API, persistencia del perfil y capturas del desktop antes y después de reabrirlo. La automatización macOS no opera el selector nativo ni valida controles, foco o teclado.
 
 ## Qué verá el fotógrafo
 
@@ -18,7 +18,7 @@ Linux y macOS comparten componentes Slint, textos, orden de acciones, estados y 
 
 ## Entregas de implementación
 
-Rama de integración: `feature/sprint-02-linux-library`. Los cambios están integrados en orden de dependencia; la aceptación de Linux y la revisión final de macOS son los gates de cierre pendientes.
+Rama de integración: `feature/sprint-02-linux-library`. Los cambios están integrados en orden de dependencia y la aceptación funcional automatizada pasó en las dos plataformas. La revisión de UI macOS descrita abajo sigue pendiente.
 
 | PR | Entrega integrada | Evidencia de revisión |
 |---|---|---|
@@ -33,16 +33,16 @@ El modo de estimación, confirmación, progreso, paginación y refresco usa el f
 ## Aceptación sobre la rama del sprint
 
 - Preparar una carpeta con JPEG distintos y autorizados, con al menos una foto más que el tamaño de página que use el cliente. Registrar nombres, cantidad y hashes iniciales. Preparar también una carpeta vacía.
-- En Linux x86-64, la automatización empaquetada recorre la selección de carpeta, importación, progreso, biblioteca, página 2, cierre y reapertura; compara el catálogo y hashes de los originales. En `55ab879`, el selector abrió en la ruta correcta, pero OCR agrupó la etiqueta `artifacts` con el bookmark lateral `doc` y no localizó la fila de carpeta. El runner ahora conserva las coordenadas OCR de cada palabra y usa la posición exacta de la etiqueta; falta que la ejecución posterior confirme el recorrido.
-- En macOS arm64, la aceptación sobre `d5258e2` pasó con capturas de 1212×840. Verificó 13 JPEG, hashes, página 2, reinicio/reimportación sin duplicados y reapertura estable del catálogo. El artefacto contiene `desktop-first.png` y `desktop-reopen.png`; aún requiere comprobar visualmente controles y el recorrido real del selector nativo con teclado/foco.
+- En Linux x86-64, la aceptación empaquetada pasó sobre `f75fe36`: selector, importación, progreso, catálogo, página 2, cierre/reapertura, IDs estables y hashes de origen. El runner conserva coordenadas OCR por palabra para separar el nombre de carpeta del texto de la barra lateral.
+- En macOS arm64, la aceptación empaquetada pasó sobre `f75fe36`: 13 JPEG, hashes, página 2, reinicio/reimportación sin duplicados y reapertura estable del catálogo. El artefacto contiene `desktop-first.png` y `desktop-reopen.png`; la prueba no automatiza el selector nativo ni la interacción visual/teclado.
 - Sobre el SHA integrado, ejecutar la suite completa del workspace y la aceptación de paquetes vigente, incluida regresión de la demo. Los workflows ejecutan esos gates al actualizar la rama Sprint 02; conservar el SHA, enlaces de ejecución y artefactos de la última ejecución verde en el informe de cierre. Los PR de función ejecutan sus pruebas acotadas.
 - Publicar en la entrega el enlace al paquete Linux y al de macOS, el SHA, los resultados y un guion de reapertura. Revisar y fusionar sprint → master, comprobar que master contiene ese SHA y retirar las ramas de función integradas. Si falla el recorrido, corregirlo en este sprint antes de empezar la selección del Sprint 03.
 
 ### Evidencia de cierre
 
-- En `d5258e2`, `7d56f4f`, `9b75cf7` y `55ab879`, `cargo test --locked --manifest-path rust/Cargo.toml --workspace`, formato y Clippy pasaron en las ejecuciones [45959952849](https://github.com/scherenhaenden/photo-culler/actions/runs/45959952849), [45961890705](https://github.com/scherenhaenden/photo-culler/actions/runs/45961890705), [45963320611](https://github.com/scherenhaenden/photo-culler/actions/runs/45963320611) y [45965036195](https://github.com/scherenhaenden/photo-culler/actions/runs/45965036195).
+- En `d5258e2`, `7d56f4f`, `9b75cf7`, `55ab879` y `f75fe36`, `cargo test --locked --manifest-path rust/Cargo.toml --workspace`, formato y Clippy pasaron; la última ejecución es [45966667891](https://github.com/scherenhaenden/photo-culler/actions/runs/45966667891).
 - La aceptación empaquetada macOS arm64 pasó en [45959953004](https://github.com/scherenhaenden/photo-culler/actions/runs/45959953004). El artefacto [macOS Sprint 02](https://github.com/scherenhaenden/photo-culler/actions/runs/45959953004/artifacts/15180727686) confirma 13 importaciones, hashes correctos, página 2 y persistencia estable. Las dos capturas son 1212×840.
-- En Linux, `55ab879` abrió el selector y llegó al directorio del repositorio, pero el OCR combinó `artifacts` con texto del bookmark lateral en una sola fila y no detectó la carpeta. La prueba ahora conserva y usa las cajas de texto individuales; el gate Linux aún debe pasar en la siguiente ejecución para cerrar. macOS arm64 sí pasó compilación y aceptación de catálogo en [45965036284](https://github.com/scherenhaenden/photo-culler/actions/runs/45965036284).
-- Las pruebas focales del runner y fixture pasaron 37/37 con Pillow disponible; `git diff --check` y análisis YAML pasan para el arreglo del portal. La revisión visual macOS de selector, controles, foco y teclado sigue pendiente.
+- En el SHA final `f75fe36`, la matriz de paquetes, WASM, navegadores y la aceptación de catálogo Linux/macOS arm64 pasaron en [45966667966](https://github.com/scherenhaenden/photo-culler/actions/runs/45966667966). Artefactos de aceptación: [Linux](https://github.com/scherenhaenden/photo-culler/actions/runs/45966667966/artifacts/15183932003) y [macOS](https://github.com/scherenhaenden/photo-culler/actions/runs/45966667966/artifacts/15183052860).
+- Las pruebas focales del runner Linux, runner macOS y fixture pasaron 39/39 con Pillow disponible; `git diff --check` y análisis YAML pasaron. La revisión macOS del selector nativo, controles, foco y teclado sigue pendiente.
 
 [Entregas posteriores y criterio común de cierre](ROADMAP.md)
