@@ -6,7 +6,8 @@ import { dirname, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium, firefox } from "playwright";
 import pngjs from "pngjs";
-import { installSummaryFixture, pairingWarmupDelayMs } from "../smoke-config.mjs";
+import { installSummaryFixture } from "../smoke-config.mjs";
+import { pairingWarmupDelayMs } from "../pairing-warmup.mjs";
 
 const GALLERY_PATH = "/api/v1/galleries/demo/photos";
 const ERROR_BODY = {

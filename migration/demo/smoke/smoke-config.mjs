@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
+export { pairingWarmupDelayMs } from "./pairing-warmup.mjs";
 
 export function buildServerArguments(webRoot, dataRoot, sourceRoot) {
   return [
     "--owned", "--port", "0", "--web-root", webRoot,
     "--data-dir", dataRoot, "--authorized-root", sourceRoot,
   ];
-}
-
-export function pairingWarmupDelayMs(browserName) {
-  return browserName === "firefox" ? 2000 : 250;
 }
 
 export function assertFixtureGalleryPage(page) {

@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium, firefox } from "playwright";
-import { assertFixtureGalleryPage, buildServerArguments, pairingWarmupDelayMs } from "./smoke-config.mjs";
+import { assertFixtureGalleryPage, buildServerArguments } from "./smoke-config.mjs";
+import { pairingWarmupDelayMs } from "./pairing-warmup.mjs";
 
 const MIME_BY_PATH = new Map([
   ["/api/v1/health", "application/json"],

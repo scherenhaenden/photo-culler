@@ -13,6 +13,8 @@ use std::{
 const SLINT_VIEW_SOURCE: &str = include_str!("slint_view.rs");
 const DEMO_WINDOW_SOURCE: &str = include_str!("../../ui/demo_window.slint");
 const GALLERY_SOURCE: &str = include_str!("../../ui/library/gallery.slint");
+const IMPORT_DIALOG_SOURCE: &str = include_str!("../../ui/library/import_dialog.slint");
+const DESKTOP_APP_SOURCE: &str = include_str!("../desktop_app.rs");
 
 #[derive(Default)]
 struct RecordingView(Mutex<Vec<ViewState>>);
@@ -187,4 +189,24 @@ fn slint_binding_contract_keeps_loading_error_retry_and_gallery_in_one_shell() {
     assert!(GALLERY_SOURCE.contains("if root.view-state == 3: StatusPanel"));
     assert!(GALLERY_SOURCE.contains("action-label: \"Reintentar\";"));
     assert!(GALLERY_SOURCE.contains("source: root.photo.thumbnail;"));
+}
+
+#[test]
+fn folder_selection_opens_import_dialog_before_loading_source_inventory() {
+    let helper_start = DESKTOP_APP_SOURCE
+        .find("fn open_import_dialog(window: &DemoWindow)")
+        .expect("folder selection should use the import dialog opener");
+    let helper_end = DESKTOP_APP_SOURCE[helper_start..]
+        .find("\n}\n")
+        .map(|offset| helper_start + offset);
+    let helper = &DESKTOP_APP_SOURCE[helper_start..helper_end.expect("helper should close")];
+    let open = helper
+        .find("window.set_import_open(true);")
+        .expect("the modal property must be enabled");
+    let request = helper
+        .find("window.invoke_import_open_requested();")
+        .expect("the source inventory should be requested");
+    assert!(open < request, "open the modal before requesting sources");
+    assert!(DEMO_WINDOW_SOURCE.contains("open: root.import-open;"));
+    assert!(IMPORT_DIALOG_SOURCE.contains("visible: root.open;"));
 }
