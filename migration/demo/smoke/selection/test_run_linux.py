@@ -16,6 +16,62 @@ SPEC.loader.exec_module(runner)
 
 
 class SelectionRunnerTests(unittest.TestCase):
+    def test_visible_text_center_finds_one_normalized_label(self):
+        rows = [
+            {"text": "Inspeccionar foco", "x": 100, "y": 40, "width": 120, "height": 20},
+            {"text": "Photo 13", "x": 30, "y": 80, "width": 70, "height": 18},
+        ]
+        self.assertEqual(runner.visible_text_center(rows, "inspeccionar FOCO"), (160, 50))
+        with self.assertRaisesRegex(RuntimeError, "expected one visible"):
+            runner.visible_text_center(rows, "volver a galería")
+
+    def test_inspector_button_uses_a_focused_crop_for_low_contrast_text(self):
+        geometry = {"x": 11, "y": 23, "width": 1440, "height": 900}
+        with mock.patch.object(runner, "enlarged_crop_ocr", return_value="Inspeccionar") as ocr:
+            self.assertEqual(
+                runner.inspector_button_center(Path("reject-first.png"), geometry),
+                (803, 95),
+            )
+        ocr.assert_called_once_with(Path("reject-first.png"), (720, 36, 216, 72))
+        with mock.patch.object(runner, "enlarged_crop_ocr", return_value="texto ilegible"):
+            with self.assertRaisesRegex(RuntimeError, "action was not visible"):
+                runner.inspector_button_center(Path("reject-first.png"), geometry)
+
+    def test_inspector_overlay_asserts_identity_decision_and_focus_controls(self):
+        rows = [
+            {"text": "Zoom 100%", "x": 700, "y": 850},
+        ]
+        screenshot = Path("inspector.png")
+        geometry = {"x": 11, "y": 23, "width": 1440, "height": 900}
+        with mock.patch.object(
+            runner, "enlarged_crop_ocr", side_effect=["INSPECCIÓN DE FOCO - photo-13", "REJECTED", "Restablecer"]
+        ) as ocr:
+            self.assertEqual(
+                runner.assert_inspector_overlay(screenshot, rows, "photo-13.jpg", "REJECTED", geometry),
+                {"photo_name": "photo-13.jpg", "decision": "REJECTED", "zoom": "100%"},
+            )
+        self.assertEqual(
+            [call.args[1] for call in ocr.call_args_list],
+            [(14, 9, 432, 54), (590, 9, 180, 52), (1195, 814, 230, 72)],
+        )
+
+        with mock.patch.object(
+            runner, "enlarged_crop_ocr", side_effect=["INSPECCIÓN DE FOCO - photo-13", "REJECTED"]
+        ):
+            with self.assertRaisesRegex(RuntimeError, "did not identify"):
+                runner.assert_inspector_overlay(screenshot, rows, "photo-12.jpg", "REJECTED", geometry)
+        with mock.patch.object(
+            runner, "enlarged_crop_ocr", side_effect=["INSPECCIÓN DE FOCO - photo-13", "REJECTED"]
+        ):
+            with self.assertRaisesRegex(RuntimeError, "did not show the 'UNRATED'"):
+                runner.assert_inspector_overlay(screenshot, rows, "photo-13.jpg", "UNRATED", geometry)
+
+    def test_inspector_back_button_uses_a_focused_top_right_crop(self):
+        geometry = {"x": 11, "y": 23, "width": 1440, "height": 900}
+        with mock.patch.object(runner, "enlarged_crop_ocr", return_value="Volver a galeria") as ocr:
+            self.assertEqual(runner.inspector_back_center(Path("inspector.png"), geometry), (1206, 68))
+        ocr.assert_called_once_with(Path("inspector.png"), (979, 18, 432, 54))
+
     def test_mutating_api_requests_send_exact_local_origin(self):
         class Response:
             def __enter__(self):
@@ -201,6 +257,13 @@ class SelectionRunnerTests(unittest.TestCase):
                 runner.assert_keep_filter(
                     Path("keep-filter.png"), [{"text": "not-the-photo", "x": 1076, "y": 66}], photo_id
                 )
+
+    def test_inspector_return_counts_visible_first_page_not_entire_catalog(self):
+        self.assertEqual(runner.first_page_visible_count(13), 12)
+        self.assertEqual(runner.first_page_visible_count(12), 12)
+        self.assertEqual(runner.first_page_visible_count(1), 1)
+        with self.assertRaisesRegex(ValueError, "must not be negative"):
+            runner.first_page_visible_count(-1)
 
     def test_inspector_photo_id_ocr_tolerates_two_errors_but_rejects_other_ids(self):
         photo_id = "8c2999e5a9393c9850cbeee4f435bec9"

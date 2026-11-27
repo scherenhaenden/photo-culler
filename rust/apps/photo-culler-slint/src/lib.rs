@@ -6,6 +6,9 @@ pub mod demo;
 pub mod recipe_flow;
 pub mod recipe_rest;
 
+#[path = "../ui/inspector/mod.rs"]
+pub mod inspector;
+
 #[cfg(not(target_arch = "wasm32"))]
 pub mod desktop;
 

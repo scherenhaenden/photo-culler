@@ -1,5 +1,5 @@
 import { DesignTokens, PanelState, StatusPanel } from "../components/components.slint";
-import { ScrollView } from "std-widgets.slint";
+import { Button, ScrollView } from "std-widgets.slint";
 
 export struct GalleryPhoto {
     id: string,
@@ -392,6 +392,7 @@ export component LibraryGallery inherits Rectangle {
     callback sort-direction-changed(descending: bool);
     callback density-changed(density: int);
     callback decision-requested(decision: string);
+    callback inspect-requested(photo-id: string);
 
     background: #050505;
     property <int> effective-viewport-width: root.viewport-width > 0 ? root.viewport-width : round(root.width / 1px);
@@ -494,6 +495,11 @@ export component LibraryGallery inherits Rectangle {
                     }
                 }
                 Rectangle { horizontal-stretch: 1; background: transparent; }
+                Button {
+                    text: "Inspeccionar foco";
+                    enabled: root.selected-id != "";
+                    clicked => { root.inspect-requested(root.selected-id); }
+                }
                 if root.selected-count > 0: Rectangle {
                     height: 24px;
                     background: #111111;

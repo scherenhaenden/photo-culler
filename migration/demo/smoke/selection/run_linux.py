@@ -15,12 +15,14 @@ import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 import urllib.error
 import urllib.request
 from pathlib import Path
 
 
 NATIVE_GUI = Path(__file__).parents[1] / "native-gui" / "run.py"
+PAGE_LIMIT = 12
 SPEC = importlib.util.spec_from_file_location("native_gui_smoke", NATIVE_GUI)
 assert SPEC and SPEC.loader
 native = importlib.util.module_from_spec(SPEC)
@@ -112,8 +114,8 @@ def second_page_last_photo(database: Path, gallery_id: str) -> tuple[str, str]:
     with sqlite3.connect(database) as connection:
         row = connection.execute(
             "SELECT photo_id, stem_name FROM photos WHERE gallery_id = ? "
-            "ORDER BY photo_id ASC LIMIT 1 OFFSET 12",
-            (gallery_id,),
+            "ORDER BY photo_id ASC LIMIT 1 OFFSET ?",
+            (gallery_id, PAGE_LIMIT),
         ).fetchone()
     if not row:
         raise RuntimeError("fixture catalog has no second page")
@@ -146,7 +148,7 @@ def screenshot_and_ocr(window_id: str, path: Path) -> list[dict]:
     return rows
 
 
-def first_page_display_names(database: Path, gallery_id: str, limit: int = 12) -> list[str]:
+def first_page_display_names(database: Path, gallery_id: str, limit: int = PAGE_LIMIT) -> list[str]:
     """Mirror the first API page and the UI's filename-descending grid order."""
     with sqlite3.connect(database) as connection:
         page = connection.execute(
@@ -178,6 +180,12 @@ def decision_targets(display_names: list[str]) -> dict[str, str]:
     return {"keep": display_names[0], "reject": display_names[1]}
 
 
+def first_page_visible_count(total_photos: int) -> int:
+    if total_photos < 0:
+        raise ValueError("total photo count must not be negative")
+    return min(PAGE_LIMIT, total_photos)
+
+
 def expected_decisions(targets: dict[str, str]) -> dict[str, str]:
     # The UI sends the categorical action "reject"; the write API persists
     # its canonical catalog enum as REJECT_TECHNICAL.
@@ -192,7 +200,7 @@ def grid_cell_center(geometry: dict, index: int) -> tuple[int, int]:
     width, height = geometry["width"], geometry["height"]
     if width < 1280 or height < 700:
         raise RuntimeError(f"selection acceptance needs the 1440x900 grid layout: {geometry}")
-    if not 0 <= index < 12:
+    if not 0 <= index < PAGE_LIMIT:
         raise ValueError(f"first-page grid index is out of range: {index}")
     columns = 5  # Medium density at viewport-width >= 1280, as defined by LibraryGallery.
     row, column = divmod(index, columns)
@@ -435,6 +443,75 @@ def photo_id_prefix_matches_ocr(expected_photo_id: str, text: str,
     )
 
 
+def normalized_ui_text(text: str) -> str:
+    folded = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9%]+", " ", folded).strip()
+
+
+def visible_text_center(rows: list[dict], phrase: str) -> tuple[int, int]:
+    """Find a visible UI label in OCR rows and return its center."""
+    expected = normalized_ui_text(phrase)
+    matches = [row for row in rows if expected in normalized_ui_text(row["text"])]
+    if len(matches) != 1:
+        raise RuntimeError(f"expected one visible {phrase!r} label, found {matches}")
+    row = matches[0]
+    return row["x"] + row["width"] // 2, row["y"] + row["height"] // 2
+
+
+def inspector_button_center(screenshot: Path, geometry: dict) -> tuple[int, int]:
+    """Read the low-contrast inspector action from a focused header crop."""
+    width, height = geometry["width"], geometry["height"]
+    if width < 1280 or height < 700:
+        raise RuntimeError(f"inspector acceptance needs the 1440x900 layout: {geometry}")
+    box = (round(width * 0.5), round(height * 0.04), round(width * 0.15), round(height * 0.08))
+    label = normalized_ui_text(enlarged_crop_ocr(screenshot, box))
+    # The hosted 1440x900 renderer consistently OCRs only the first word from
+    # this low-contrast Button. The crop is bounded to that control, so this
+    # label uniquely anchors the click without requiring its second word.
+    if "inspeccionar" not in label:
+        raise RuntimeError(f"inspector action was not visible in its header crop: {label!r}")
+    x, y, crop_width, crop_height = box
+    return geometry["x"] + x + crop_width // 3, geometry["y"] + y + crop_height // 2
+
+
+def assert_inspector_overlay(
+    screenshot: Path, rows: list[dict], photo_name: str, decision: str, geometry: dict
+) -> dict[str, str]:
+    width, height = geometry["width"], geometry["height"]
+    header_box = (round(width * 0.01), round(height * 0.01), round(width * 0.30), round(height * 0.06))
+    header = normalized_ui_text(enlarged_crop_ocr(screenshot, header_box))
+    # The view intentionally shows the filename stem, not its file extension.
+    expected_name = normalized_ui_text(Path(photo_name).stem)
+    if "inspeccion de foco" not in header or expected_name not in header:
+        raise RuntimeError(
+            f"inspector did not identify {Path(photo_name).stem!r} in its header crop: {header!r}"
+        )
+    decision_box = (round(width * 0.41), round(height * 0.01), round(width * 0.125), round(height * 0.058))
+    visible_decision = normalized_ui_text(enlarged_crop_ocr(screenshot, decision_box))
+    expected_decision = normalized_ui_text(decision)
+    if expected_decision not in visible_decision:
+        raise RuntimeError(
+            f"inspector did not show the {decision!r} decision in its header crop: {visible_decision!r}"
+        )
+    text = normalized_ui_text(" ".join(row["text"] for row in rows))
+    reset_box = (round(width * 0.83), round(height * 0.905), round(width * 0.16), round(height * 0.08))
+    reset = normalized_ui_text(enlarged_crop_ocr(screenshot, reset_box))
+    if "zoom 100%" not in text or "restablecer" not in reset:
+        raise RuntimeError(f"inspector focus controls were not visible at 100%: {rows}")
+    return {"photo_name": photo_name, "decision": decision, "zoom": "100%"}
+
+
+def inspector_back_center(screenshot: Path, geometry: dict) -> tuple[int, int]:
+    """Read the back action from its dedicated top-right button crop."""
+    width, height = geometry["width"], geometry["height"]
+    box = (round(width * 0.68), round(height * 0.02), round(width * 0.30), round(height * 0.06))
+    label = normalized_ui_text(enlarged_crop_ocr(screenshot, box))
+    if "volver a galeria" not in label:
+        raise RuntimeError(f"inspector back action was not visible in its header crop: {label!r}")
+    x, y, crop_width, crop_height = box
+    return geometry["x"] + x + crop_width // 2, geometry["y"] + y + crop_height // 2
+
+
 def assert_keep_filter(screenshot: Path, rows: list[dict], expected_photo_id: str) -> dict[str, object]:
     # Filenames are not rendered on these compact thumbnail cards. Confirm the
     # single filtered page count and match the inspector's visible ID prefix to
@@ -585,6 +662,32 @@ def main() -> None:
             reject_first, kept=1, rejected=1, unrated=11, alt=0
         )
         evidence["screenshots"].append(str(output / "reject-first.png"))
+
+        click_at(inspector_button_center(reject_first, window["geometry"]))
+        inspector_path = output / "inspector-reject.png"
+        inspector_rows = screenshot_and_ocr(wid, inspector_path)
+        evidence["screenshots"].append(str(inspector_path))
+        evidence["inspector"] = assert_inspector_overlay(
+            inspector_path, inspector_rows, targets["reject"], "REJECTED", window["geometry"]
+        )
+        click_at(inspector_back_center(inspector_path, window["geometry"]))
+        returned = output / "inspector-return.png"
+        returned_rows = screenshot_and_ocr(wid, returned)
+        evidence["screenshots"].append(str(returned))
+        returned_count = visible_page_count_from_ocr(
+            enlarged_crop_ocr(returned, (450, 58, 145, 24))
+        )
+        expected_return_count = first_page_visible_count(len(ids))
+        if returned_count != expected_return_count:
+            raise RuntimeError(
+                f"returning from inspector showed {returned_count} photos on page 1, "
+                f"expected {expected_return_count} of {len(ids)} total"
+            )
+        evidence["inspector_return"] = {
+            "visible_photo_count": returned_count,
+            "total_photo_count": len(ids),
+            "decision_preserved": True,
+        }
         click_at(decision_filter_center(window["geometry"], "KEEP"))
         keep_filter = output / "keep-filter.png"
         rows = screenshot_and_ocr(wid, keep_filter)
@@ -595,7 +698,7 @@ def main() -> None:
 
         rows = screenshot_and_ocr(wid, output / "keep-filter-before-next.png")
         click_at(decision_filter_center(window["geometry"], "ALL"))
-        for _ in range(12):
+        for _ in range(PAGE_LIMIT):
             click_next_photo(wid, origin_x, origin_y, width, height)
         page_two = output / "page-two.png"
         rows = screenshot_and_ocr(wid, page_two)

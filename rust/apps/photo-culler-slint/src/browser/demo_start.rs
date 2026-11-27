@@ -183,7 +183,7 @@ pub fn start() -> Result<(), wasm_bindgen::JsValue> {
     use crate::demo::{
         analysis_flow,
         controller::DemoController,
-        import_flow,
+        import_flow, inspector_flow,
         rest::DemoRestClient,
         slint_view::{SlintDemoView, SlintDispatcher},
     };
@@ -204,6 +204,7 @@ pub fn start() -> Result<(), wasm_bindgen::JsValue> {
     let browser_transport = BrowserTransport::default();
     browser_transport.set_window(window.as_weak());
     let client = Arc::new(DemoRestClient::new(browser_transport.clone()));
+    inspector_flow::bind(&window, client.clone());
     let filter_controller = controller.clone();
     let filter_client = client.clone();
     view.bind_decision_filter_handler(Arc::new(move |filter| {

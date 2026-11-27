@@ -37,6 +37,19 @@ impl<T: Transport + Clone> DemoRestClient<T> {
 }
 
 impl<T: Transport> DemoRestClient<T> {
+    /// Fetch the higher resolution preview used while checking focus.
+    pub async fn large_preview(&self, photo_id: &str) -> Result<Vec<u8>, DemoError> {
+        match self.previews.get(photo_id, PreviewSize::Large).await {
+            Ok(bytes) => Ok(bytes),
+            Err(ClientError::Http { status: 404, .. }) => self
+                .previews
+                .get(photo_id, PreviewSize::Full)
+                .await
+                .map_err(map_client_error),
+            Err(error) => Err(map_client_error(error)),
+        }
+    }
+
     pub async fn import_sources(&self, gallery_id: &str) -> Result<ImportSourcesPage, DemoError> {
         self.inner
             .import_sources(gallery_id)
@@ -600,6 +613,36 @@ mod tests {
                 client.thumbnail(&gallery.photos[0]).await.unwrap(),
                 [0xff, 0xd8, 0xff, 0xd9]
             );
+        });
+    }
+
+    #[test]
+    fn inspector_large_preview_accepts_jpeg_and_surfaces_preview_errors() {
+        let transport = FakeTransport {
+            responses: Arc::new(Mutex::new(VecDeque::from([
+                Ok(response("image/jpeg", &[0xff, 0xd8, 0xff, 0xd9])),
+                Ok(Response {
+                    status: 404,
+                    content_type: Some("application/json".into()),
+                    body: br#"{"code":"preview_missing","message":"missing","request_id":"req-2"}"#
+                        .to_vec(),
+                    redirected: false,
+                }),
+                Ok(response("image/jpeg", &[0xff, 0xd8, 0xff, 0xd9])),
+                Ok(response("text/plain", b"preview unavailable")),
+            ]))),
+        };
+        let client = DemoRestClient::new(transport);
+        poll_ready(async {
+            assert_eq!(
+                client.large_preview("photo-1").await.unwrap(),
+                [0xff, 0xd8, 0xff, 0xd9]
+            );
+            assert_eq!(
+                client.large_preview("photo-full").await.unwrap(),
+                [0xff, 0xd8, 0xff, 0xd9]
+            );
+            assert!(client.large_preview("photo-2").await.is_err());
         });
     }
 
