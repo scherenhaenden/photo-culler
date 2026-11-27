@@ -1,6 +1,6 @@
 # Sprint 03 · Primera selección en Linux
 
-**Estado: alcance y arquitectura definidos; implementación por iniciar.** La base es `feature/sprint-02-linux-library` en `8083d33`. Esta entrega se limita al escritorio Linux x86-64. El E2E de Sprint 02 queda para la próxima sesión, como acordó el usuario; Sprint 03 no se fusiona a `master` antes de cerrar su aceptación Linux.
+**Estado: implementación integrada; aceptación Linux aprobada en el head anterior; integración de S02 actualizada y pendiente de repetir CI.** La rama es `feature/sprint-03-linux-selection`, derivada de Sprint 02. No fusionar a `master` antes de cerrar las aceptaciones de ambos sprints.
 
 ## Resultado para el fotógrafo
 
@@ -31,7 +31,7 @@ Capturar una imagen de la primera página, otra de la segunda y otra del filtro 
 
 Se reutilizan las rutas y la persistencia de decisión que ya existen. La guía de implementación define tres ramas aisladas: acciones accesibles de selección, filtro/cuentas globales, y aceptación E2E Linux de paquete. No se amplía a RAW, análisis, exportación, IA, ni aceptación macOS en este sprint.
 
-El selector de carpetas y primer importado pertenecen a Sprint 02; su E2E queda pendiente para mañana. Sprint 03 usa un catálogo de prueba ya sembrado para probar selección sin mezclar ambos recorridos.
+El selector de carpetas y primer importado pertenecen a Sprint 02. Sus runners Linux y macOS están incluidos en la misma rama y sus pasos de CI corren por separado de la aceptación de selección persistente de Sprint 03. Sprint 03 usa un catálogo de prueba sembrado para probar selección.
 
 ## Pruebas por nivel
 
@@ -39,6 +39,12 @@ El selector de carpetas y primer importado pertenecen a Sprint 02; su E2E queda 
 - **Rama de catálogo:** tests de controlador para filtro/cursor y refresco de resumen; tests de API existentes para contrato y revisión de decisiones.
 - **Rama Linux E2E:** paquete real Linux bajo Xvfb, diálogo no requerido porque se inicia desde un perfil/catálogo sembrado; simular ratón y teclado sobre la ventana, comprobar estado SQLite, capturas, hashes y reapertura.
 - **Rama Sprint 03:** suite Rust completa relevante, workflow de paquete Linux, regresión del smoke demo y N2N anterior. Publicar SHA, paquete y manifiesto de evidencia.
+
+## Evidencia de integración
+
+- El head `79c2439a70fdc430d2bc6f75fca3c73397efcd30` pasó el workflow de compilación e integración `45862827930` y la matriz de paquete Slint `45869568546`; dentro de esta última, `Run persistent library decision selection acceptance` pasó en Linux. La ejecución nativa Linux registrada es el artefacto `15142017983`.
+- Sprint 02 avanzó después con `69334ec68af75be24c745d8697b0f2e9e07563f9`, que corrige la apertura del diálogo tras seleccionar la carpeta. Esta rama integra ese head y conserva pasos independientes para las aceptaciones Linux/macOS de S02 y la aceptación Linux de S03.
+- La integración crea un SHA nuevo. Repetir los workflows de paquete y la suite pertinente sobre ese SHA antes de considerar la aceptación final de S03 cerrada.
 
 ## Secuencia de ramas
 

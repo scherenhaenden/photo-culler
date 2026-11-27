@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -435,6 +436,38 @@ def photo_id_prefix_matches_ocr(expected_photo_id: str, text: str,
     )
 
 
+def normalized_ui_text(text: str) -> str:
+    folded = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9%]+", " ", folded).strip()
+
+
+def visible_text_center(rows: list[dict], phrase: str) -> tuple[int, int]:
+    """Find a visible UI label in OCR rows and return its center."""
+    expected = normalized_ui_text(phrase)
+    matches = [row for row in rows if expected in normalized_ui_text(row["text"])]
+    if len(matches) != 1:
+        raise RuntimeError(f"expected one visible {phrase!r} label, found {matches}")
+    row = matches[0]
+    return row["x"] + row["width"] // 2, row["y"] + row["height"] // 2
+
+
+def assert_inspector_overlay(rows: list[dict], photo_name: str, decision: str) -> dict[str, str]:
+    text = normalized_ui_text(" ".join(row["text"] for row in rows))
+    expected_name = normalized_ui_text(photo_name)
+    if "inspeccion de foco" not in text or expected_name not in text:
+        raise RuntimeError(
+            f"inspector did not identify {photo_name!r} in its header: {rows}"
+        )
+    expected_decision = normalized_ui_text(decision)
+    if expected_decision not in text:
+        raise RuntimeError(
+            f"inspector did not show the {decision!r} decision for {photo_name!r}: {rows}"
+        )
+    if "zoom 100%" not in text or "restablecer" not in text or "recorte" not in text:
+        raise RuntimeError(f"inspector focus controls were not visible at 100%: {rows}")
+    return {"photo_name": photo_name, "decision": decision, "zoom": "100%"}
+
+
 def assert_keep_filter(screenshot: Path, rows: list[dict], expected_photo_id: str) -> dict[str, object]:
     # Filenames are not rendered on these compact thumbnail cards. Confirm the
     # single filtered page count and match the inspector's visible ID prefix to
@@ -585,6 +618,31 @@ def main() -> None:
             reject_first, kept=1, rejected=1, unrated=11, alt=0
         )
         evidence["screenshots"].append(str(output / "reject-first.png"))
+
+        inspect_x, inspect_y = visible_text_center(rows, "Inspeccionar foco")
+        click_at((origin_x + inspect_x, origin_y + inspect_y))
+        inspector_path = output / "inspector-reject.png"
+        inspector_rows = screenshot_and_ocr(wid, inspector_path)
+        evidence["screenshots"].append(str(inspector_path))
+        evidence["inspector"] = assert_inspector_overlay(
+            inspector_rows, targets["reject"], "REJECTED"
+        )
+        close_x, close_y = visible_text_center(inspector_rows, "Volver a galería")
+        click_at((origin_x + close_x, origin_y + close_y))
+        returned = output / "inspector-return.png"
+        returned_rows = screenshot_and_ocr(wid, returned)
+        evidence["screenshots"].append(str(returned))
+        returned_count = visible_page_count_from_ocr(
+            enlarged_crop_ocr(returned, (450, 58, 145, 24))
+        )
+        if returned_count != 13:
+            raise RuntimeError(
+                f"returning from inspector showed {returned_count} library photos, expected 13"
+            )
+        evidence["inspector_return"] = {
+            "visible_photo_count": returned_count,
+            "decision_preserved": True,
+        }
         click_at(decision_filter_center(window["geometry"], "KEEP"))
         keep_filter = output / "keep-filter.png"
         rows = screenshot_and_ocr(wid, keep_filter)

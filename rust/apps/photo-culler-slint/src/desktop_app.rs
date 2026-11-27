@@ -664,7 +664,7 @@ fn start_load(
             && resolved_gallery.is_some()
             && let Some(window) = open_import_window.upgrade()
         {
-            window.invoke_import_open_requested();
+            open_import_dialog(&window);
         }
         if let (Some(status_file), Some((origin, server_pid))) =
             (smoke_status_file(), smoke_context)
@@ -701,6 +701,13 @@ fn start_load(
         window.set_error_message(format!("Could not start the gallery request: {error}").into());
         window.set_view_state(3);
     }
+}
+
+/// Show the modal before loading its source/job inventory. The import-flow
+/// callback deliberately ignores responses when the dialog is closed.
+fn open_import_dialog(window: &DemoWindow) {
+    window.set_import_open(true);
+    window.invoke_import_open_requested();
 }
 
 fn smoke_status_file() -> Option<PathBuf> {
