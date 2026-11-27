@@ -22,6 +22,7 @@ from pathlib import Path
 
 
 NATIVE_GUI = Path(__file__).parents[1] / "native-gui" / "run.py"
+PAGE_LIMIT = 12
 SPEC = importlib.util.spec_from_file_location("native_gui_smoke", NATIVE_GUI)
 assert SPEC and SPEC.loader
 native = importlib.util.module_from_spec(SPEC)
@@ -113,8 +114,8 @@ def second_page_last_photo(database: Path, gallery_id: str) -> tuple[str, str]:
     with sqlite3.connect(database) as connection:
         row = connection.execute(
             "SELECT photo_id, stem_name FROM photos WHERE gallery_id = ? "
-            "ORDER BY photo_id ASC LIMIT 1 OFFSET 12",
-            (gallery_id,),
+            "ORDER BY photo_id ASC LIMIT 1 OFFSET ?",
+            (gallery_id, PAGE_LIMIT),
         ).fetchone()
     if not row:
         raise RuntimeError("fixture catalog has no second page")
@@ -147,7 +148,7 @@ def screenshot_and_ocr(window_id: str, path: Path) -> list[dict]:
     return rows
 
 
-def first_page_display_names(database: Path, gallery_id: str, limit: int = 12) -> list[str]:
+def first_page_display_names(database: Path, gallery_id: str, limit: int = PAGE_LIMIT) -> list[str]:
     """Mirror the first API page and the UI's filename-descending grid order."""
     with sqlite3.connect(database) as connection:
         page = connection.execute(
@@ -179,6 +180,12 @@ def decision_targets(display_names: list[str]) -> dict[str, str]:
     return {"keep": display_names[0], "reject": display_names[1]}
 
 
+def first_page_visible_count(total_photos: int) -> int:
+    if total_photos < 0:
+        raise ValueError("total photo count must not be negative")
+    return min(PAGE_LIMIT, total_photos)
+
+
 def expected_decisions(targets: dict[str, str]) -> dict[str, str]:
     # The UI sends the categorical action "reject"; the write API persists
     # its canonical catalog enum as REJECT_TECHNICAL.
@@ -193,7 +200,7 @@ def grid_cell_center(geometry: dict, index: int) -> tuple[int, int]:
     width, height = geometry["width"], geometry["height"]
     if width < 1280 or height < 700:
         raise RuntimeError(f"selection acceptance needs the 1440x900 grid layout: {geometry}")
-    if not 0 <= index < 12:
+    if not 0 <= index < PAGE_LIMIT:
         raise ValueError(f"first-page grid index is out of range: {index}")
     columns = 5  # Medium density at viewport-width >= 1280, as defined by LibraryGallery.
     row, column = divmod(index, columns)
@@ -670,12 +677,15 @@ def main() -> None:
         returned_count = visible_page_count_from_ocr(
             enlarged_crop_ocr(returned, (450, 58, 145, 24))
         )
-        if returned_count != 13:
+        expected_return_count = first_page_visible_count(len(ids))
+        if returned_count != expected_return_count:
             raise RuntimeError(
-                f"returning from inspector showed {returned_count} library photos, expected 13"
+                f"returning from inspector showed {returned_count} photos on page 1, "
+                f"expected {expected_return_count} of {len(ids)} total"
             )
         evidence["inspector_return"] = {
             "visible_photo_count": returned_count,
+            "total_photo_count": len(ids),
             "decision_preserved": True,
         }
         click_at(decision_filter_center(window["geometry"], "KEEP"))
@@ -688,7 +698,7 @@ def main() -> None:
 
         rows = screenshot_and_ocr(wid, output / "keep-filter-before-next.png")
         click_at(decision_filter_center(window["geometry"], "ALL"))
-        for _ in range(12):
+        for _ in range(PAGE_LIMIT):
             click_next_photo(wid, origin_x, origin_y, width, height)
         page_two = output / "page-two.png"
         rows = screenshot_and_ocr(wid, page_two)
