@@ -264,13 +264,13 @@ def click_next_photo(rows: list[dict]) -> None:
 def photo_index_visible(rows: list[dict], expected_index: int) -> bool:
     return any(
         row["confidence"] >= 35
-        and re.search(rf"\bfoto\s+{expected_index}\b", normalize_text(row["text"])) is not None
+        and re.search(rf"\bfoto\s+{expected_index}(?!\d)", normalize_text(row["text"])) is not None
         for row in rows
     )
 
 
 def photo_index_text_visible(text: str, expected_index: int) -> bool:
-    return re.search(rf"\bfoto\s+{expected_index}\b", normalize_text(text)) is not None
+    return re.search(rf"\bfoto\s+{expected_index}(?!\d)", normalize_text(text)) is not None
 
 
 def navigation_crop_geometry(width: int, height: int) -> tuple[int, int, int, int]:

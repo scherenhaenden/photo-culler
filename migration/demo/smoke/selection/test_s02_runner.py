@@ -182,6 +182,16 @@ class Sprint02RunnerTests(unittest.TestCase):
         self.assertTrue(runner.photo_index_text_visible("Foto 3 · página 1", 3))
         self.assertFalse(runner.photo_index_text_visible("Foto 2 · página 1", 3))
 
+    def test_photo_index_accepts_adjacent_ocr_suffix_but_not_a_longer_number(self):
+        self.assertTrue(
+            runner.photo_index_visible(
+                [{"text": "Foto 5S - pagina 1", "confidence": 90}], 5
+            )
+        )
+        self.assertTrue(runner.photo_index_text_visible("Foto 5S - pagina 1", 5))
+        self.assertFalse(runner.photo_index_text_visible("Foto 50 - pagina 1", 5))
+        self.assertFalse(runner.photo_index_text_visible("Foto 5S - pagina 1", 50))
+
     def test_folder_dialog_select_fallback_targets_the_lower_right_button(self):
         self.assertEqual(runner.folder_dialog_select_point(1097, 844), (1047, 818))
 
